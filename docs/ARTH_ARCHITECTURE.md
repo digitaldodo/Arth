@@ -193,28 +193,46 @@ CREATE INDEX idx_outbox_pending
 
 ---
 
-## 3. Authentication
+## 3. Authentication & Session Architecture
 
+### 3.1 Overview
 - **Provider**: Supabase Auth
-- **Methods**: Google OAuth (primary), Magic Link email (fallback)
-- **Session**: HTTP-only cookie managed by `@supabase/ssr`
-- **Client**: `createBrowserClient` for browser, `createServerClient` for Server Components and Route Handlers
-- **Profile creation**: Database trigger on `auth.users` insert creates a matching `public.profiles` row
+- **Authentication Method**: Google OAuth with PKCE flow (primary); Magic Link email (fallback)
+- **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`
+- **Clients**:
+  - `frontend/src/lib/supabase/server.ts`: Server-side client using `createServerClient` reading/writing cookies in Next.js Server Components, Server Actions, and Route Handlers.
+  - Browser: Server Action initiates OAuth redirect to Supabase provider; browser JS never holds raw long-lived refresh tokens or database master credentials.
+- **Profile Creation**: PostgreSQL trigger `fn_handle_new_user()` on `auth.users` automatically provisions `public.profiles` and seeds initial default categories.
 
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, display_name)
-  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name');
-  RETURN NEW;
-END;
-$$;
+### 3.2 BFF Thin Proxy Pattern
+The Next.js frontend acts as a Backend-For-Frontend (BFF) proxy for authenticated Fastify API requests:
+1. Browser makes requests to Next.js route handlers (`/api/backend/*`).
+2. Next.js server validates the HTTP-only session cookie via `@supabase/ssr`.
+3. Next.js extracts the ephemeral `access_token` JWT from the session.
+4. Next.js forwards the request to Fastify with `Authorization: Bearer <access_token>`.
+5. Fastify validates the JWT, decorates `request.user`, and executes domain logic.
+6. Browser code never directly manages JWT refresh tokens or bearer headers.
 
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-```
+### 3.3 Fastify JWT Verification Plugin
+The backend service (`backend/src/plugins/auth.ts`) provides zero-trust identity verification:
+- **Library**: `jose` (JSON Object Signing and Encryption).
+- **Verification Modes**:
+  - **Symmetric (HS256)**: Verifies against `SUPABASE_JWT_SECRET` when configured (optimal for local testing and containerized services).
+  - **Asymmetric (RS256 / JWKS)**: Dynamically fetches and caches public signing keys from `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`.
+- **Validation Rules**:
+  - Signature integrity.
+  - Expiration (`exp` check with clock tolerance).
+  - Audience check: claims `aud === 'authenticated'`.
+  - Issuer check: claims `iss === `${SUPABASE_URL}/auth/v1``.
+  - Subject existence: `sub` must be a valid user UUID.
+- **Request Decoration**: Injects `request.user = { id: payload.sub, email: payload.email, role: payload.role }`.
+
+### 3.4 Auth Endpoints & Handlers
+- `POST /login`: Server action in `frontend/src/app/login/page.tsx` initiates OAuth sign-in with redirect to Supabase.
+- `GET /auth/callback`: Route Handler exchanging authorization `code` for session, with strict relative URL sanitization against open redirect attacks.
+- `POST /auth/logout` & `GET /auth/logout`: Route Handler revoking Supabase session and clearing HTTP-only cookies.
+- `GET /api/v1/auth/me`: Fastify protected identity endpoint returning `AuthIdentityResponse` (`{ id, email, role }`).
+- `GET /api/backend/auth/me`: Next.js BFF proxy endpoint routing client identity requests to Fastify.
 
 ---
 

@@ -25,6 +25,11 @@ arth/
 ├── frontend/                     # Next.js 16 App Router (@arth/frontend)
 │   ├── src/
 │   │   ├── app/                  # App Router layouts, pages, globals.css
+│   │   │   ├── api/backend/auth/ # BFF thin proxy forwarding Bearer JWTs to Fastify
+│   │   │   ├── auth/callback/    # Supabase PKCE OAuth callback handler
+│   │   │   ├── auth/logout/      # Session invalidation & cookie clearance
+│   │   │   ├── login/            # Ledger Minimal sign-in UI
+│   │   │   └── page.tsx          # Authenticated session display & foundation
 │   │   ├── components/
 │   │   │   ├── ui/               # Reusable UI primitives (ThemeToggle)
 │   │   │   └── layout/           # Shared page layouts & navigation
@@ -34,8 +39,10 @@ arth/
 │   │   │   ├── categories/
 │   │   │   └── settings/
 │   │   └── lib/
-│   │       ├── api-client/       # Typed backend API client functions
-│   │       └── format.ts         # Paise-to-INR & date formatters
+│   │       ├── api-client/       # Typed backend API client (fetchCurrentUser, etc.)
+│   │       ├── format.ts         # Paise-to-INR & date formatters
+│   │       └── supabase/         # SSR Supabase client (HTTP-only cookies)
+│   ├── tests/                    # Frontend Route Handler & proxy test suite
 │   ├── public/                   # Static assets & icons
 │   ├── package.json
 │   ├── next.config.ts
@@ -45,17 +52,19 @@ arth/
 │   ├── src/
 │   │   ├── app.ts                # Fastify factory function & plugin registration
 │   │   ├── server.ts             # Server entry point (starts on port 3001)
-│   │   ├── config/               # Environment configuration & validation
-│   │   ├── plugins/              # Shared Fastify plugins (CORS, etc.)
+│   │   ├── config/               # Environment configuration & JWT validation config
+│   │   ├── plugins/              # Shared Fastify plugins (CORS, auth/JWT verifier)
 │   │   └── modules/              # Domain modules
+│   │       ├── auth/             # Protected auth endpoints (GET /api/v1/auth/me)
 │   │       └── health/           # Health check endpoint (GET /health)
-│   ├── tests/                    # Automated backend tests (Node test runner)
+│   ├── tests/                    # Automated backend tests (auth, health, schema audit)
 │   ├── package.json
 │   └── tsconfig.json
 │
 ├── packages/
 │   └── contracts/                # Shared API Contracts (@arth/contracts)
 │       ├── src/
+│       │   ├── auth.ts           # AuthIdentityResponse contract
 │       │   ├── health.ts         # HealthCheckResponse contract
 │       │   └── index.ts          # Unified exports
 │       ├── package.json
@@ -158,6 +167,27 @@ pnpx supabase test db
 
 ---
 
+## Authentication & Session Architecture
+
+Arth uses a defense-in-depth, zero-trust session architecture:
+- **Client Authentication**: Google OAuth with PKCE flow initiated from `frontend/src/app/login/page.tsx`.
+- **Session Security**: Session tokens are held in `HttpOnly`, `SameSite=Lax`, and `Secure` (production) cookies managed by `@supabase/ssr`.
+- **BFF Thin Proxy**: Browser requests hit Next.js Route Handlers (`/api/backend/*`), which extract the server-held `access_token` and forward it as `Authorization: Bearer <token>` to Fastify.
+- **Backend Verification**: Fastify (`backend/src/plugins/auth.ts`) validates JWTs with `jose` (symmetric HS256 secret or asymmetric JWKS), verifying signatures, issuer, audience (`authenticated`), and expiration, and decorates `request.user`.
+
+### Supabase Google OAuth Setup
+1. In your [Supabase Dashboard](https://supabase.com/dashboard), navigate to **Authentication &rarr; Providers &rarr; Google**.
+2. Enable Google provider and input your **Google Client ID** and **Google Client Secret** from Google Cloud Console.
+3. Add the redirect URL: `https://<project-ref>.supabase.co/auth/v1/callback`.
+4. In your `.env.local`, set:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+   SUPABASE_JWT_SECRET=<your-jwt-secret>
+   ```
+
+---
+
 ## Available Monorepo Scripts
 
 | Command | Description |
@@ -170,7 +200,7 @@ pnpx supabase test db
 | `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
 | `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
 | `pnpm lint` | Runs ESLint across the frontend codebase |
-| `pnpm test` | Runs the automated backend test suite via Node test runner |
+| `pnpm test` | Runs all automated test suites across backend (19 tests) and frontend (4 tests) |
 | `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
 | `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
 
@@ -183,4 +213,5 @@ pnpx supabase test db
 - **Phase 01E**: Project Scaffold & Tooling Setup (Completed)
 - **Phase 01F**: Modular Monorepo Architecture & Backend Foundation (Completed)
 - **Phase 01G**: Supabase Database Schema, Migrations & Row-Level Security (Completed)
-- **Phase 01H**: Authentication Flow & Backend Session Verification (Next)
+- **Phase 01H**: Authentication Flow & Backend Session Verification (Completed)
+- **Phase 01I**: Transaction Entry & Outbox Engine (Next)

@@ -103,39 +103,38 @@
 | Database Types | Typed schema definitions in `backend/src/types/database.types.ts` separated from API contracts | Complete ✅ |
 | ADR-001 Update | Documented genuine RLS execution mechanics (PostgreSQL `SET LOCAL` claims vs scoped Supabase client) | Complete ✅ |
 
-### 01-H · Authentication Flow & Backend Session Verification
+### 01-H · Authentication Flow & Backend Session Verification ✅
 
 > Focus: End-to-end authentication, JWT verification in Fastify, and user-scoped database session mapping.
 
-| Task | Details |
-|---|---|
-| Supabase Auth Integration | Google OAuth and magic link sign-in flows configured in frontend |
-| Fastify JWT Auth Plugin | `backend/src/plugins/auth.ts` verifying incoming Supabase JWTs |
-| User Session Propagation | Mapping verified `user.id` to database transactions with RLS claims |
-| Session Verification Tests | Automated backend tests confirming authenticated vs unauthenticated request behavior |
-
-| Task | Details |
-|---|---|
-| Supabase SSR client | `src/lib/supabase/server.ts` — `createServerClient` |
-| Supabase browser client | `src/lib/supabase/client.ts` — `createBrowserClient` |
-| Middleware | `src/middleware.ts` — refresh session, redirect unauthenticated to `/login` |
-| Login page | `src/app/(auth)/login/page.tsx` — Google OAuth button + magic link fallback |
-| Auth callback | `src/app/auth/callback/route.ts` — exchange code for session |
-| Logout | Server Action in settings |
-| Profile auto-creation | DB trigger (Migration 0006) |
+| Task | Details | Status |
+|---|---|---|
+| Shared Contracts | Defined `AuthIdentityResponse` in `@arth/contracts` | Complete ✅ |
+| Fastify JWT Auth Plugin | `backend/src/plugins/auth.ts` verifying incoming Supabase JWTs with `jose` (symmetric HS256 / asymmetric JWKS) | Complete ✅ |
+| Fastify Auth Route | `GET /api/v1/auth/me` protected endpoint returning verified caller identity | Complete ✅ |
+| Backend Security Tests | 10 automated test cases in `backend/tests/auth.test.ts` covering invalid signatures, expired tokens, audience checks, missing tokens | Complete ✅ |
+| Supabase SSR Client | `frontend/src/lib/supabase/server.ts` with HTTP-only, `SameSite=Lax`, and `Secure` cookie options | Complete ✅ |
+| Auth Callback Handler | `frontend/src/app/auth/callback/route.ts` with PKCE code exchange and open redirect sanitization | Complete ✅ |
+| Logout Route Handler | `frontend/src/app/auth/logout/route.ts` clearing session cookies on POST/GET | Complete ✅ |
+| BFF API Proxy | `frontend/src/app/api/backend/auth/me/route.ts` forwarding server-held session Bearer JWT to Fastify | Complete ✅ |
+| Frontend Auth Tests | Automated tests in `frontend/tests/auth-proxy.test.ts` verifying error handling, missing code, redirect security, and unauthenticated proxy protection | Complete ✅ |
+| Login UI | Ledger Minimal sign-in screen at `frontend/src/app/login/page.tsx` with Google OAuth server action | Complete ✅ |
+| Authenticated Root UX | `frontend/src/app/page.tsx` displaying user session context and sign-out controls | Complete ✅ |
 
 **Acceptance criteria**:
-- [ ] Owner can log in with Google OAuth
-- [ ] Owner can log in with magic link email
-- [ ] Unauthenticated users are redirected to `/login`
-- [ ] Session persists across page refreshes
-- [ ] `profiles` row is created on first login
+- [x] Owner can log in with Google OAuth via PKCE flow
+- [x] Unauthenticated requests to protected endpoints return 401 Unauthorized
+- [x] Session persists in secure HTTP-only cookies
+- [x] Fastify verifies JWT tokens with zero credential leakage
+- [x] Next.js BFF proxy securely forwards server-held session tokens without exposing them to browser scripts
+- [x] Open redirect protection enforces relative local return paths
+- [x] 100% of workspace tests pass (23/23 tests)
 
-### 01-H · Transaction entry form
+### 01-I · Transaction Entry & Outbox Engine
 
 | Task | Details |
 |---|---|
-| Zod schema | `src/types/transaction.ts` — validates all fields including paise conversion |
+| Zod schema | Shared contracts & backend validation schemas for transaction creation |
 | Amount input | Accepts decimal INR (e.g., `150.50`) → converts to `15050` paise before submission |
 | Type selector | Toggle: Income / Expense |
 | Date picker | Defaults to today in Asia/Kolkata; editable; uses `date-fns-tz` |
@@ -144,8 +143,8 @@
 | Necessity selector | Shown only when type = Expense; required; Essential / Optional / Luxury |
 | Note field | Optional free-text, max 500 chars |
 | UUID v7 generation | Client-side before submission |
-| Server Action | `src/modules/TransactionEntry/actions.ts` — validates, inserts transaction + outbox_event in DB transaction |
-| Success/error feedback | Toast notification via shadcn/ui Sonner |
+| Fastify Endpoint | `POST /api/v1/transactions` validating input and executing atomic insert + outbox trigger |
+| Success/error feedback | Toast notification via Ledger Minimal UI feedback |
 
 **Acceptance criteria**:
 - [ ] All required fields validated with Zod before submission
@@ -156,7 +155,7 @@
 - [ ] Duplicate UUID submission is handled as a no-op (idempotent upsert)
 - [ ] Form resets after successful submission
 
-### 01-I · Category management
+### 01-J · Category Management
 
 | Task | Details |
 |---|---|

@@ -14,7 +14,8 @@
   "dependencies": {
     "@arth/contracts": "workspace:*",
     "@fastify/cors": "^10.0.2",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "jose": "^6.2.13"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

@@ -13,7 +13,9 @@
     "build:contracts": "pnpm --filter @arth/contracts build",
     "lint": "pnpm --filter @arth/frontend lint",
     "typecheck": "pnpm --recursive typecheck",
-    "test": "pnpm --filter @arth/backend test",
+    "test": "pnpm --filter @arth/backend test && pnpm --filter @arth/frontend test",
+    "test:frontend": "pnpm --filter @arth/frontend test",
+    "test:backend": "pnpm --filter @arth/backend test",
     "start:frontend": "pnpm --filter @arth/frontend start",
     "start:backend": "pnpm --filter @arth/backend start"
   }

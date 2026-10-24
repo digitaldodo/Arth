@@ -97,11 +97,12 @@ arth/
 6. **Time-Ordered Primary Keys**: UUID v7 for transactions to guarantee chronological ordering and idempotent outbox replay.
 7. **Declarative Category Integrity**: Relational composite foreign key `(category_id, user_id, type)` guarantees transactions cannot reference another user's category or a category of mismatched type.
 8. **Reversible Soft Deletion**: Transactions use `deleted_at TIMESTAMPTZ` with atomic outbox emission for synchronization.
+9. **JWT Verification with `jose` (Phase 01H)**: Implemented in Fastify (`backend/src/plugins/auth.ts`) supporting symmetric HS256 and asymmetric JWKS verification with strict audience (`authenticated`), expiration, and issuer checks.
+10. **BFF Authentication Proxy (Phase 01H)**: Frontend holds HTTP-only cookies via `@supabase/ssr` and proxies authenticated API calls through Next.js route handlers (`/api/backend/*`), passing the session's bearer JWT server-to-server to Fastify without exposing tokens to client script.
 
-### Choices Requiring Future Validation (Phases 01H & Phase 02):
-1. **JWT Verification Strategy in Fastify**: Validating Supabase JWTs in Fastify via local asymmetric public key verification (`jose` / `@fastify/jwt`) versus remote JWKS endpoint caching.
-2. **Database Driver Selection**: Finalizing between direct PostgreSQL driver (`postgres.js`) using `SET LOCAL` session context vs `@supabase/supabase-js` scoped with caller token.
-3. **Outbox Worker Process**: Running the Phase 02 Google Sheets outbox sync worker as an in-process Fastify background job versus a standalone Node process in `backend/`.
+### Choices Requiring Future Validation (Phase 02):
+1. **Database Driver Selection**: Finalizing between direct PostgreSQL driver (`postgres.js`) using `SET LOCAL` session context vs `@supabase/supabase-js` scoped with caller token.
+2. **Outbox Worker Process**: Running the Phase 02 Google Sheets outbox sync worker as an in-process Fastify background job versus a standalone Node process in `backend/`.
 
 ---
 *Documented in accordance with Arth Architecture Protocol.*
