@@ -94,6 +94,9 @@ Color is strictly forbidden from acting as the sole carrier of status. In Arth:
 - **Essential** always pairs with text label `Essential` and a solid geometric glyph `[▲]`.
 - **Optional** always pairs with text label `Optional` and a circular glyph `[●]`.
 - **Luxury** always pairs with text label `Luxury` and a diamond glyph `[◆]`.
+- **People Tracker (I owe them)**: Always rendered in Red (`--expense-fg`, `--expense-bg`, `--expense-border`) AND paired with explicit textual phrasing: *"I owe [Name]"* and an amber/red status badge.
+- **People Tracker (They owe me)**: Always rendered in Green (`--income-fg`, `--income-bg`, `--income-border`) AND paired with explicit textual phrasing: *"[Name] owes me"* and an emerald status badge.
+- **Single Direction Rule**: Each person has exactly one active direction at a time with a single outstanding balance. Opposing color badges or split "To Pay / To Receive" numbers on the same card are strictly prohibited.
 
 ---
 

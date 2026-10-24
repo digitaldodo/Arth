@@ -18,7 +18,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0005_rls_policies.sql',
       '0006_auth_trigger.sql',
       '0007_indexes.sql',
-      '0008_category_reorder.sql'
+      '0008_category_reorder.sql',
+      '0009_people_tracker.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -87,5 +88,18 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('SECURITY INVOKER'), 'Function must execute with caller permissions and RLS');
     assert.ok(sql.includes('auth.uid()'), 'Function must verify user context');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_reorder_categories'), 'Execution grant to authenticated role must be present');
+  });
+
+  test('0009_people_tracker.sql defines people, records, settlements, and atomic settlement function', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0009_people_tracker.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TYPE public.person_direction AS ENUM'), 'person_direction ENUM must be defined');
+    assert.ok(sql.includes('CREATE TABLE public.people'), 'people table must be declared');
+    assert.ok(sql.includes('CREATE TABLE public.person_money_records'), 'person_money_records table must be declared');
+    assert.ok(sql.includes('CREATE TABLE public.person_money_settlements'), 'person_money_settlements table must be declared');
+    assert.ok(sql.includes('amount_paise BIGINT NOT NULL CHECK (amount_paise > 0)'), 'Amounts must be positive BIGINT paise');
+    assert.ok(sql.includes('fn_record_person_settlement'), 'Atomic settlement function must exist');
+    assert.ok(sql.includes('FOR UPDATE'), 'Settlement function must lock record for update against concurrent over-settlement');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'RLS must be enabled on people tables');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_record_person_settlement'), 'Execution grant to authenticated must be present');
   });
 });

@@ -14,6 +14,18 @@ import type {
   ArchiveCategoryResponse,
   ReorderCategoriesRequest,
   ReorderCategoriesResponse,
+  PersonListQuery,
+  PersonListResponse,
+  PersonDetailResponse,
+  CreatePersonRequest,
+  CreatePersonResponse,
+  UpdatePersonRequest,
+  UpdatePersonResponse,
+  ArchivePersonResponse,
+  CreatePersonRecordRequest,
+  CreatePersonRecordResponse,
+  RecordSettlementRequest,
+  RecordSettlementResponse,
 } from '@arth/contracts';
 
 const API_BASE_URL =
@@ -257,5 +269,196 @@ export async function reorderCategories(
     throw error;
   }
 
+  return data;
+}
+
+/**
+ * Lists people for the authenticated user with optional search, direction, and archival filters.
+ */
+export async function fetchPeople(
+  query: PersonListQuery = {}
+): Promise<PersonListResponse> {
+  const params = new URLSearchParams();
+  if (query.search) params.set('search', query.search);
+  if (query.include_archived !== undefined) {
+    params.set('include_archived', String(query.include_archived));
+  }
+  if (query.direction) params.set('direction', query.direction);
+
+  const qs = params.toString();
+  const url = qs ? `/api/backend/people?${qs}` : '/api/backend/people';
+
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || `Failed to fetch people (${response.status})`);
+  }
+  return data;
+}
+
+/**
+ * Retrieves details, named money records, and settlements for a single person.
+ */
+export async function fetchPersonDetail(
+  id: string
+): Promise<PersonDetailResponse> {
+  const response = await fetch(`/api/backend/people/${encodeURIComponent(id)}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || `Failed to fetch person details (${response.status})`);
+  }
+  return data;
+}
+
+/**
+ * Creates a new person with initial direction.
+ */
+export async function createPerson(
+  req: CreatePersonRequest
+): Promise<CreatePersonResponse> {
+  const response = await fetch('/api/backend/people', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.message || `Failed to create person (${response.status})`) as Error & {
+      statusCode?: number;
+    };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Renames a person or updates direction (only allowed when fully settled).
+ */
+export async function updatePerson(
+  id: string,
+  req: UpdatePersonRequest
+): Promise<UpdatePersonResponse> {
+  const response = await fetch(`/api/backend/people/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.message || `Failed to update person (${response.status})`) as Error & {
+      statusCode?: number;
+    };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Archives or unarchives a person.
+ */
+export async function archivePerson(
+  id: string,
+  archived: boolean
+): Promise<ArchivePersonResponse> {
+  const response = await fetch(`/api/backend/people/${encodeURIComponent(id)}/archive`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ archived }),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.message || `Failed to archive person (${response.status})`) as Error & {
+      statusCode?: number;
+    };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Creates a named money record for a person.
+ */
+export async function createPersonRecord(
+  personId: string,
+  req: CreatePersonRecordRequest
+): Promise<CreatePersonRecordResponse> {
+  const response = await fetch(
+    `/api/backend/people/${encodeURIComponent(personId)}/records`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(req),
+      cache: 'no-store',
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.message || `Failed to create money record (${response.status})`) as Error & {
+      statusCode?: number;
+    };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Records a payment or collection against a specific named money record.
+ */
+export async function recordSettlement(
+  recordId: string,
+  req: RecordSettlementRequest
+): Promise<RecordSettlementResponse> {
+  const response = await fetch(
+    `/api/backend/people/records/${encodeURIComponent(recordId)}/settlements`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(req),
+      cache: 'no-store',
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.message || `Failed to record settlement (${response.status})`) as Error & {
+      statusCode?: number;
+    };
+    error.statusCode = response.status;
+    throw error;
+  }
   return data;
 }

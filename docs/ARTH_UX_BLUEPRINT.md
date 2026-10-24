@@ -68,9 +68,9 @@ The five candidate destinations were evaluated for their operational frequency a
 
 ### 3.2 Recommended Navigation Structure
 
-#### Mobile Layout (< 768px): 3-Item Bottom Navigation Bar with Central "Quick Add" FAB
+#### Mobile Layout (< 768px): 5-Item Bottom Navigation Bar with Central "Quick Add" Action
 
-Rather than crowding the mobile screen with 5 tabs, the navigation is focused into **2 main browsing tabs + 1 central Hero Entry button + 1 auxiliary Settings/More tab**:
+The mobile navigation is organized into **4 primary domain tabs + 1 central Hero Action button**:
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -79,31 +79,28 @@ Rather than crowding the mobile screen with 5 tabs, the navigation is focused in
 │                    (Active Screen)                     │
 │                                                        │
 ├────────────────────────────────────────────────────────┤
-│   [ Dashboard ]      [ ( + ) ]      [ Transactions ]   │
-│       Home           Quick Add           Ledger        │
+│  [Home]    [Ledger]     [ ( + ) ]    [People]   [More] │
+│   🏠          📊        Quick Add       👥        ☰    │
 └────────────────────────────────────────────────────────┘
 ```
-*(Settings and Category Management are cleanly accessed via a discreet Profile/Settings icon in the top header or within a compact bottom tab row `[ Home | Ledger | (+) | Categories | Settings ]`).*
 
-**Final Mobile Recommendation:**  
-A 4-item bottom bar with floating elevated center action:
-1. **Home / Dashboard** (Icon + label)
-2. **Ledger / History** (Icon + label)
-3. **Add (+)** (Prominent high-contrast central pill/circle button; floating elevation)
-4. **Categories** (Icon + label)
-5. **Settings** (Icon + label)
+**Mobile Navigation Destinations:**  
+1. **Home / Dashboard** (Icon + label): Financial pulse check and recent records.
+2. **Ledger / History** (Icon + label): Chronological transaction log, filters, and cash flow analysis.
+3. **Add (+)** (Prominent high-contrast central button): Opens Transaction Quick Add drawer immediately without unloading the underlying view.
+4. **People** (Icon + label): People & Money Tracker with direction-filtered debtor/creditor balances.
+5. **More** (Icon + label): Secondary operational hub providing direct access to Category Management, Appearance (Theme toggle), Account Profile, and Sign Out.
 
-*Why 4 tabs + 1 CTA works best:*
-- Direct access to the top 4 operational domains without hidden "hamburger" menus.
-- Clear thumb zone access.
-- Tapping `(+)` opens the Transaction Entry Drawer/Sheet over the current context without unloading the underlying view.
+*Why this 5-item layout works best:*
+- Direct thumb-zone access to high-velocity daily flows (Ledger, Quick Add, People).
+- Preserves clean access to maintenance utilities (Categories and Settings) via the "More" screen without cluttering primary tabs.
+- Tapping `(+)` opens the Transaction Entry Drawer over the current context without unloading state.
 
-#### Desktop & Tablet Layout (≥ 768px): Left Vertical Navigation Rail / Sidebar
+#### Desktop & Tablet Layout (≥ 768px): Header Tabs + Action Controls
 
-On desktop and tablet screens, bottom bars become awkward, stretching across wide viewports and leaving primary actions distant from the content.
-
-- **Screen width 768px – 1024px (Tablet / Narrow Desktop)**: Compact collapsible left icon rail (64px width) containing Logo, Home, Ledger, Categories, Settings, and an elevated "Add Transaction" button at the top.
-- **Screen width ≥ 1024px (Full Desktop)**: Expanded left sidebar (240px width) with text labels, active route indicators, quick summary pills, and keyboard shortcut reminders (e.g. `Press 'N' for new transaction`).
+On desktop and tablet screens:
+- **Left Header**: App Logo ("Arth") + Primary Navigation Tabs: **Ledger | People | Categories**.
+- **Right Header**: Direct "+ Add Transaction" button, Theme Toggle, User Profile badge, and Sign Out action.
 
 ### 3.3 Returning from Secondary Tasks Without Context Loss
 
@@ -353,6 +350,42 @@ flowchart TD
 
 ---
 
+### Flow H: Track Money with People (Phase 01K)
+
+*Objective*: Record loans and debts associated with people, record partial or full repayments, and track net balances per person.
+
+```mermaid
+flowchart TD
+    Open[Navigate to People] --> PeopleList[View People Cards with Net Balances]
+    PeopleList --> Filter[Filter: All / They owe me / I owe them / Archived]
+    
+    PeopleList --> AddPerson[Tap '+ Add Person']
+    AddPerson --> EnterPerson[Enter Name & Initial Direction]
+    EnterPerson --> SavePerson[Save Person]
+    
+    PeopleList --> SelectPerson[Tap Person Card]
+    SelectPerson --> PersonDetail[View Person Detail & Total Balance]
+    
+    PersonDetail --> AddRecord[Tap '+ Add Record']
+    AddRecord --> FormRecord[Enter Title, Amount ₹, Date, Notes]
+    FormRecord --> SaveRecord[Save Record -> Increases Person Balance]
+    
+    PersonDetail --> SettleAction[Tap 'Record Payment / Received']
+    SettleAction --> SettleModal[Enter Settlement Amount ₹ & Date]
+    SettleModal --> ExecSettle[Execute Settlement via Atomic RPC]
+    ExecSettle --> StatusUpdate[Record updates to Partially Settled or Settled]
+    
+    PersonDetail --> ChangeDir[Change Direction]
+    ChangeDir --> CheckRecords{Unsettled Records?}
+    CheckRecords -- Yes --> BlockChange[Blocked: Settle all records first]
+    CheckRecords -- No --> ConfirmChange[Confirm Direction Change]
+    
+    PersonDetail --> ArchiveAction[Archive Person]
+    ArchiveAction --> SoftArchive[Non-destructive archive -> Preserves past history]
+```
+
+---
+
 ## 6. Progressive-Disclosure Matrix
 
 To maintain extreme clarity, every screen adheres to this strict 3-level disclosure architecture:
@@ -362,8 +395,9 @@ To maintain extreme clarity, every screen adheres to this strict 3-level disclos
 | **Dashboard** (`/dashboard`) | • Current Month Net Savings<br>• Month Total Income & Expense<br>• Today's Total Expense<br>• 5 most recent transactions with type, amount, category<br>• Hero (+) Button | • Category spending breakdown (ranked progress bars)<br>• Necessity ratio breakdown (Essential / Optional / Luxury toggle)<br>• Quick date-range selector (This Month / Last Month) | • "View All Transactions" (navigates to Ledger)<br>• Category-specific transaction drilldowns<br>• Full monthly export preview |
 | **Transaction Entry** (Drawer / Sheet) | • Type Switcher (`Expense` / `Income`)<br>• Amount input field with large autofocus display<br>• Today's date chip (IST)<br>• Top 6 most frequent category chips<br>• Payment Method segmented control (`Online` / `Cash`)<br>• Necessity toggle (`Essential` / `Optional` / `Luxury` - Expense only)<br>• Big primary "Save" button | • Full category grid/search popover (if not in top 6)<br>• Date picker modal (to select past date)<br>• "+ Add Note" expandable text input | • Future Offline queue badge<br>• Advanced metadata (exact timestamp) |
 | **Transactions Ledger** (`/transactions`) | • Chronological transaction feed grouped by date<br>• Search bar (keyword on note/category)<br>• Clear total matching count & sum<br>• Row displays: Amount, Category icon/name, Payment method badge, Necessity pill | • Filter Sheet: Filter by Date Range, Type, Category, Payment Method, Necessity<br>• Active filter chips with (x) clear buttons<br>• Row tap: Opens Edit Drawer | • Batch operations (future)<br>• Detailed audit view (created_at, UUID v7, raw paise value)<br>• Reversible soft-delete action |
+| **People Tracker** (`/people`) | • Aggregate list of people with active balances<br>• Direction status badge & dual-encoded color<br>• Search filter & direction tabs (`All`, `They owe me`, `I owe them`)<br>• "+ Add Person" CTA | • Person Detail view with total outstanding balance banner<br>• Filter records by status (`All`, `Outstanding`, `Settled`)<br>• Named record cards with settlement history<br>• "+ Add Record" button | • "Record Payment / Received" settlement modal<br>• Rename Person modal<br>• Direction change confirmation (gated by settlement)<br>• Non-destructive Archive confirmation & restore |
 | **Category Manager** (`/categories`) | • List of active categories with Icon, Name, and Drag handle<br>• Category count badge<br>• Floating "+ Add Category" button | • Inline edit name & icon selector sheet<br>• Archive button with impact explanation<br>• Color badge picker | • "Archived Categories" accordion (unarchive or inspect)<br>• Merge category utility (future) |
-| **Settings** (`/settings`) | • Account Info (Display Name, Email, Auth Provider)<br>• Theme Switcher (`Light` / `Dark` / `System`)<br>• App Version & Timezone (`Asia/Kolkata`)<br>• Navigation link to Category Manager<br>• Sign Out button | • Future Sync Status Card (Supabase sync time, Sheets outbox queue counter)<br>• Manual Sync "Check Now" button (Phase 02)<br>• CSV / JSON Data Export buttons (Phase 02) | • Raw diagnostics log (for troubleshooting sync outbox)<br>• Account deletion / Reset data request |
+| **Settings / More** (`/settings`) | • Account Info (Display Name, Email, Auth Provider)<br>• Theme Switcher (`Light` / `Dark` / `System`)<br>• App Version & Timezone (`Asia/Kolkata`)<br>• Navigation link to Category Manager<br>• Sign Out button | • Future Sync Status Card (Supabase sync time, Sheets outbox queue counter)<br>• Manual Sync "Check Now" button (Phase 02)<br>• CSV / JSON Data Export buttons (Phase 02) | • Raw diagnostics log (for troubleshooting sync outbox)<br>• Account deletion / Reset data request |
 
 ---
 

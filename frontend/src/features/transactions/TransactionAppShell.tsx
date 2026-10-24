@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
+import { PeoplePage } from '@/features/people/PeoplePage';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -15,8 +16,10 @@ interface TransactionAppShellProps {
   } | null;
 }
 
+export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
+
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
-  const [activeView, setActiveView] = useState<'ledger' | 'categories'>('ledger');
+  const [activeView, setActiveView] = useState<AppView>('ledger');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
@@ -67,6 +70,17 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   }`}
                 >
                   Ledger
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('people')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                    activeView === 'people'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  People
                 </button>
                 <button
                   type="button"
@@ -127,21 +141,143 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
         )}
 
         {user ? (
-          activeView === 'ledger' ? (
-            <TransactionLedger
-              onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-              refreshTrigger={refreshTrigger}
-            />
-          ) : (
-            <CategoryManager onCategoryChange={handleCategoryChanged} />
-          )
+          <>
+            {activeView === 'home' && (
+              <div className="space-y-6">
+                <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
+                    Overview
+                  </span>
+                  <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                    Welcome back, {user.email?.split('@')[0]}
+                  </h2>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                    Arth is operating in personal finance mode with exact integer-paise calculations, isolated tenant security, and dedicated people obligation tracking.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('ledger')}
+                      className="px-3.5 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors"
+                    >
+                      View Ledger &rarr;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('people')}
+                      className="px-3.5 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md transition-colors"
+                    >
+                      People & Obligations &rarr;
+                    </button>
+                  </div>
+                </div>
+
+                <TransactionLedger
+                  onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+                  refreshTrigger={refreshTrigger}
+                />
+              </div>
+            )}
+
+            {activeView === 'ledger' && (
+              <TransactionLedger
+                onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+                refreshTrigger={refreshTrigger}
+              />
+            )}
+
+            {activeView === 'people' && (
+              <PeoplePage
+                onRefreshShell={() => setRefreshTrigger((prev) => prev + 1)}
+              />
+            )}
+
+            {activeView === 'categories' && (
+              <CategoryManager onCategoryChange={handleCategoryChanged} />
+            )}
+
+            {activeView === 'more' && (
+              <div className="space-y-5">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+                    More & Settings
+                  </h1>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Application settings, category customization, and account details
+                  </p>
+                </div>
+
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl divide-y divide-[var(--border-hairline)] overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setActiveView('categories')}
+                    className="w-full p-4 text-left flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">🏷️</span>
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Category Management
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Add, rename, reorder, or archive income and expense categories
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)]">&rarr;</span>
+                  </button>
+
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">🌓</span>
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Appearance & Theme
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Switch between archival Light and obsidian Dark themes
+                        </p>
+                      </div>
+                    </div>
+                    <ThemeToggle />
+                  </div>
+
+                  <div className="p-4 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">👤</span>
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Account Profile
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-[var(--text-muted)] font-mono pt-1">
+                      Timezone: Asia/Kolkata (IST) • Currency: INR (₹) • System: Ledger Minimal
+                    </div>
+                  </div>
+                </div>
+
+                <form action="/auth/logout" method="POST">
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 text-xs font-medium border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-400 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-100/50 rounded-lg transition-colors"
+                  >
+                    Sign Out of Arth
+                  </button>
+                </form>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
               Welcome to Arth Personal Finance
             </h2>
             <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-              Please sign in with your Google account to access your personal ledger, record income and expenses, and track your cash flow.
+              Please sign in with your Google account to access your personal ledger, record income and expenses, and track people obligations.
             </p>
             <div>
               <Link
@@ -156,41 +292,70 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       </main>
 
       {/* Mobile Fixed Bottom Navigation with Central Quick Add (+) */}
-      <div className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-8 py-2 flex items-center justify-between">
+      {/* 5 destinations: Home | Ledger | Add (+) | People | More */}
+      <nav aria-label="Mobile Navigation" className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-3 py-1.5 flex items-center justify-around">
+        {/* 1. Home */}
+        <button
+          onClick={() => setActiveView('home')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            activeView === 'home'
+              ? 'text-[var(--text-primary)] font-bold'
+              : 'text-[var(--text-muted)]'
+          }`}
+        >
+          <span className="text-base leading-none">🏠</span>
+          <span className="truncate">Home</span>
+        </button>
+
+        {/* 2. Ledger */}
         <button
           onClick={() => setActiveView('ledger')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
             activeView === 'ledger'
               ? 'text-[var(--text-primary)] font-bold'
               : 'text-[var(--text-muted)]'
           }`}
         >
-          <span className="text-base">📊</span>
-          <span>Ledger</span>
+          <span className="text-base leading-none">📊</span>
+          <span className="truncate">Ledger</span>
         </button>
 
-        {/* Central Floating Quick Add Action */}
+        {/* 3. Central Floating Quick Add Action (+) */}
         <button
           type="button"
           onClick={() => setIsQuickAddOpen(true)}
           aria-label="Add transaction"
-          className="flex items-center justify-center w-12 h-12 -mt-5 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-lg hover:scale-105 active:scale-95 transition-transform"
+          className="flex items-center justify-center w-11 h-11 -mt-4 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-lg hover:scale-105 active:scale-95 transition-transform"
         >
           <span className="text-2xl font-light leading-none">+</span>
         </button>
 
+        {/* 4. People */}
         <button
-          onClick={() => setActiveView('categories')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
-            activeView === 'categories'
+          onClick={() => setActiveView('people')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            activeView === 'people'
               ? 'text-[var(--text-primary)] font-bold'
               : 'text-[var(--text-muted)]'
           }`}
         >
-          <span className="text-base">🏷️</span>
-          <span>Categories</span>
+          <span className="text-base leading-none">👥</span>
+          <span className="truncate">People</span>
         </button>
-      </div>
+
+        {/* 5. More */}
+        <button
+          onClick={() => setActiveView('more')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            activeView === 'more' || activeView === 'categories'
+              ? 'text-[var(--text-primary)] font-bold'
+              : 'text-[var(--text-muted)]'
+          }`}
+        >
+          <span className="text-base leading-none">☰</span>
+          <span className="truncate">More</span>
+        </button>
+      </nav>
 
       {/* Quick Add Modal / Sheet */}
       {isQuickAddOpen && (

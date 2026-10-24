@@ -177,7 +177,32 @@
 - [x] Type (`income` vs `expense`) is strictly immutable post-creation
 - [x] 100% of workspace tests pass (74/74 tests)
 
-### 01-K · Dashboard (read-only)
+### 01-K · People & Money Tracker ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Migration 0009: People Tracker | Added `public.person_direction` ENUM (`i_owe_them`, `they_owe_me`), `public.people`, `public.person_money_records`, and `public.person_money_settlements` tables with composite tenant foreign keys `(person_id, user_id)` and `(record_id, user_id)`. Created atomic `public.fn_record_person_settlement` with `SECURITY INVOKER` and row-level locking (`FOR UPDATE`). | Complete ✅ |
+| Database Schema Audit | Updated `backend/tests/database-schema-audit.test.ts` to assert Migration 0009 tables, composite constraints, and RPC function (11/11 tests passing) | Complete ✅ |
+| Shared Contracts | Defined `PersonDirection`, `SettlementStatus`, `PersonDTO`, `PersonDetailDTO`, `PersonMoneyRecordDTO`, `PersonMoneySettlementDTO`, `CreatePersonRequest`, `UpdatePersonRequest`, `ArchivePersonRequest`, `CreatePersonRecordRequest`, `RecordSettlementRequest`, `PersonListQuery`, `PersonListResponse`, `PersonDetailResponse` in `@arth/contracts` | Complete ✅ |
+| Fastify Backend Module | Implemented `backend/src/modules/people/` with strict input validation, `IPeopleService` supporting both live Supabase RPC and atomic in-memory mock with row locking and over-settlement prevention, and 7 authenticated routes: `GET /api/v1/people`, `POST /api/v1/people`, `GET /api/v1/people/:id`, `PATCH /api/v1/people/:id`, `PATCH /api/v1/people/:id/archive`, `POST /api/v1/people/:id/records`, `POST /api/v1/people/records/:recordId/settlements` | Complete ✅ |
+| Backend Automated Tests | 10 comprehensive tests in `backend/tests/people.test.ts` covering authentication boundaries, directions, cumulative balance calculation, validation, partial and full settlements, over-settlement rejection, direction locking when unsettled records exist, renaming, non-destructive archiving, and cross-user isolation (70 backend tests passing) | Complete ✅ |
+| Frontend BFF Proxies | Next.js API route handlers in `frontend/src/app/api/backend/people/` forwarding session Bearer JWTs to Fastify with 401 unauthenticated protection | Complete ✅ |
+| Frontend API Client | Extended `frontend/src/lib/api-client/index.ts` with typed helpers for people, records, and settlements | Complete ✅ |
+| Frontend BFF Tests | 7 automated tests in `frontend/tests/people-proxy.test.ts` verifying unauthenticated protection on all people BFF endpoints (22 frontend tests passing) | Complete ✅ |
+| Ledger Minimal UI | Responsive People view in `frontend/src/features/people/PeoplePage.tsx` with search, direction filter tabs (`All`, `They owe me`, `I owe them`, `Archived toggle`), dual-encoded color styling (RED = I owe them, GREEN = They owe me), person detail view, record filtering, and modals for Add Person, Add Money Record, Record Settlement, Rename, Direction Change Confirmation, and Archive Confirmation | Complete ✅ |
+| Navigation Shell Update | Updated mobile bottom navigation to the approved 5 destinations: **Home (`🏠`) | Ledger (`📊`) | Add (`+`) | People (`👥`) | More (`☰`)**, and updated desktop header tabs (**Ledger | People | Categories**). Created dedicated More screen providing access to Categories, Theme toggle, and Account | Complete ✅ |
+
+**Acceptance criteria**:
+- [x] RED strictly indicates "I owe them"; GREEN strictly indicates "They owe me" with explicit textual descriptions
+- [x] Each person has exactly one active direction at a time and one aggregate outstanding balance
+- [x] Direction change is strictly blocked while unsettled records remain
+- [x] Partial and full settlements are supported; over-settlement is rejected
+- [x] Concurrency-safe atomic settlement function with row locking prevents race conditions
+- [x] People obligations and settlements are strictly isolated from the main ledger (`transactions`)
+- [x] 5-destination mobile bottom bar and desktop header navigation tabs
+- [x] 100% of workspace tests pass (92/92 tests across 11 test suites)
+
+### 01-L · Dashboard (read-only)
 
 | Task | Details |
 |---|---|
@@ -196,7 +221,7 @@
 - [ ] Soft-deleted transactions are invisible to the user
 - [ ] Edit pre-populates all fields correctly
 
-### 01-K · PWA manifest & baseline installability
+### 01-M · PWA manifest & baseline installability
 
 | Task | Details |
 |---|---|
@@ -209,7 +234,7 @@
 - [ ] Browser shows "Install Arth" prompt on Chrome/Edge
 - [ ] Lighthouse PWA score ≥ 85 (without offline; that's Phase 03)
 
-### 01-L · Deployment
+### 01-N · Deployment
 
 | Task | Details |
 |---|---|

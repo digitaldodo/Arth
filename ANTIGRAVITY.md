@@ -73,6 +73,7 @@ Modules are located under `src/modules/<ModuleName>/`. Each module owns its comp
 |---|---|---|
 | `TransactionEntry` | ✅ Active | Phase 01 |
 | `CategoryManager` | ✅ Active | Phase 01 |
+| `PeopleTracker` | ✅ Active | Phase 01 |
 | `Dashboard` | ✅ Active | Phase 01 |
 | `ExportImport` (`ImportExport`) | Planned | Phase 02 |
 | `GoogleSheetsSync` | Planned | Phase 02 |

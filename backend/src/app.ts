@@ -8,6 +8,8 @@ import { transactionRoutes } from './modules/transactions/transaction.routes.js'
 import type { ITransactionService } from './modules/transactions/transaction.service.js';
 import { categoryRoutes } from './modules/categories/category.routes.js';
 import type { ICategoryService } from './modules/categories/category.service.js';
+import { peopleRoutes } from './modules/people/people.routes.js';
+import type { IPeopleService } from './modules/people/people.service.js';
 
 /**
  * Fastify application factory function.
@@ -17,7 +19,8 @@ export async function buildApp(
   customConfig?: Partial<AppConfig>,
   customVerifier?: TokenVerifier,
   customTransactionService?: ITransactionService,
-  customCategoryService?: ICategoryService
+  customCategoryService?: ICategoryService,
+  customPeopleService?: IPeopleService
 ): Promise<FastifyInstance> {
   const config: AppConfig = {
     ...loadConfig(),
@@ -42,6 +45,10 @@ export async function buildApp(
   await app.register(categoryRoutes, {
     config,
     service: customCategoryService,
+  });
+  await app.register(peopleRoutes, {
+    config,
+    service: customPeopleService,
   });
 
   return app;

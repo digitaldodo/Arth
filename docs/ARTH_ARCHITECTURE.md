@@ -179,6 +179,57 @@ CREATE INDEX idx_outbox_status_pending_created
 CREATE INDEX idx_outbox_pending
   ON public.outbox_events (created_at ASC)
   WHERE status = 'pending';
+
+-- ─── people & money tracker (Phase 01K) ──────────────────────────────────────
+CREATE TYPE public.person_direction AS ENUM ('i_owe_them', 'they_owe_me');
+
+CREATE TABLE public.people (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  direction     public.person_direction NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  archived_at   TIMESTAMPTZ,
+  CONSTRAINT uq_people_user_name_active UNIQUE (user_id, lower(name)) WHERE (archived_at IS NULL),
+  CONSTRAINT uq_people_id_user UNIQUE (id, user_id)
+);
+
+CREATE TABLE public.person_money_records (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  person_id      UUID NOT NULL,
+  user_id        UUID NOT NULL,
+  title          TEXT NOT NULL,
+  amount_paise   BIGINT NOT NULL CHECK (amount_paise > 0),
+  settled_paise  BIGINT NOT NULL DEFAULT 0 CHECK (settled_paise >= 0 AND settled_paise <= amount_paise),
+  record_date    DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
+  notes          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fk_records_person_user FOREIGN KEY (person_id, user_id)
+    REFERENCES public.people(id, user_id) ON DELETE CASCADE,
+  CONSTRAINT uq_person_money_records_id_user UNIQUE (id, user_id)
+);
+
+CREATE TABLE public.person_money_settlements (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  record_id        UUID NOT NULL,
+  person_id        UUID NOT NULL,
+  user_id          UUID NOT NULL,
+  amount_paise     BIGINT NOT NULL CHECK (amount_paise > 0),
+  settlement_date  DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
+  notes            TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fk_settlements_record_user FOREIGN KEY (record_id, user_id)
+    REFERENCES public.person_money_records(id, user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_settlements_person_user FOREIGN KEY (person_id, user_id)
+    REFERENCES public.people(id, user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_people_user_active ON public.people (user_id, created_at DESC) WHERE archived_at IS NULL;
+CREATE INDEX idx_person_records_person ON public.person_money_records (person_id, user_id, record_date DESC);
+CREATE INDEX idx_person_records_active ON public.person_money_records (person_id, user_id) WHERE settled_paise < amount_paise;
+CREATE INDEX idx_person_settlements_record ON public.person_money_settlements (record_id, user_id, settlement_date DESC);
 ```
 
 ### 2.3 Constraints enforced
@@ -187,9 +238,36 @@ CREATE INDEX idx_outbox_pending
 |---|---|
 | Expense must have necessity | `CHECK` constraint on `transactions` |
 | Amounts always positive | `CHECK (amount_paise > 0)` |
-| Unique category names per user | `UNIQUE (user_id, name)` |
+| Unique category names per user | `UNIQUE (user_id, type, lower(name)) WHERE archived_at IS NULL` |
 | User can only read/write own rows | RLS policies on all tables |
-| Soft deletes only | `deleted_at` column; `WHERE deleted_at IS NULL` in all queries |
+| Soft deletes only | `deleted_at` / `archived_at` column; filter in active queries |
+| Composite tenant foreign keys | `(person_id, user_id)` and `(record_id, user_id)` enforce tenant boundary |
+| Settlement within bounds | `CHECK (settled_paise >= 0 AND settled_paise <= amount_paise)` |
+| Concurrency-safe settlements | `public.fn_record_person_settlement` with `SELECT ... FOR UPDATE` row locking |
+| Direction locking | Direction cannot be changed while unsettled records exist |
+| Physical ledger isolation | People obligations are strictly isolated from `transactions` |
+
+### 2.4 People & Money Tracker Architecture (Phase 01K)
+
+The People tracker provides debt and loan tracking with strict financial invariants:
+
+1. **Physical Ledger Isolation**:
+   - People obligations (`person_money_records`) and settlements (`person_money_settlements`) are physically separated from the main ledger (`transactions`).
+   - Neither loans nor settlements generate income or expense transactions or alter the Dashboard Net Cash Flow.
+2. **Strict Single-Direction Invariant**:
+   - Each person has exactly one active direction at any given time: `i_owe_them` or `they_owe_me`.
+   - Never display separate "To Pay" and "To Receive" balances for the same person.
+3. **Direction Switching Lock**:
+   - A person's direction is strictly immutable while any active, unsettled balance remains (`remaining_paise > 0`).
+   - Direction can only be updated if all existing money records are fully settled (`settled_paise = amount_paise`).
+4. **Atomic Concurrency-Safe Settlements**:
+   - Stored procedure `public.fn_record_person_settlement` executes under `SECURITY INVOKER` respecting tenant RLS.
+   - It acquires a row-level lock (`SELECT ... FOR UPDATE`) on the target record, preventing concurrent over-settlement race conditions.
+   - Increments `settled_paise` and inserts a matching `person_money_settlements` record atomically.
+5. **Color Dual-Encoding**:
+   - **RED**: I owe this person money (`i_owe_them`).
+   - **GREEN**: This person owes me money (`they_owe_me`).
+   - Accompanied at all times with explicit text descriptions (e.g. "I owe Rahul ₹1,200.00" or "Rahul owes me ₹500.00").
 
 ---
 
