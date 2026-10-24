@@ -216,6 +216,44 @@ export class SupabaseTransactionService implements ITransactionService {
       .single();
 
     if (insertErr || !inserted) {
+      if (insertErr?.code === '23505') {
+        // Concurrent replay detected: another request inserted with this ID
+        const { data: concurrentExisting } = await client
+          .from('transactions')
+          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+          .eq('id', input.id)
+          .maybeSingle();
+
+        if (concurrentExisting) {
+          if (concurrentExisting.deleted_at) {
+            throw new ConflictError(
+              'Transaction with this ID was previously deleted and cannot be recreated'
+            );
+          }
+
+          const isMatch =
+            Number(concurrentExisting.amount_paise) === Number(input.amount_paise) &&
+            concurrentExisting.type === input.type &&
+            concurrentExisting.category_id === input.category_id &&
+            concurrentExisting.transaction_date === input.transaction_date &&
+            concurrentExisting.payment_method === input.payment_method &&
+            (concurrentExisting.necessity ?? null) === input.necessity &&
+            (concurrentExisting.description ?? null) === input.description &&
+            (concurrentExisting.notes ?? null) === input.notes;
+
+          if (isMatch) {
+            const catName = (concurrentExisting.categories as unknown as { name?: string } | null)?.name;
+            return {
+              transaction: mapToTransactionDTO(concurrentExisting as unknown as StoredTransactionRecord, catName),
+              isReplay: true,
+            };
+          }
+
+          throw new ConflictError(
+            'A transaction with this ID already exists with different payload attributes'
+          );
+        }
+      }
       throw new Error(`Failed to create transaction: ${insertErr?.message || 'Unknown error'}`);
     }
 

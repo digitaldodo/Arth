@@ -2,7 +2,7 @@
 -- Executes with pgTAP on PostgreSQL / Supabase CLI
 
 BEGIN;
-SELECT plan(15);
+SELECT plan(20);
 
 -- -----------------------------------------------------------------------------
 -- Mock Setup: Authenticated Test Users
@@ -262,6 +262,30 @@ SELECT throws_ok(
   '42501', -- insufficient_privilege
   NULL,
   'Authenticated users must be denied direct SELECT on public.outbox_events'
+);
+
+-- -----------------------------------------------------------------------------
+-- 13. Test Settlement Direct Mutation Lockdown: Authenticated Users Denied INSERT/UPDATE/DELETE
+-- -----------------------------------------------------------------------------
+SELECT throws_ok(
+  $$ INSERT INTO public.person_money_settlements (record_id, amount_paise) VALUES ('0192e456-789a-7bc1-8def-123456789099'::UUID, 50000) $$,
+  '42501',
+  NULL,
+  'Authenticated users must be denied direct INSERT on public.person_money_settlements'
+);
+
+SELECT throws_ok(
+  $$ UPDATE public.person_money_settlements SET amount_paise = 99999 WHERE id = '0192e456-789a-7bc1-8def-123456789099'::UUID $$,
+  '42501',
+  NULL,
+  'Authenticated users must be denied direct UPDATE on public.person_money_settlements'
+);
+
+SELECT throws_ok(
+  $$ DELETE FROM public.person_money_settlements WHERE id = '0192e456-789a-7bc1-8def-123456789099'::UUID $$,
+  '42501',
+  NULL,
+  'Authenticated users must be denied direct DELETE on public.person_money_settlements'
 );
 
 SELECT * FROM finish();

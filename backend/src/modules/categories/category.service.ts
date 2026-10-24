@@ -148,22 +148,7 @@ export class SupabaseCategoryService implements ICategoryService {
   ): Promise<CategoryDTO> {
     const client = this.getScopedClient(token);
 
-    // 1. Check for active duplicate name
-    const { data: existing } = await client
-      .from('categories')
-      .select('id, name')
-      .eq('type', input.type)
-      .ilike('name', input.name)
-      .is('archived_at', null)
-      .maybeSingle();
-
-    if (existing) {
-      throw new ConflictError(
-        `An active ${input.type} category named '${input.name}' already exists`
-      );
-    }
-
-    // 2. Assign sort order if omitted
+    // 1. Assign sort order if omitted
     let sortOrder = input.sort_order;
     if (sortOrder === undefined) {
       const { data: maxOrderData } = await client
@@ -178,7 +163,7 @@ export class SupabaseCategoryService implements ICategoryService {
       sortOrder = maxOrderData ? maxOrderData.sort_order + 1 : 1;
     }
 
-    // 3. Insert category
+    // 2. Insert category atomically — relying on idx_categories_user_type_name_active for uniqueness
     const { data: inserted, error: insertErr } = await client
       .from('categories')
       .insert({
@@ -195,7 +180,7 @@ export class SupabaseCategoryService implements ICategoryService {
 
     if (insertErr) {
       if (insertErr.code === '23505') {
-        throw new ConflictError(`An active category named '${input.name}' already exists`);
+        throw new ConflictError(`An active ${input.type} category named '${input.name}' already exists`);
       }
       throw new Error(`Failed to create category: ${insertErr.message}`);
     }
@@ -222,25 +207,7 @@ export class SupabaseCategoryService implements ICategoryService {
       throw new NotFoundError('Category not found');
     }
 
-    // 2. Check name uniqueness if name is changing
-    if (input.name && input.name.toLowerCase() !== category.name.toLowerCase()) {
-      const { data: duplicate } = await client
-        .from('categories')
-        .select('id')
-        .eq('type', category.type)
-        .ilike('name', input.name)
-        .neq('id', categoryId)
-        .is('archived_at', null)
-        .maybeSingle();
-
-      if (duplicate) {
-        throw new ConflictError(
-          `An active ${category.type} category named '${input.name}' already exists`
-        );
-      }
-    }
-
-    // 3. Update category
+    // 2. Update category — relying on authoritative idx_categories_user_type_name_active for collision detection
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -568,6 +535,11 @@ export class InMemoryCategoryService implements ICategoryService {
     const activeCategories = this.categories.filter(
       (c) => c.user_id === userId && c.type === input.type && c.archived_at === null
     );
+
+    const uniqueIds = new Set(input.category_ids);
+    if (uniqueIds.size !== input.category_ids.length) {
+      throw new ValidationError('Category IDs list must not contain duplicates');
+    }
 
     if (activeCategories.length !== input.category_ids.length) {
       throw new ValidationError(

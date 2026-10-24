@@ -164,7 +164,7 @@ pnpx supabase test db
 - **`public.categories`**: Separates `income` vs `expense` taxonomy. Uniqueness per `(user_id, type, lower(name))` where active. Supports non-destructive archiving via `archived_at`.
 - **`public.transactions`**: Stores amounts as positive integer paise (`BIGINT > 0`). Enforces composite foreign key `(category_id, user_id, type)` preventing cross-user or mismatched category assignments. Requires necessity for expenses and strictly `NULL` for income.
 - **`public.outbox_events`**: Atomic transactional outbox populated via `trg_transactions_outbox` capturing create, update, soft-delete, and restoration events for Google Sheets sync. Immutable to authenticated users.
-- **`public.people` & obligations**: Isolated debt and loan tracker. Tables `public.people`, `public.person_money_records`, and `public.person_money_settlements` maintain tenant isolation with composite foreign keys. Settlement concurrency is secured via row-locked stored procedure `fn_record_person_settlement`.
+- **`public.people` & obligations**: Isolated debt and loan tracker. Tables `public.people`, `public.person_money_records`, and `public.person_money_settlements` maintain tenant isolation with composite foreign keys. Settlement concurrency and idempotency are secured via row-locked stored procedure `fn_record_person_settlement`. Direct mutations are revoked from authenticated users. Cascading deletion is blocked (`ON DELETE RESTRICT`) to preserve financial audit history.
 
 ---
 
@@ -201,7 +201,7 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 | `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
 | `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
 | `pnpm lint` | Runs ESLint across the frontend codebase |
-| `pnpm test` | Runs all automated test suites across backend (70 tests) and frontend (22 tests) — 92 tests passing |
+| `pnpm test` | Runs all automated test suites across backend (82 tests) and frontend (22 tests) — 104 tests passing |
 | `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
 | `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
 
@@ -218,4 +218,5 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 - **Phase 01I**: Transaction Entry & Outbox Engine (Completed)
 - **Phase 01J**: Category Management & Custom Ordering (Completed)
 - **Phase 01K**: People & Money Tracker (Completed)
-- **Phase 01L**: Dashboard (read-only) (Next)
+- **Phase 01L**: Database Reliability, ACID & CRUD Performance Hardening (Completed)
+- **Phase 01M**: Dashboard (read-only) (Next)

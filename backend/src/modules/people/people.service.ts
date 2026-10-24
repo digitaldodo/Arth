@@ -634,6 +634,9 @@ export class SupabasePeopleService implements IPeopleService {
       if (error.message.includes('exceeds remaining outstanding balance')) {
         throw new ConflictError(error.message);
       }
+      if (error.code === '23505' || error.message.includes('already exists with different attributes')) {
+        throw new ConflictError(error.message);
+      }
       if (error.code === 'P0002') {
         throw new NotFoundError('Money record not found');
       }
@@ -888,6 +891,33 @@ export class InMemoryPeopleService implements IPeopleService {
 
     if (record.archived_at) {
       throw new ConflictError('Cannot record settlement for an archived record');
+    }
+
+    // Idempotency check: if explicit settlement ID provided, check for existing
+    if (input.id) {
+      const existingSettlement = this.settlements.find(
+        (s) => s.id === input.id && s.user_id === userId
+      );
+
+      if (existingSettlement) {
+        if (
+          existingSettlement.record_id === recordId &&
+          existingSettlement.amount_paise === Number(input.amount_paise) &&
+          existingSettlement.settlement_date === input.settlement_date
+        ) {
+          const personDetail = await this.getPerson(userId, record.person_id);
+          const currentRecord = personDetail.person.records.find((r) => r.id === recordId)!;
+          return {
+            settlement: mapToSettlementDTO(existingSettlement),
+            record: currentRecord,
+            person: personDetail.person,
+          };
+        }
+
+        throw new ConflictError(
+          'A settlement with this ID already exists with different attributes'
+        );
+      }
     }
 
     const alreadySettled = this.settlements

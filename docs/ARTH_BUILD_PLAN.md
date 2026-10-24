@@ -202,7 +202,29 @@
 - [x] 5-destination mobile bottom bar and desktop header navigation tabs
 - [x] 100% of workspace tests pass (92/92 tests across 11 test suites)
 
-### 01-L · Dashboard (read-only)
+### 01-L · Database Reliability, ACID & CRUD Performance Hardening ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Migration 0010: Database Hardening | Schema migration adding `ON DELETE RESTRICT` constraints to prevent cascade deletion of financial history, revoking direct `INSERT/UPDATE/DELETE` on `person_money_settlements` from authenticated role, hardening `fn_record_person_settlement` with idempotency replay handling and `SECURITY DEFINER`, adding `FOR UPDATE` row locking to `fn_reorder_categories`, and adding performance covering indexes | Complete ✅ |
+| Database Schema Audit Test | Updated `backend/tests/database-schema-audit.test.ts` to assert all 10 migrations and hardening rules | Complete ✅ |
+| ACID & Concurrency Test Suite | Created `backend/tests/database-acid-reliability.test.ts` with 11 automated test cases verifying transaction-outbox atomicity, settlement limits, idempotent replays, concurrent settlement over-settlement prevention, cross-user isolation, category reorder permutation validation, and non-destructive archival | Complete ✅ |
+| Backend Services Hardening | Hardened `SupabaseTransactionService` to handle concurrent unique-key replay, removed redundant read-before-write checks in `SupabaseCategoryService`, and implemented settlement idempotency checks in both live and in-memory people services | Complete ✅ |
+| Database Operations Spec | Authored `docs/DATABASE_OPERATIONS.md` documenting ACID guarantees, disaster recovery runbook, PITR setup, append-only protocol, and query benchmarks | Complete ✅ |
+| Architecture Document Reconciliation | Reconciled `docs/ARTH_ARCHITECTURE.md` to authoritative single-source-of-truth model for settlement balances (no duplicate mutable column) and updated constraints matrix | Complete ✅ |
+
+**Acceptance criteria**:
+- [x] Transaction write and outbox event insert commit or rollback atomically
+- [x] Person settlement idempotency: repeated request with same ID returns existing settlement without duplicate counting; conflicting attributes raise conflict error
+- [x] Settlement totals cannot exceed original amount under sequential and concurrent loads
+- [x] Direct table mutations on settlements are revoked from authenticated users (RPC enforced)
+- [x] Financial history protected via `ON DELETE RESTRICT`
+- [x] Category reorder row locking prevents concurrent mutation race conditions
+- [x] Redundant read-before-write queries removed from category CRUD
+- [x] Performance covering indexes added for transaction, people, and settlement queries
+- [x] 100% of workspace tests pass (104/104 tests across 12 test suites)
+
+### 01-M · Dashboard (read-only)
 
 | Task | Details |
 |---|---|
@@ -221,7 +243,7 @@
 - [ ] Soft-deleted transactions are invisible to the user
 - [ ] Edit pre-populates all fields correctly
 
-### 01-M · PWA manifest & baseline installability
+### 01-N · PWA manifest & baseline installability
 
 | Task | Details |
 |---|---|
@@ -234,7 +256,7 @@
 - [ ] Browser shows "Install Arth" prompt on Chrome/Edge
 - [ ] Lighthouse PWA score ≥ 85 (without offline; that's Phase 03)
 
-### 01-N · Deployment
+### 01-O · Deployment
 
 | Task | Details |
 |---|---|
