@@ -7,28 +7,52 @@
 
 ## 1. System overview
 
-Arth is a single-user personal finance tracking Progressive Web App. The user manually enters income and expense transactions. There is no bank integration, no automatic import, and no multi-tenancy. Supabase PostgreSQL is the single authoritative database. Google Sheets is a read-only secondary copy kept in near-real-time sync. The app must remain functional offline (Phase 03+) with local-first storage that reconciles on reconnection.
+Arth is a single-user personal finance tracking Progressive Web App structured as a modular monorepo (`pnpm-workspace`). The user manually enters income and expense transactions. There is no bank integration, no automatic import, and no multi-tenancy. 
+
+The architecture enforces strict separation between:
+1. **Frontend (`frontend/`)**: Next.js 16 App Router application managing UI, navigation, theme, client-side caching, and API client communication. Pure presentation layer with zero direct database access or service credentials.
+2. **Backend (`backend/`)**: Fastify TypeScript API service managing domain logic, input validation, user authorization, and data mutation orchestration.
+3. **Shared Contracts (`packages/contracts/`)**: Common TypeScript types, request/response DTOs, and schemas shared between frontend and backend.
+4. **Database Infrastructure (`supabase/`)**: PostgreSQL 15 database migrations, Row Level Security (RLS) policies, and database tests.
+5. **Secondary Storage (Phase 02)**: Google Sheets API v4 integration fed via an authoritative asynchronous Outbox pattern worker.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                        Browser                          │
-│  Next.js (React) — shadcn/ui — Tailwind CSS             │
-│  Zustand (UI state) ── Dexie.js IndexedDB (Phase 03+)  │
-└────────────┬────────────────────────┬───────────────────┘
-             │ HTTPS (anon key)       │ HTTPS (anon key)
-             ▼                        ▼
-┌────────────────────┐   ┌────────────────────────────────┐
-│  Next.js Server    │   │        Supabase                │
-│  Route Handlers /  │──▶│  PostgreSQL  │  Auth (RLS)     │
-│  Server Actions    │   │  Realtime    │  Storage         │
-│                    │   └────────────────────────────────┘
-│  service-role key  │
-│  Google SA creds   │──▶  Google Sheets API v4
-└────────────────────┘
-         │
-         ▼
-   Vercel Edge / Node.js runtime
+┌──────────────────────────────────────────────────────────┐
+│              Frontend Application (frontend/)            │
+│   Next.js 16 (App Router) — Tailwind CSS v4             │
+│   Ledger Minimal Tokens — UI state (Zustand)             │
+│   Pure presentation & API client; ZERO database access  │
+└───────────────────────────┬──────────────────────────────┘
+                            │ HTTPS / JSON API
+                            │ (Bearer JWT / Session token)
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│               Backend Service (backend/)                 │
+│   Fastify TypeScript Service                             │
+│   • Request Validation & API Authorization               │
+│   • Domain Business Rules & Authoritative Calculations   │
+│   • Authoritative Outbox & Sheets Sync Worker (Phase 02) │
+│   • Isolated Service-Role & Google SA Credentials        │
+└─────────────┬──────────────────────────────┬─────────────┘
+              │ Authenticated SQL / Service  │ Google API v4
+              ▼                              ▼
+┌───────────────────────────────┐  ┌───────────────────────┐
+│       Supabase Database       │  │  Google Sheets API    │
+│  PostgreSQL 15 (RLS Enforced) │  │  Secondary Ledger     │
+│  Profiles, Categories, Txns   │  └───────────────────────┘
+│  Outbox Events table          │
+└───────────────────────────────┘
 ```
+
+### 1.1 Monorepo Workspace Boundaries
+
+| Package / Directory | Responsibilities | Disallowed Dependencies / Behaviors |
+|---|---|---|
+| `frontend/` | Next.js App Router, React UI, Ledger Minimal styles, client cache | No direct database connection, no service-role keys, no Google Sheets credentials |
+| `backend/` | Fastify server, business rules, API routing, validation, DB access | No frontend UI components, no client-side DOM APIs |
+| `packages/contracts/` | Typed API contracts, DTO interfaces, shared schemas | No business logic, no heavy dependencies, no database access |
+| `supabase/` | Append-only SQL migrations, local emulation config, RLS policies | No application runtime code |
+| `docs/` | Architecture specs, UX blueprint, design tokens, prototypes | No executable runtime dependencies |
 
 ---
 

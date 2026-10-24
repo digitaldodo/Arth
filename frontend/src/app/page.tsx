@@ -1,8 +1,17 @@
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { formatPaiseToINR } from "@/lib/format";
+import type { HealthCheckResponse } from "@arth/contracts";
 
 export default function HomePage() {
   const verifiedPaiseSample = 145000; // 1,450.00 INR demonstration
+
+  const sampleHealthContract: HealthCheckResponse = {
+    status: "ok",
+    service: "arth-backend",
+    version: "0.1.0",
+    uptimeSeconds: 0,
+    timestamp: "2026-10-25T00:00:00.000Z",
+  };
 
   return (
     <main className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] px-4 py-8 md:py-16 transition-colors">
@@ -19,7 +28,7 @@ export default function HomePage() {
               </span>
             </div>
             <p className="text-[13px] text-[var(--text-secondary)]">
-              Personal finance tracking foundation with local-first ledger clarity
+              Modular personal finance architecture with strict domain boundaries
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -33,51 +42,47 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[var(--income-fg)]" />
               <span className="text-[13px] font-medium text-[var(--text-primary)]">
-                System Status: Foundation Scaffold Ready
+                System Status: Modular Monorepo Established
               </span>
             </div>
             <span className="font-mono text-[11px] text-[var(--text-muted)]">
-              Phase 01E Complete
+              Phase 01F Active
             </span>
           </div>
           <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
-            The Next.js 16 App Router application has been successfully initialized in the workspace with strict TypeScript, Tailwind CSS v4, and the complete Ledger Minimal semantic design token foundation.
+            Workspace restructured into decoupled packages: <code className="font-mono text-[12px] bg-[var(--bg-surface-subtle)] px-1 py-0.5 rounded-[2px]">frontend/</code> (Next.js 16 UI), <code className="font-mono text-[12px] bg-[var(--bg-surface-subtle)] px-1 py-0.5 rounded-[2px]">backend/</code> (Fastify API service), <code className="font-mono text-[12px] bg-[var(--bg-surface-subtle)] px-1 py-0.5 rounded-[2px]">packages/contracts/</code> (shared types), and <code className="font-mono text-[12px] bg-[var(--bg-surface-subtle)] px-1 py-0.5 rounded-[2px]">supabase/</code> (PostgreSQL migrations &amp; RLS).
           </p>
         </section>
 
-        {/* Technical Architecture Matrix */}
+        {/* Architectural Boundaries Matrix */}
         <section className="rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] overflow-hidden">
           <div className="px-5 py-3.5 border-b border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)]">
             <h2 className="text-[11px] font-semibold tracking-[0.05em] uppercase text-[var(--text-secondary)]">
-              Active Technical Specifications
+              Modular Architecture Boundaries
             </h2>
           </div>
           <dl className="divide-y divide-[var(--border-hairline)] text-[13px]">
             <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-              <dt className="text-[var(--text-secondary)]">Application Runtime</dt>
-              <dd className="font-mono text-[12px] text-[var(--text-primary)]">Next.js 16 (App Router) + React 19</dd>
+              <dt className="text-[var(--text-secondary)]">Frontend Package (<code className="text-[11px]">@arth/frontend</code>)</dt>
+              <dd className="font-mono text-[12px] text-[var(--text-primary)]">Next.js 16 App Router · Port 3000</dd>
             </div>
             <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-              <dt className="text-[var(--text-secondary)]">Type Safety</dt>
-              <dd className="font-mono text-[12px] text-[var(--text-primary)]">TypeScript 5 (Strict Mode enabled)</dd>
+              <dt className="text-[var(--text-secondary)]">Backend Service (<code className="text-[11px]">@arth/backend</code>)</dt>
+              <dd className="font-mono text-[12px] text-[var(--text-primary)]">Fastify API Service · Port 3001</dd>
             </div>
             <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-              <dt className="text-[var(--text-secondary)]">Design System Baseline</dt>
-              <dd className="text-[var(--text-primary)]">Ledger Minimal (Concept 1: Warm Paper / Obsidian)</dd>
+              <dt className="text-[var(--text-secondary)]">Shared Contracts (<code className="text-[11px]">@arth/contracts</code>)</dt>
+              <dd className="font-mono text-[12px] text-[var(--text-primary)]">TypeScript API definitions ({sampleHealthContract.service})</dd>
+            </div>
+            <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+              <dt className="text-[var(--text-secondary)]">Database Layer (<code className="text-[11px]">supabase/</code>)</dt>
+              <dd className="font-mono text-[12px] text-[var(--text-primary)]">PostgreSQL · RLS Enforced · UTC Timestamps</dd>
             </div>
             <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
               <dt className="text-[var(--text-secondary)]">Currency Representation</dt>
               <dd className="font-mono text-[12px] text-[var(--text-primary)]">
                 Integer Paise (100 paise = ₹1.00) &rarr; {formatPaiseToINR(verifiedPaiseSample)}
               </dd>
-            </div>
-            <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-              <dt className="text-[var(--text-secondary)]">Timezone Standard</dt>
-              <dd className="font-mono text-[12px] text-[var(--text-primary)]">UTC database storage, Asia/Kolkata presentation</dd>
-            </div>
-            <div className="px-5 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-              <dt className="text-[var(--text-secondary)]">Package Manager</dt>
-              <dd className="font-mono text-[12px] text-[var(--text-primary)]">pnpm 10.24.0</dd>
             </div>
           </dl>
         </section>
@@ -93,8 +98,8 @@ export default function HomePage() {
               <code className="font-mono text-[11px] text-[var(--text-muted)]">docs/ARTH_ARCHITECTURE.md</code>
             </li>
             <li className="flex items-center justify-between py-1 border-b border-[var(--border-hairline)]">
-              <span className="text-[var(--text-primary)] font-medium">UX Blueprint & Workflows</span>
-              <code className="font-mono text-[11px] text-[var(--text-muted)]">docs/ARTH_UX_BLUEPRINT.md</code>
+              <span className="text-[var(--text-primary)] font-medium">Architecture Decision Record (ADR)</span>
+              <code className="font-mono text-[11px] text-[var(--text-muted)]">docs/decisions/ADR-001-modular-monorepo.md</code>
             </li>
             <li className="flex items-center justify-between py-1 border-b border-[var(--border-hairline)]">
               <span className="text-[var(--text-primary)] font-medium">Ledger Minimal Design System</span>
@@ -113,8 +118,8 @@ export default function HomePage() {
 
         {/* Next Phase Indicator */}
         <footer className="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between text-[12px] text-[var(--text-muted)] gap-2">
-          <span>Next: Phase 01F · Supabase Project Setup &amp; Migrations</span>
-          <span className="font-mono">v0.1.0-alpha · Phase 01E</span>
+          <span>Next: Phase 01G · Supabase Setup &amp; Authentication Flow</span>
+          <span className="font-mono">v0.1.0-alpha · Phase 01F</span>
         </footer>
       </div>
     </main>

@@ -73,7 +73,21 @@
 | Quality Gates Verification | `pnpm install`, `pnpm lint` (0 errors), `pnpm typecheck` (0 errors), `pnpm build` (clean), and CDP browser inspection (0 console errors, exact RGB matches) | Complete ✅ |
 | Git Repository Init | Git initialized with verified `.gitignore` excluding build artifacts and secrets | Complete ✅ |
 
-### 01-F · Supabase project setup
+### 01-F · Modular Monorepo Architecture & Backend Foundation ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Monorepo Workspace | Configured `pnpm-workspace.yaml` and root `package.json` with scripts for `dev`, `build`, `lint`, `typecheck`, `test` | Complete ✅ |
+| Frontend Decoupling | Migrated Next.js 16 app into `frontend/` package (`@arth/frontend`); zero database credentials or server-role keys | Complete ✅ |
+| Feature Slices & UI Primitives | Structured `frontend/src/` with `features/` (dashboard, transactions, categories, settings), `components/` (ui, layout), and `lib/api-client/` | Complete ✅ |
+| Shared Contracts Package | Created `packages/contracts/` (`@arth/contracts`) exporting typed API interfaces (`HealthCheckResponse`) | Complete ✅ |
+| Fastify Backend Foundation | Implemented `@arth/backend` with configuration loader, CORS plugin, health module, and `buildApp()` factory | Complete ✅ |
+| Health Route & Automated Tests | Built `GET /health` endpoint; verified with automated unit tests using Node.js test runner | Complete ✅ |
+| Supabase Directory | Established root `supabase/` directory with `migrations/`, `tests/`, and `config.toml` | Complete ✅ |
+| ADR-001 Documentation | Authored `docs/decisions/ADR-001-modular-monorepo.md` documenting separation rationale, boundaries, and security flow | Complete ✅ |
+| Quality Gates Verification | `pnpm install`, workspace `typecheck`, backend tests, frontend build, backend health query, and browser inspection all passed with 0 errors | Complete ✅ |
+
+### 01-G · Supabase project setup & migrations
 
 > These steps require the owner to perform manual actions in the Supabase dashboard. The agent documents what to do; it does not invent credentials.
 
@@ -104,7 +118,7 @@ Entertainment, Shopping, Education, Personal Care, Travel,
 Investments, Salary, Freelance, Other Income, Other Expense
 ```
 
-### 01-G · Authentication flow
+### 01-H · Authentication flow & backend session verification
 
 | Task | Details |
 |---|---|

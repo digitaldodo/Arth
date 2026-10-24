@@ -1,14 +1,89 @@
-# Arth (अर्थ) — Personal Finance Tracker
+# Arth (अर्थ) — Modular Monorepo Architecture
 
 Arth is a fast, local-first personal finance tracker engineered for high-velocity transaction capture (< 5 seconds), dual-write synchronization to Google Sheets, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**).
 
+The repository is structured as a **modular monorepo** with strict physical boundaries between frontend presentation, backend business logic, shared contracts, and database migrations.
+
+---
+
 ## Architectural Principles
 
+- **Separation of Concerns**: Pure Next.js frontend with zero direct database connections; Fastify backend service authoritatively enforces validation and business logic.
+- **Shared API Contracts**: Type-safe request/response DTOs defined in `@arth/contracts` consumed by both applications.
 - **Amounts in Integer Paise**: Financial values are stored as integers representing paise (1 INR = 100 paise) as `BIGINT` in PostgreSQL to prevent floating-point rounding errors.
 - **Deterministic Timezones**: Stored as UTC `TIMESTAMPTZ` in Supabase; formatted in `Asia/Kolkata` (IST) for user interfaces.
 - **Ledger Minimal Design System**: High-contrast, typography-driven financial clarity featuring warm archival paper in light mode (`#FBFBF9`) and restrained obsidian in dark mode (`#0C0A09`).
 - **Outbox Pattern**: Transaction mutations write to an authoritative `outbox_events` table before background asynchronous synchronization to Google Sheets.
-- **Strict Row Level Security (RLS)**: Direct database queries are enforced per authenticated user; administrative operations are isolated to server routes.
+- **Two-Layer Security**: Backend API authentication/authorization + PostgreSQL Row Level Security (RLS) enforcement.
+
+---
+
+## Repository Structure
+
+```text
+arth/
+├── frontend/                     # Next.js 16 App Router (@arth/frontend)
+│   ├── src/
+│   │   ├── app/                  # App Router layouts, pages, globals.css
+│   │   ├── components/
+│   │   │   ├── ui/               # Reusable UI primitives (ThemeToggle)
+│   │   │   └── layout/           # Shared page layouts & navigation
+│   │   ├── features/             # Feature-sliced modules
+│   │   │   ├── dashboard/
+│   │   │   ├── transactions/
+│   │   │   ├── categories/
+│   │   │   └── settings/
+│   │   └── lib/
+│   │       ├── api-client/       # Typed backend API client functions
+│   │       └── format.ts         # Paise-to-INR & date formatters
+│   ├── public/                   # Static assets & icons
+│   ├── package.json
+│   ├── next.config.ts
+│   └── tsconfig.json
+│
+├── backend/                      # Fastify TypeScript Service (@arth/backend)
+│   ├── src/
+│   │   ├── app.ts                # Fastify factory function & plugin registration
+│   │   ├── server.ts             # Server entry point (starts on port 3001)
+│   │   ├── config/               # Environment configuration & validation
+│   │   ├── plugins/              # Shared Fastify plugins (CORS, etc.)
+│   │   └── modules/              # Domain modules
+│   │       └── health/           # Health check endpoint (GET /health)
+│   ├── tests/                    # Automated backend tests (Node test runner)
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── packages/
+│   └── contracts/                # Shared API Contracts (@arth/contracts)
+│       ├── src/
+│       │   ├── health.ts         # HealthCheckResponse contract
+│       │   └── index.ts          # Unified exports
+│       ├── package.json
+│       └── tsconfig.json
+│
+├── supabase/                     # Database Infrastructure
+│   ├── migrations/               # Numbered, append-only SQL migrations
+│   ├── tests/                    # Database-level pgTAP tests
+│   └── config.toml               # Supabase CLI local emulation configuration
+│
+├── docs/                         # Specifications & Architectural Documentation
+│   ├── decisions/                # Architecture Decision Records (ADR-001)
+│   ├── ARTH_ARCHITECTURE.md      # System, database, & synchronization architecture
+│   ├── ARTH_BUILD_PLAN.md        # Phased implementation plan & progress log
+│   ├── ARTH_DESIGN_SYSTEM.md     # Ledger Minimal tokens and component rules
+│   ├── ARTH_UX_BLUEPRINT.md      # Navigation, IA, and progressive disclosure flows
+│   └── design-concepts/          # Screen prototype & automated verification shots
+│
+├── .env.example                  # Non-secret environment variable templates
+├── .gitignore                    # Git exclusion rules
+├── AGENTS.md                     # Agent entrypoint pointer
+├── ANTIGRAVITY.md                # Canonical project instructions and rules
+├── package.json                  # Root monorepo configuration
+├── pnpm-workspace.yaml           # Workspace package definitions
+└── pnpm-lock.yaml                # Monorepo dependency lockfile
+```
+
+---
 
 ## Prerequisites
 
@@ -16,9 +91,13 @@ Arth is a fast, local-first personal finance tracker engineered for high-velocit
 - **pnpm**: v10.24.0+
 - **Git**
 
+---
+
 ## Getting Started
 
 ### 1. Install Dependencies
+
+Install all dependencies across the monorepo:
 
 ```bash
 pnpm install
@@ -26,57 +105,57 @@ pnpm install
 
 ### 2. Configure Environment Variables
 
-Copy the example environment template:
+Copy the root environment template:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Populate `.env.local` with your local Supabase credentials and application URL. Note: real secrets should never be committed to git.
+### 3. Run Development Servers
 
-### 3. Run Development Server
+Run both frontend and backend concurrently:
 
 ```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend: [http://localhost:3001](http://localhost:3001) (Health: `GET /health`)
 
-## Available Scripts
+Or run services independently:
+
+```bash
+# Frontend only (Next.js)
+pnpm dev:frontend
+
+# Backend only (Fastify with tsx watch)
+pnpm dev:backend
+```
+
+---
+
+## Available Monorepo Scripts
 
 | Command | Description |
 |---|---|
-| `pnpm dev` | Starts the Next.js development server with hot reloading |
-| `pnpm build` | Compiles the production-optimized Next.js build |
-| `pnpm start` | Runs the compiled production server |
-| `pnpm lint` | Runs ESLint across the codebase |
-| `pnpm typecheck` | Validates TypeScript types with `tsc --noEmit` |
+| `pnpm dev` | Runs frontend and backend concurrently in development mode |
+| `pnpm dev:frontend` | Runs only the Next.js frontend development server |
+| `pnpm dev:backend` | Runs only the Fastify backend service with auto-reload |
+| `pnpm build` | Builds all packages: `@arth/contracts` &rarr; `@arth/backend` &rarr; `@arth/frontend` |
+| `pnpm build:frontend` | Builds the production Next.js frontend application |
+| `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
+| `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
+| `pnpm lint` | Runs ESLint across the frontend codebase |
+| `pnpm test` | Runs the automated backend test suite via Node test runner |
+| `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
+| `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
 
-## Project Structure
-
-```text
-├── docs/                        # Architecture, UX blueprints, design specifications
-│   ├── ARTH_ARCHITECTURE.md     # Technical and database specifications
-│   ├── ARTH_BUILD_PLAN.md       # Phased implementation plan
-│   ├── ARTH_DESIGN_SYSTEM.md    # Ledger Minimal tokens and component rules
-│   ├── ARTH_UX_BLUEPRINT.md     # User journeys and screen specifications
-│   └── design-concepts/         # Interactive screen prototypes
-├── public/                      # Static assets and icons
-├── src/
-│   ├── app/                     # Next.js App Router (layout, pages, globals.css)
-│   ├── components/              # Shared UI components and primitives
-│   ├── features/                # Feature-sliced module boundaries
-│   └── lib/                     # Currency/date formatters, utility functions
-├── .env.example                 # Non-secret environment variable definitions
-├── AGENTS.md                    # Agent entrypoint pointer
-├── ANTIGRAVITY.md               # Canonical project instructions and rules
-├── package.json                 # Dependency manifests and scripts
-└── tsconfig.json                # TypeScript strict configuration
-```
+---
 
 ## Phase Status
 
 - **Phase 00**: Architecture & Auditing (Completed)
-- **Phase 01A–01D**: Visual Direction & Prototype Sign-off (Ledger Minimal approved)
+- **Phase 01A–01D**: Visual Direction & Screen Prototype (Ledger Minimal approved)
 - **Phase 01E**: Project Scaffold & Tooling Setup (Completed)
-- **Phase 01F**: Supabase Project Setup & Migrations (Next)
+- **Phase 01F**: Modular Monorepo Architecture & Backend Foundation (Completed)
+- **Phase 01G**: Supabase Project Setup & Migrations (Next)
