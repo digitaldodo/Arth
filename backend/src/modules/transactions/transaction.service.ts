@@ -291,7 +291,7 @@ export class SupabaseTransactionService implements ITransactionService {
 
     let qb = client
       .from('categories')
-      .select('id, name, type, icon, color, sort_order, is_default')
+      .select('id, name, type, icon, color, sort_order, is_default, archived_at')
       .is('archived_at', null)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
@@ -314,6 +314,7 @@ export class SupabaseTransactionService implements ITransactionService {
       color: c.color,
       sort_order: c.sort_order,
       is_default: c.is_default,
+      archived_at: c.archived_at ?? null,
     }));
 
     return { categories };
@@ -541,6 +542,7 @@ export class InMemoryTransactionService implements ITransactionService {
       color: c.color,
       sort_order: c.sort_order,
       is_default: c.is_default,
+      archived_at: c.archived_at ?? null,
     }));
 
     return { categories };

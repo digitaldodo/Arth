@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 7 numbered migration files exist in sequential order', () => {
+  test('All 8 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -17,7 +17,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0004_create_outbox_events.sql',
       '0005_rls_policies.sql',
       '0006_auth_trigger.sql',
-      '0007_indexes.sql'
+      '0007_indexes.sql',
+      '0008_category_reorder.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -78,5 +79,13 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('idx_transactions_user_date_active'), 'Active transactions date index must be present');
     assert.ok(sql.includes('idx_categories_user_type_sort'), 'Category sorting index must be present');
     assert.ok(sql.includes('idx_outbox_status_pending_created'), 'Pending outbox index must be present');
+  });
+
+  test('0008_category_reorder.sql enforces atomic category reordering with SECURITY INVOKER', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0008_category_reorder.sql'), 'utf-8');
+    assert.ok(sql.includes('fn_reorder_categories'), 'Reorder function must exist');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Function must execute with caller permissions and RLS');
+    assert.ok(sql.includes('auth.uid()'), 'Function must verify user context');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_reorder_categories'), 'Execution grant to authenticated role must be present');
   });
 });

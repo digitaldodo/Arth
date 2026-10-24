@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
+import { CategoryManager } from '@/features/categories/CategoryManager';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -15,8 +16,10 @@ interface TransactionAppShellProps {
 }
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
+  const [activeView, setActiveView] = useState<'ledger' | 'categories'>('ledger');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [categoryVersion, setCategoryVersion] = useState<number>(0);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
@@ -30,6 +33,10 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     setTimeout(() => {
       setSaveSuccessBanner(null);
     }, 4000);
+  };
+
+  const handleCategoryChanged = () => {
+    setCategoryVersion((prev) => prev + 1);
   };
 
   return (
@@ -46,6 +53,34 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 Ledger
               </span>
             </Link>
+
+            {/* Desktop Navigation Switcher */}
+            {user && (
+              <div className="hidden sm:flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-md border border-[var(--border-hairline)] ml-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('ledger')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                    activeView === 'ledger'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Ledger
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('categories')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                    activeView === 'categories'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Categories
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -92,10 +127,14 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
         )}
 
         {user ? (
-          <TransactionLedger
-            onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-            refreshTrigger={refreshTrigger}
-          />
+          activeView === 'ledger' ? (
+            <TransactionLedger
+              onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+              refreshTrigger={refreshTrigger}
+            />
+          ) : (
+            <CategoryManager onCategoryChange={handleCategoryChanged} />
+          )
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -117,10 +156,14 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       </main>
 
       {/* Mobile Fixed Bottom Navigation with Central Quick Add (+) */}
-      <div className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-6 py-2 flex items-center justify-between">
+      <div className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-8 py-2 flex items-center justify-between">
         <button
-          onClick={() => {}}
-          className="flex flex-col items-center gap-0.5 text-[10px] font-medium text-[var(--text-primary)]"
+          onClick={() => setActiveView('ledger')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+            activeView === 'ledger'
+              ? 'text-[var(--text-primary)] font-bold'
+              : 'text-[var(--text-muted)]'
+          }`}
         >
           <span className="text-base">📊</span>
           <span>Ledger</span>
@@ -137,11 +180,15 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
         </button>
 
         <button
-          onClick={() => {}}
-          className="flex flex-col items-center gap-0.5 text-[10px] font-medium text-[var(--text-muted)]"
+          onClick={() => setActiveView('categories')}
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+            activeView === 'categories'
+              ? 'text-[var(--text-primary)] font-bold'
+              : 'text-[var(--text-muted)]'
+          }`}
         >
-          <span className="text-base">⚙️</span>
-          <span>Settings</span>
+          <span className="text-base">🏷️</span>
+          <span>Categories</span>
         </button>
       </div>
 
@@ -151,6 +198,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           isOpen={true}
           onClose={() => setIsQuickAddOpen(false)}
           onSuccess={handleTransactionCreated}
+          categoryVersion={categoryVersion}
         />
       )}
     </div>

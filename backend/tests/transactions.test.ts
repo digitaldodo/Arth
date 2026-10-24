@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { v7 as uuidv7 } from 'uuid';
 import { buildApp } from '../src/app.js';
 import { InMemoryTransactionService } from '../src/modules/transactions/transaction.service.js';
+import { InMemoryCategoryService } from '../src/modules/categories/category.service.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('Backend Transactions & Categories API', () => {
   let app: FastifyInstance;
   let service: InMemoryTransactionService;
+  let categoryService: InMemoryCategoryService;
 
   const userA = {
     userId: '11111111-1111-7111-8111-111111111111',
@@ -25,9 +27,12 @@ describe('Backend Transactions & Categories API', () => {
 
   before(async () => {
     service = new InMemoryTransactionService();
+    categoryService = new InMemoryCategoryService();
     // Seed default categories for both test users
     service.seedDefaultCategories(userA.userId);
     service.seedDefaultCategories(userB.userId);
+    categoryService.seedDefaults(userA.userId);
+    categoryService.seedDefaults(userB.userId);
 
     // Custom verifier decoding tokens based on Bearer value
     const mockVerifier = async (token: string) => {
@@ -39,7 +44,8 @@ describe('Backend Transactions & Categories API', () => {
     app = await buildApp(
       { env: 'test' },
       mockVerifier,
-      service
+      service,
+      categoryService
     );
     await app.ready();
   });

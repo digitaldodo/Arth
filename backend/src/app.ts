@@ -6,6 +6,8 @@ import { healthRoutes } from './modules/health/health.routes.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { transactionRoutes } from './modules/transactions/transaction.routes.js';
 import type { ITransactionService } from './modules/transactions/transaction.service.js';
+import { categoryRoutes } from './modules/categories/category.routes.js';
+import type { ICategoryService } from './modules/categories/category.service.js';
 
 /**
  * Fastify application factory function.
@@ -14,7 +16,8 @@ import type { ITransactionService } from './modules/transactions/transaction.ser
 export async function buildApp(
   customConfig?: Partial<AppConfig>,
   customVerifier?: TokenVerifier,
-  customTransactionService?: ITransactionService
+  customTransactionService?: ITransactionService,
+  customCategoryService?: ICategoryService
 ): Promise<FastifyInstance> {
   const config: AppConfig = {
     ...loadConfig(),
@@ -35,6 +38,10 @@ export async function buildApp(
   await app.register(transactionRoutes, {
     config,
     service: customTransactionService,
+  });
+  await app.register(categoryRoutes, {
+    config,
+    service: customCategoryService,
   });
 
   return app;

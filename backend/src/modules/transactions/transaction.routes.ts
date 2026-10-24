@@ -5,7 +5,6 @@ import {
   ConflictError,
   validateCreateTransactionRequest,
   validateTransactionListQuery,
-  validateCategoryListQuery,
 } from './transaction.validation.js';
 import {
   type ITransactionService,
@@ -117,51 +116,6 @@ export const transactionRoutes: FastifyPluginAsync<TransactionRoutesOptions> = a
           statusCode: 500,
           error: 'Internal Server Error',
           message: 'An unexpected error occurred while retrieving transactions',
-        });
-      }
-    }
-  );
-
-  // C. GET /api/v1/categories - List active categories for caller
-  app.get(
-    '/api/v1/categories',
-    {
-      preHandler: [app.verifyAuth],
-    },
-    async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-
-      try {
-        const query = validateCategoryListQuery(
-          (request.query || {}) as Record<string, unknown>
-        );
-        const result = await service.listCategories(
-          request.user.userId,
-          query,
-          request.token
-        );
-
-        return reply.status(200).send(result);
-      } catch (err: unknown) {
-        if (err instanceof ValidationError) {
-          return reply.status(400).send({
-            statusCode: 400,
-            error: 'Bad Request',
-            message: err.message,
-          });
-        }
-
-        request.log.error(err, 'Failed to list categories');
-        return reply.status(500).send({
-          statusCode: 500,
-          error: 'Internal Server Error',
-          message: 'An unexpected error occurred while retrieving categories',
         });
       }
     }

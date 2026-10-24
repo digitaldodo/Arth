@@ -16,9 +16,15 @@ interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (res: CreateTransactionResponse) => void;
+  categoryVersion?: number;
 }
 
-export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps) {
+export function QuickAddModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  categoryVersion = 0,
+}: QuickAddModalProps) {
   // Stable UUID v7 for this submission session (retained on retry)
   const [txnId] = useState<string>(() => uuidv7());
   const [type, setType] = useState<TransactionType>('expense');
@@ -73,7 +79,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
     return () => {
       isMounted = false;
     };
-  }, [isOpen, type]);
+  }, [isOpen, type, categoryVersion]);
 
   // Handle Escape key to close modal
   useEffect(() => {

@@ -154,26 +154,30 @@
 - [x] Form resets after successful submission and updates active ledger view
 - [x] 100% of workspace tests pass (57/57 tests)
 
-### 01-J · Category Management
+### 01-J · Category Management & Custom Ordering ✅
 
-| Task | Details |
-|---|---|
-| Category list UI | `src/modules/CategoryManager/` — list with drag-to-reorder (dnd-kit) |
-| Add category | Name, optional icon (emoji picker), optional color |
-| Edit category | Inline name edit |
-| Reorder | Drag handle; `sort_order` updated via Server Action |
-| Archive category | Soft delete (`is_archived = true`); hidden from transaction form |
-| Unarchive | Settings panel |
-| Default categories | Seeded by `supabase/seed.sql`; marked `is_default = true` |
+| Task | Details | Status |
+|---|---|---|
+| Migration 0008: Atomic Reorder | Stored procedure `public.fn_reorder_categories(p_type, p_category_ids)` enforcing SECURITY INVOKER, array duplicate checking, and active count matching | Complete ✅ |
+| Shared Contracts | `CreateCategoryRequest`, `UpdateCategoryRequest`, `ArchiveCategoryRequest`, `ReorderCategoriesRequest`, `CategoryListQuery` in `@arth/contracts` | Complete ✅ |
+| Fastify Category Endpoints | `GET /api/v1/categories`, `POST /api/v1/categories`, `PATCH /api/v1/categories/:id`, `PATCH /api/v1/categories/:id/archive`, `PUT /api/v1/categories/reorder` | Complete ✅ |
+| Backend Category Tests | 11 automated test cases in `backend/tests/categories.test.ts` covering auth, validation, uniqueness, rename, type-immutability, cross-user isolation, and reorder | Complete ✅ |
+| Frontend BFF Proxies | Next.js server-side proxies for `/api/backend/categories`, `/api/backend/categories/[id]`, `/api/backend/categories/[id]/archive` | Complete ✅ |
+| Category Management UI | Ledger Minimal UI in `frontend/src/features/categories/CategoryManager.tsx` with taxonomy tabs, rank badges, up/down reorder controls, color picker, inline rename, archive confirmation modal, and collapsible restore accordion | Complete ✅ |
+| Navigation & Quick Add Sync | Connected Category Manager to desktop header tabs and mobile bottom bar; propagates category mutations immediately to `QuickAddModal` | Complete ✅ |
+| Frontend Tests | 5 automated tests in `frontend/tests/category-proxy.test.ts` verifying authentication boundaries and parameter forwarding | Complete ✅ |
 
 **Acceptance criteria**:
-- [ ] Categories are listed in `sort_order` order
-- [ ] New categories are appended after existing ones
-- [ ] Archived categories do not appear in transaction form
-- [ ] Category names are unique per user (enforced by DB + Zod)
-- [ ] Default categories cannot be hard-deleted
+- [x] Categories are listed in `sort_order` order
+- [x] Atomic custom reordering validates complete permutation without duplicates or foreign IDs
+- [x] New categories are appended after existing ones with custom or sequential `sort_order`
+- [x] Non-destructive archive hides categories from Quick Add while preserving historical transactions
+- [x] Collapsible Archived Categories section allows restoring categories without data loss
+- [x] Category names are unique per user and type (case-insensitive, DB + application validated)
+- [x] Type (`income` vs `expense`) is strictly immutable post-creation
+- [x] 100% of workspace tests pass (74/74 tests)
 
-### 01-J · Dashboard (read-only)
+### 01-K · Dashboard (read-only)
 
 | Task | Details |
 |---|---|

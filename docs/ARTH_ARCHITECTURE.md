@@ -285,7 +285,27 @@ Monetary amounts are submitted from UI as decimal strings (e.g., `"250.50"`), pa
 
 ---
 
-## 6. Google Sheets synchronization strategy
+## 6. Category Management & Custom Ordering Architecture
+
+### 6.1 Data Invariants & Non-Destructive Lifecycle
+- **Strictly Non-Destructive**: Categories are never physically deleted (`DELETE` statements are strictly prohibited). Soft-archiving (`archived_at TIMESTAMPTZ`) hides categories from new entry workflows while maintaining 100% referential integrity with past transactions.
+- **Relational Consistency**: Transactions enforce composite foreign key constraint `fk_transactions_category_user_type FOREIGN KEY (category_id, user_id, type) REFERENCES public.categories(id, user_id, type)`.
+- **Type Immutability**: Once created, category `type` (`income` vs `expense`) cannot be modified because past transactions reference `(category_id, user_id, type)`.
+- **Case-Insensitive Active Uniqueness**: Enforced via partial unique index `idx_categories_user_type_name_active ON public.categories (user_id, type, lower(name)) WHERE archived_at IS NULL`.
+- **Restoration Rules**: An archived category can be restored only if no active category of the same type and user already shares that case-insensitive name.
+
+### 6.2 Atomic Custom Ordering Engine
+- **Stored Procedure**: `public.fn_reorder_categories(p_type public.transaction_type, p_category_ids UUID[])` runs with `SECURITY INVOKER`.
+- **Validation**:
+  - Checks for array duplicates.
+  - Verifies that the provided ID list matches the exact count and identities of all active categories for the calling user and type (`WHERE user_id = auth.uid() AND type = p_type AND archived_at IS NULL`).
+  - Rejects partial, missing, foreign, or archived category IDs.
+- **Atomic Renumbering**: Updates `sort_order = ordinal_index` in a single transaction, preventing race conditions or duplicated sort orders.
+- **Immediate Propagation**: Category additions, renames, reorders, and archive state changes are propagated to the frontend shell and immediately reflected in Quick Add without requiring page reloads.
+
+---
+
+## 7. Google Sheets synchronization strategy
 
 ### 5.1 Architecture
 
