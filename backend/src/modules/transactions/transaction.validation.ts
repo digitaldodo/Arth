@@ -1,0 +1,252 @@
+import {
+  parseINRToPaise,
+  type CreateTransactionRequest,
+  type TransactionListQuery,
+  type CategoryListQuery,
+  type TransactionType,
+  type PaymentMethod,
+  type NecessityClass,
+} from '@arth/contracts';
+
+// RFC 9562 UUID v7 regex (verifies version 7 and variant bits)
+const UUID_V7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Standard UUID regex for category references
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// YYYY-MM-DD date regex
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+export class ValidationError extends Error {
+  public readonly statusCode = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+export class ConflictError extends Error {
+  public readonly statusCode = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+export interface ValidatedCreateTransactionInput {
+  id: string;
+  amount_paise: bigint;
+  type: TransactionType;
+  category_id: string;
+  transaction_date: string;
+  payment_method: PaymentMethod;
+  necessity: NecessityClass | null;
+  description: string | null;
+  notes: string | null;
+}
+
+export interface ValidatedTransactionListQuery {
+  page: number;
+  page_size: number;
+  type?: TransactionType;
+  category_id?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface ValidatedCategoryListQuery {
+  type?: TransactionType;
+}
+
+/**
+ * Validates transaction creation request body according to Arth financial rules.
+ */
+export function validateCreateTransactionRequest(body: unknown): ValidatedCreateTransactionInput {
+  if (!body || typeof body !== 'object') {
+    throw new ValidationError('Request body must be a valid JSON object');
+  }
+
+  const payload = body as Record<string, unknown>;
+
+  // 1. Validate ID (must be client-generated UUID v7)
+  if (typeof payload.id !== 'string' || !UUID_V7_REGEX.test(payload.id)) {
+    throw new ValidationError('Invalid transaction ID: must be a valid UUID v7');
+  }
+
+  // 2. Validate Type
+  if (payload.type !== 'income' && payload.type !== 'expense') {
+    throw new ValidationError("Transaction type must be 'income' or 'expense'");
+  }
+  const type: TransactionType = payload.type;
+
+  // 3. Validate Amount (Exact decimal string converted to integer paise)
+  if (typeof payload.amount !== 'string') {
+    throw new ValidationError('Amount must be provided as a decimal string');
+  }
+  let amount_paise: bigint;
+  try {
+    amount_paise = parseINRToPaise(payload.amount);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Invalid amount';
+    throw new ValidationError(msg);
+  }
+
+  // 4. Validate Category ID
+  if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
+    throw new ValidationError('Category ID must be a valid UUID');
+  }
+
+  // 5. Validate Transaction Date
+  if (typeof payload.transaction_date !== 'string' || !DATE_REGEX.test(payload.transaction_date)) {
+    throw new ValidationError('Transaction date must be in YYYY-MM-DD format');
+  }
+  const [year, month, day] = payload.transaction_date.split('-').map(Number);
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    isNaN(parsedDate.getTime()) ||
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== month - 1 ||
+    parsedDate.getUTCDate() !== day
+  ) {
+    throw new ValidationError('Transaction date is not a valid calendar date');
+  }
+
+  // 6. Validate Payment Method
+  if (payload.payment_method !== 'online' && payload.payment_method !== 'cash') {
+    throw new ValidationError("Payment method must be 'online' or 'cash'");
+  }
+  const payment_method: PaymentMethod = payload.payment_method;
+
+  // 7. Validate Necessity
+  let necessity: NecessityClass | null = null;
+  if (type === 'expense') {
+    if (
+      payload.necessity !== 'essential' &&
+      payload.necessity !== 'optional' &&
+      payload.necessity !== 'luxury'
+    ) {
+      throw new ValidationError(
+        "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
+      );
+    }
+    necessity = payload.necessity;
+  } else {
+    // Income transactions must NOT have necessity
+    if (payload.necessity !== undefined && payload.necessity !== null && payload.necessity !== '') {
+      throw new ValidationError('Income transactions must not have a necessity value');
+    }
+    necessity = null;
+  }
+
+  // 8. Description & Notes
+  let description: string | null = null;
+  if (typeof payload.description === 'string') {
+    const trimmed = payload.description.trim();
+    if (trimmed.length > 500) {
+      throw new ValidationError('Description cannot exceed 500 characters');
+    }
+    description = trimmed.length > 0 ? trimmed : null;
+  }
+
+  let notes: string | null = null;
+  if (typeof payload.notes === 'string') {
+    const trimmed = payload.notes.trim();
+    if (trimmed.length > 1000) {
+      throw new ValidationError('Notes cannot exceed 1000 characters');
+    }
+    notes = trimmed.length > 0 ? trimmed : null;
+  }
+
+  return {
+    id: payload.id.toLowerCase(),
+    amount_paise,
+    type,
+    category_id: payload.category_id.toLowerCase(),
+    transaction_date: payload.transaction_date,
+    payment_method,
+    necessity,
+    description,
+    notes,
+  };
+}
+
+/**
+ * Validates query parameters for transaction listing.
+ */
+export function validateTransactionListQuery(
+  query: Record<string, unknown>
+): ValidatedTransactionListQuery {
+  let page = 1;
+  if (query.page !== undefined) {
+    const parsed = parseInt(String(query.page), 10);
+    if (isNaN(parsed) || parsed < 1) {
+      throw new ValidationError('Page must be a positive integer greater than or equal to 1');
+    }
+    page = parsed;
+  }
+
+  let page_size = 20;
+  if (query.page_size !== undefined) {
+    const parsed = parseInt(String(query.page_size), 10);
+    if (isNaN(parsed) || parsed < 1 || parsed > 100) {
+      throw new ValidationError('Page size must be between 1 and 100');
+    }
+    page_size = parsed;
+  }
+
+  let type: TransactionType | undefined = undefined;
+  if (query.type !== undefined) {
+    if (query.type !== 'income' && query.type !== 'expense') {
+      throw new ValidationError("Query type must be 'income' or 'expense'");
+    }
+    type = query.type;
+  }
+
+  let category_id: string | undefined = undefined;
+  if (query.category_id !== undefined) {
+    if (typeof query.category_id !== 'string' || !UUID_REGEX.test(query.category_id)) {
+      throw new ValidationError('Query category_id must be a valid UUID');
+    }
+    category_id = query.category_id.toLowerCase();
+  }
+
+  let start_date: string | undefined = undefined;
+  if (query.start_date !== undefined) {
+    if (typeof query.start_date !== 'string' || !DATE_REGEX.test(query.start_date)) {
+      throw new ValidationError('Query start_date must be in YYYY-MM-DD format');
+    }
+    start_date = query.start_date;
+  }
+
+  let end_date: string | undefined = undefined;
+  if (query.end_date !== undefined) {
+    if (typeof query.end_date !== 'string' || !DATE_REGEX.test(query.end_date)) {
+      throw new ValidationError('Query end_date must be in YYYY-MM-DD format');
+    }
+    end_date = query.end_date;
+  }
+
+  return {
+    page,
+    page_size,
+    type,
+    category_id,
+    start_date,
+    end_date,
+  };
+}
+
+/**
+ * Validates query parameters for category listing.
+ */
+export function validateCategoryListQuery(
+  query: Record<string, unknown>
+): ValidatedCategoryListQuery {
+  let type: TransactionType | undefined = undefined;
+  if (query.type !== undefined) {
+    if (query.type !== 'income' && query.type !== 'expense') {
+      throw new ValidationError("Query type must be 'income' or 'expense'");
+    }
+    type = query.type;
+  }
+
+  return { type };
+}

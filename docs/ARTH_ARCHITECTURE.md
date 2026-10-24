@@ -265,7 +265,27 @@ CREATE POLICY "Users read own outbox"
 
 ---
 
-## 5. Google Sheets synchronization strategy
+## 5. Transaction Engine & Idempotency Mechanics (Phase 01I)
+
+### 5.1 Client-Side UUID v7
+All transaction primary keys are generated client-side before submission using standard RFC 9562 UUID v7 (`uuid` library).
+- Generates monotonically increasing, timestamp-ordered keys that guarantee natural chronological clustering.
+- Retained across network retries to enable deterministic idempotency.
+
+### 5.2 Idempotency Invariants
+1. **First Submission**: Fastify validates inputs, verifies category ownership and matching type, and inserts `public.transactions`. The `trg_transactions_outbox` trigger automatically writes `transaction.created` to `public.outbox_events` in the same PostgreSQL transaction. Returns HTTP 201 Created (`idempotent_replay: false`).
+2. **Identical Replay**: Retrying with the same UUID v7 and identical normalized payload is detected as an idempotent replay. Returns HTTP 200 OK (`idempotent_replay: true`) with the existing record, without generating duplicate transactions or duplicate outbox events.
+3. **Payload Mutation Conflict**: Submitting the same UUID v7 with different payload attributes (e.g., altered amount or category) is rejected with HTTP 409 Conflict.
+4. **Deleted ID Conflict**: Attempting to replay or recreate a transaction whose UUID v7 was previously soft-deleted (`deleted_at IS NOT NULL`) returns HTTP 409 Conflict, preventing accidental resurrection of deleted records.
+
+### 5.3 Integer-Paise Financial Representation
+Monetary amounts are submitted from UI as decimal strings (e.g., `"250.50"`), parsed using exact string and BigInt arithmetic without floating-point math, and stored in PostgreSQL as `BIGINT CHECK (amount_paise > 0)`.
+- Rejects zero, negative, malformed, or excessive decimal precision (> 2 decimal digits).
+- Formatting uses Indian numbering notation (`₹12,34,567.89`) via `formatPaiseToINR`.
+
+---
+
+## 6. Google Sheets synchronization strategy
 
 ### 5.1 Architecture
 

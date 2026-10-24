@@ -200,7 +200,7 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 | `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
 | `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
 | `pnpm lint` | Runs ESLint across the frontend codebase |
-| `pnpm test` | Runs all automated test suites across backend (19 tests) and frontend (4 tests) |
+| `pnpm test` | Runs all automated test suites across backend (47 tests) and frontend (10 tests) |
 | `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
 | `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
 
@@ -214,4 +214,5 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 - **Phase 01F**: Modular Monorepo Architecture & Backend Foundation (Completed)
 - **Phase 01G**: Supabase Database Schema, Migrations & Row-Level Security (Completed)
 - **Phase 01H**: Authentication Flow & Backend Session Verification (Completed)
-- **Phase 01I**: Transaction Entry & Outbox Engine (Next)
+- **Phase 01I**: Transaction Entry & Outbox Engine (Completed)
+- **Phase 01J**: Category Management (Next)

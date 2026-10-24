@@ -10,8 +10,12 @@ export interface AuthenticatedUser {
 }
 
 declare module 'fastify' {
+  interface FastifyInstance {
+    verifyAuth: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
   interface FastifyRequest {
     user?: AuthenticatedUser;
+    token?: string;
   }
 }
 
@@ -111,6 +115,7 @@ export function createAuthHook(verifier: TokenVerifier) {
     try {
       const user = await verifier(token);
       request.user = user;
+      request.token = token;
     } catch (err: unknown) {
       if (err instanceof errors.JWTExpired) {
         reply.status(401).send({

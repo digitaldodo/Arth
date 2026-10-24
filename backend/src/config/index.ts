@@ -7,6 +7,7 @@ export interface AppConfig {
   host: string;
   corsOrigin: string | string[];
   supabaseUrl?: string;
+  supabaseAnonKey?: string;
   supabaseJwtSecret?: string;
   jwtAudience: string;
   jwtIssuer?: string;
@@ -19,6 +20,7 @@ export function loadConfig(): AppConfig {
   const host = process.env.HOST || '0.0.0.0';
   const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseJwtSecret = process.env.SUPABASE_JWT_SECRET;
   const jwtAudience = process.env.JWT_AUDIENCE || 'authenticated';
   const jwtIssuer =
@@ -33,6 +35,7 @@ export function loadConfig(): AppConfig {
       ? corsOrigin.split(',').map((o) => o.trim())
       : corsOrigin,
     supabaseUrl,
+    supabaseAnonKey,
     supabaseJwtSecret,
     jwtAudience,
     jwtIssuer,

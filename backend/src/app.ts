@@ -4,6 +4,8 @@ import { registerCors } from './plugins/cors.js';
 import { registerAuth, TokenVerifier } from './plugins/auth.js';
 import { healthRoutes } from './modules/health/health.routes.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { transactionRoutes } from './modules/transactions/transaction.routes.js';
+import type { ITransactionService } from './modules/transactions/transaction.service.js';
 
 /**
  * Fastify application factory function.
@@ -11,7 +13,8 @@ import { authRoutes } from './modules/auth/auth.routes.js';
  */
 export async function buildApp(
   customConfig?: Partial<AppConfig>,
-  customVerifier?: TokenVerifier
+  customVerifier?: TokenVerifier,
+  customTransactionService?: ITransactionService
 ): Promise<FastifyInstance> {
   const config: AppConfig = {
     ...loadConfig(),
@@ -29,6 +32,10 @@ export async function buildApp(
   // Register domain modules
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(transactionRoutes, {
+    config,
+    service: customTransactionService,
+  });
 
   return app;
 }

@@ -130,30 +130,29 @@
 - [x] Open redirect protection enforces relative local return paths
 - [x] 100% of workspace tests pass (23/23 tests)
 
-### 01-I · Transaction Entry & Outbox Engine
+### 01-I · Transaction Entry & Outbox Engine ✅
 
-| Task | Details |
-|---|---|
-| Zod schema | Shared contracts & backend validation schemas for transaction creation |
-| Amount input | Accepts decimal INR (e.g., `150.50`) → converts to `15050` paise before submission |
-| Type selector | Toggle: Income / Expense |
-| Date picker | Defaults to today in Asia/Kolkata; editable; uses `date-fns-tz` |
-| Category selector | Dropdown from user's active categories; sorted by `sort_order` |
-| Payment method | Two-option selector: Online / Cash |
-| Necessity selector | Shown only when type = Expense; required; Essential / Optional / Luxury |
-| Note field | Optional free-text, max 500 chars |
-| UUID v7 generation | Client-side before submission |
-| Fastify Endpoint | `POST /api/v1/transactions` validating input and executing atomic insert + outbox trigger |
-| Success/error feedback | Toast notification via Ledger Minimal UI feedback |
+| Task | Details | Status |
+|---|---|---|
+| Shared Contracts | Defined `CreateTransactionRequest`, `TransactionDTO`, `CategoryDTO`, and list queries in `@arth/contracts` | Complete ✅ |
+| Exact Money Utility | `parseINRToPaise`, `paiseToDecimal`, `formatPaiseToINR` with BigInt math and zero floating-point drift | Complete ✅ |
+| Fastify Endpoints | `POST /api/v1/transactions`, `GET /api/v1/transactions`, `GET /api/v1/categories` with JWT authentication | Complete ✅ |
+| Idempotency Engine | UUID v7 idempotency handling (201 created, 200 idempotent replay, 409 payload conflict, 409 deleted ID reuse) | Complete ✅ |
+| Backend Tests | 18 transaction API tests + 10 money calculation tests (47 total backend tests passing) | Complete ✅ |
+| BFF API Proxies | Next.js server-side proxies for `/api/backend/transactions` and `/api/backend/categories` | Complete ✅ |
+| Quick Add UI | Ledger Minimal Quick Add modal/bottom-sheet with responsive drawer, top-6 chips, and safe retry | Complete ✅ |
+| Ledger Screen | Responsive ledger listing with Net Cash Flow computation, filters, and empty states | Complete ✅ |
+| Frontend Tests | 10 automated frontend tests verifying proxy protection, date handling, and currency formatting | Complete ✅ |
 
 **Acceptance criteria**:
-- [ ] All required fields validated with Zod before submission
-- [ ] Necessity field hidden for Income, required for Expense
-- [ ] Amount entered as INR decimal, stored as paise integer
-- [ ] Date defaults to current date in IST
-- [ ] Transaction and outbox_event inserted atomically
-- [ ] Duplicate UUID submission is handled as a no-op (idempotent upsert)
-- [ ] Form resets after successful submission
+- [x] All required fields validated before submission
+- [x] Necessity field required for Expense, strictly absent for Income
+- [x] Amount entered as INR decimal, stored as paise integer (`BIGINT`)
+- [x] Date defaults to current date in Asia/Kolkata (IST)
+- [x] Transaction and outbox_event inserted atomically via database trigger
+- [x] Duplicate UUID v7 submission is handled as an idempotent replay without duplicating outbox events
+- [x] Form resets after successful submission and updates active ledger view
+- [x] 100% of workspace tests pass (57/57 tests)
 
 ### 01-J · Category Management
 
