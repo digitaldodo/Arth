@@ -132,6 +132,30 @@ pnpm dev:frontend
 pnpm dev:backend
 ```
 
+### 4. Database Setup & Migrations (Local Development)
+
+The database schema and RLS policies are version-controlled under `supabase/migrations/`:
+
+```bash
+# Start local Supabase container stack (requires Docker Desktop running)
+pnpx supabase start
+
+# Apply all migrations & test triggers against local database
+pnpx supabase db reset
+
+# Run pgTAP database security and constraint test suite
+pnpx supabase test db
+```
+
+---
+
+## Database Architecture & Constraints
+
+- **`public.profiles`**: Auto-provisioned on signup via `auth.users` trigger. Defaults to `Asia/Kolkata` and `INR`.
+- **`public.categories`**: Separates `income` vs `expense` taxonomy. Uniqueness per `(user_id, type, lower(name))` where active. Supports non-destructive archiving via `archived_at`.
+- **`public.transactions`**: Stores amounts as positive integer paise (`BIGINT > 0`). Enforces composite foreign key `(category_id, user_id, type)` preventing cross-user or mismatched category assignments. Requires necessity for expenses and strictly `NULL` for income.
+- **`public.outbox_events`**: Atomic transactional outbox populated via `trg_transactions_outbox` capturing create, update, soft-delete, and restoration events for Google Sheets sync. Immutable to authenticated users.
+
 ---
 
 ## Available Monorepo Scripts
@@ -158,4 +182,5 @@ pnpm dev:backend
 - **Phase 01A–01D**: Visual Direction & Screen Prototype (Ledger Minimal approved)
 - **Phase 01E**: Project Scaffold & Tooling Setup (Completed)
 - **Phase 01F**: Modular Monorepo Architecture & Backend Foundation (Completed)
-- **Phase 01G**: Supabase Project Setup & Migrations (Next)
+- **Phase 01G**: Supabase Database Schema, Migrations & Row-Level Security (Completed)
+- **Phase 01H**: Authentication Flow & Backend Session Verification (Next)

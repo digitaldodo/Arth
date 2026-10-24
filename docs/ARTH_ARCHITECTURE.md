@@ -86,15 +86,20 @@ CREATE TABLE public.categories (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
-  icon         TEXT,                      -- emoji or icon name
+  type         public.transaction_type NOT NULL,
+  icon         TEXT,                      -- emoji or glyph name
   color        TEXT,                      -- hex color
   sort_order   INTEGER NOT NULL DEFAULT 0,
   is_default   BOOLEAN NOT NULL DEFAULT FALSE,
-  is_archived  BOOLEAN NOT NULL DEFAULT FALSE,
+  archived_at  TIMESTAMPTZ,               -- non-destructive soft-archive
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, name)
+  CONSTRAINT uq_categories_id_user_type UNIQUE (id, user_id, type)
 );
+
+CREATE UNIQUE INDEX idx_categories_user_type_name_active
+  ON public.categories (user_id, type, lower(name))
+  WHERE archived_at IS NULL;
 
 -- ─── transactions ────────────────────────────────────────────────────────────
 CREATE TYPE public.transaction_type    AS ENUM ('income', 'expense');
@@ -104,40 +109,63 @@ CREATE TYPE public.necessity_class     AS ENUM ('essential', 'optional', 'luxury
 CREATE TABLE public.transactions (
   id                 UUID PRIMARY KEY,            -- UUID v7, client-generated
   user_id            UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  type               public.transaction_type   NOT NULL,
   amount_paise       BIGINT NOT NULL CHECK (amount_paise > 0),
-  category_id        UUID REFERENCES public.categories(id) ON DELETE SET NULL,
+  type               public.transaction_type   NOT NULL,
+  category_id        UUID NOT NULL,
+  transaction_date   DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
   payment_method     public.payment_method     NOT NULL,
-  necessity          public.necessity_class,       -- required when type = 'expense'
-  note               TEXT,
-  transaction_date   DATE NOT NULL,               -- date in Asia/Kolkata
+  necessity          public.necessity_class,       -- required when type = 'expense', NULL for 'income'
+  description        TEXT,
+  notes              TEXT,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at         TIMESTAMPTZ,                 -- soft delete
-  -- outbox tracking
-  sheets_synced_at   TIMESTAMPTZ,
-  CONSTRAINT expense_needs_necessity CHECK (
-    type = 'income' OR necessity IS NOT NULL
+  deleted_at         TIMESTAMPTZ,                 -- reversible soft delete
+  sheets_synced_at   TIMESTAMPTZ,                 -- outbox synchronization marker
+  
+  -- Composite relational foreign key enforcing category ownership and type match
+  CONSTRAINT fk_transactions_category_user_type
+    FOREIGN KEY (category_id, user_id, type)
+    REFERENCES public.categories(id, user_id, type)
+    ON DELETE RESTRICT,
+
+  -- Necessity constraint
+  CONSTRAINT chk_transactions_necessity CHECK (
+    (type = 'expense' AND necessity IS NOT NULL) OR
+    (type = 'income' AND necessity IS NULL)
   )
 );
 
-CREATE INDEX idx_transactions_user_date
-  ON public.transactions (user_id, transaction_date DESC)
+CREATE INDEX idx_transactions_user_date_active
+  ON public.transactions (user_id, transaction_date DESC, created_at DESC)
   WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_transactions_outbox
-  ON public.transactions (user_id, sheets_synced_at)
-  WHERE deleted_at IS NULL AND sheets_synced_at IS NULL;
+CREATE INDEX idx_transactions_user_category
+  ON public.transactions (user_id, category_id)
+  WHERE deleted_at IS NULL;
 
 -- ─── outbox_events ───────────────────────────────────────────────────────────
-CREATE TYPE public.outbox_event_type AS ENUM ('upsert', 'delete');
-CREATE TYPE public.outbox_status     AS ENUM ('pending', 'delivered', 'failed');
+CREATE TYPE public.outbox_status AS ENUM ('pending', 'processing', 'completed', 'failed');
 
 CREATE TABLE public.outbox_events (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   entity_type      TEXT NOT NULL DEFAULT 'transaction',
   entity_id        UUID NOT NULL,
+  event_type       TEXT NOT NULL,
+  payload          JSONB NOT NULL,
+  status           public.outbox_status NOT NULL DEFAULT 'pending',
+  retry_count      INTEGER NOT NULL DEFAULT 0,
+  error_message    TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  processed_at     TIMESTAMPTZ,
+  CONSTRAINT chk_outbox_event_type CHECK (
+    event_type IN ('transaction.created', 'transaction.updated', 'transaction.deleted', 'transaction.restored')
+  )
+);
+
+CREATE INDEX idx_outbox_status_pending_created
+  ON public.outbox_events (status, created_at ASC)
+  WHERE status = 'pending';
   event_type       public.outbox_event_type NOT NULL,
   payload          JSONB NOT NULL,
   status           public.outbox_status NOT NULL DEFAULT 'pending',

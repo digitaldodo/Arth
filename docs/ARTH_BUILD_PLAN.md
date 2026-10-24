@@ -87,38 +87,32 @@
 | ADR-001 Documentation | Authored `docs/decisions/ADR-001-modular-monorepo.md` documenting separation rationale, boundaries, and security flow | Complete ✅ |
 | Quality Gates Verification | `pnpm install`, workspace `typecheck`, backend tests, frontend build, backend health query, and browser inspection all passed with 0 errors | Complete ✅ |
 
-### 01-G · Supabase project setup & migrations
+### 01-G · Supabase Database Schema, Migrations & Row-Level Security ✅
 
-> These steps require the owner to perform manual actions in the Supabase dashboard. The agent documents what to do; it does not invent credentials.
+| Task | Details | Status |
+|---|---|---|
+| Migration 0001: Profiles | `public.profiles` referencing `auth.users(id)` with `Asia/Kolkata` and `INR` defaults | Complete ✅ |
+| Migration 0002: Categories | `public.categories` with `type` (income/expense), non-destructive `archived_at`, and composite uniqueness | Complete ✅ |
+| Migration 0003: Transactions | `public.transactions` with integer paise (`BIGINT > 0`), necessity checks, and composite category FK | Complete ✅ |
+| Migration 0004: Outbox Events | `public.outbox_events` table and atomic trigger `trg_transactions_outbox` capturing create/update/delete/restore | Complete ✅ |
+| Migration 0005: RLS & Grants | Row-Level Security enabled on all tables; least privilege grants; `outbox_events` restricted from normal users | Complete ✅ |
+| Migration 0006: Auth Trigger | `fn_handle_new_user()` auto-creating profile and seeding approved 15 default categories | Complete ✅ |
+| Migration 0007: Indexes | Optimized covering indexes for active ledger date, category lookup, and FIFO outbox polling | Complete ✅ |
+| Database Security Tests | pgTAP test suite in `supabase/tests/database_security.test.sql` covering all 12 security & constraint rules | Complete ✅ |
+| Automated Schema Audit | Node test suite in `backend/tests/database-schema-audit.test.ts` verifying migration integrity (9/9 passing) | Complete ✅ |
+| Database Types | Typed schema definitions in `backend/src/types/database.types.ts` separated from API contracts | Complete ✅ |
+| ADR-001 Update | Documented genuine RLS execution mechanics (PostgreSQL `SET LOCAL` claims vs scoped Supabase client) | Complete ✅ |
+
+### 01-H · Authentication Flow & Backend Session Verification
+
+> Focus: End-to-end authentication, JWT verification in Fastify, and user-scoped database session mapping.
 
 | Task | Details |
 |---|---|
-| Create Supabase project | Owner action: supabase.com → New project → copy URL + keys |
-| Enable Google OAuth | Supabase dashboard → Auth → Providers → Google → enter Client ID + Secret |
-| Apply migrations | `pnpm supabase db push` or paste SQL into Supabase SQL editor |
-| Seed categories | Run `supabase/seed.sql` — default categories only, no financial data |
-| Verify RLS | Test that unauthenticated requests return zero rows |
-
-**Migration files to create**:
-```
-supabase/migrations/
-  0001_create_profiles.sql
-  0002_create_categories.sql
-  0003_create_transactions.sql
-  0004_create_outbox_events.sql
-  0005_rls_policies.sql
-  0006_auth_trigger.sql
-  0007_indexes.sql
-```
-
-**Seed categories** (no financials — only taxonomy):
-```
-Food & Dining, Transport, Housing, Utilities, Healthcare,
-Entertainment, Shopping, Education, Personal Care, Travel,
-Investments, Salary, Freelance, Other Income, Other Expense
-```
-
-### 01-H · Authentication flow & backend session verification
+| Supabase Auth Integration | Google OAuth and magic link sign-in flows configured in frontend |
+| Fastify JWT Auth Plugin | `backend/src/plugins/auth.ts` verifying incoming Supabase JWTs |
+| User Session Propagation | Mapping verified `user.id` to database transactions with RLS claims |
+| Session Verification Tests | Automated backend tests confirming authenticated vs unauthenticated request behavior |
 
 | Task | Details |
 |---|---|
