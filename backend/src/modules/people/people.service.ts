@@ -903,7 +903,8 @@ export class InMemoryPeopleService implements IPeopleService {
         if (
           existingSettlement.record_id === recordId &&
           existingSettlement.amount_paise === Number(input.amount_paise) &&
-          existingSettlement.settlement_date === input.settlement_date
+          existingSettlement.settlement_date === input.settlement_date &&
+          (existingSettlement.notes ?? null) === (input.notes ?? null)
         ) {
           const personDetail = await this.getPerson(userId, record.person_id);
           const currentRecord = personDetail.person.records.find((r) => r.id === recordId)!;

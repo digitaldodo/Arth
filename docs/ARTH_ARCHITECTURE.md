@@ -246,10 +246,11 @@ CREATE INDEX idx_settlements_record_amount ON public.person_money_settlements (r
 | User can only read/write own rows | RLS policies on all tables (`auth.uid() = user_id`) |
 | Soft deletes only | `deleted_at` / `archived_at` column; filter in active queries |
 | Composite tenant foreign keys | `(person_id, user_id)` and `(record_id, user_id)` enforce tenant boundary |
-| History preservation | `ON DELETE RESTRICT` on records and settlements prevents accidental cascading deletion |
+| History preservation | `ON DELETE RESTRICT` on records and settlements; `DELETE` revoked on `people` and `person_money_records` (Migration 0011) |
+| Non-destructive lifecycle | Archival (`archived_at`) is the sole supported lifecycle for people and money records |
 | Settlement within bounds | Computed from settlement rows via `fn_record_person_settlement` under `FOR UPDATE` row lock |
 | Direct settlement write lockdown | Direct `INSERT`, `UPDATE`, `DELETE` revoked from `authenticated` role |
-| Settlement idempotency | `p_id` replay returns existing settlement without duplicate counting; conflict raises `23505` |
+| Settlement idempotency & replay | `p_id` replay returns existing settlement (matching `record_id`, `amount_paise`, `settlement_date`, `notes`); concurrent identical retries resolve post-lock; conflicts raise `23505` |
 | Concurrency-safe settlements | `public.fn_record_person_settlement` with `SELECT ... FOR UPDATE` row locking |
 | Concurrency-safe category reorder | `public.fn_reorder_categories` with `FOR UPDATE` lock on active categories |
 | Direction locking | Direction cannot be changed while unsettled records exist |

@@ -224,6 +224,27 @@
 - [x] Performance covering indexes added for transaction, people, and settlement queries
 - [x] 100% of workspace tests pass (104/104 tests across 12 test suites)
 
+### 01-L.1 · Close Database Reliability Gaps ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Migration 0011: History Protection & Settlement Hardening | Revoked direct `DELETE` privileges on `people` and `person_money_records` from `authenticated` role; dropped `people_delete_own` and `records_delete_own` RLS policies so non-destructive archiving (`archived_at`) is the sole supported lifecycle. Redefined `public.fn_record_person_settlement` with strict payload equality (including notes), post-lock re-check for concurrent identical retries, and explicit revocation from `PUBLIC`/`anon` with execution grant to `authenticated`. | Complete ✅ |
+| Database Schema Audit | Updated `backend/tests/database-schema-audit.test.ts` to assert all 11 migrations, delete privilege revocation, dropped delete policies, post-lock recheck, and execution role grants | Complete ✅ |
+| Concurrency & Idempotency Tests | Extended `backend/tests/database-acid-reliability.test.ts` to verify settlement replay with identical notes, conflict rejection on mismatched notes, rejection of settlements on archived records, and absence of hard-delete API methods | Complete ✅ |
+| Backend People Service Hardening | Updated `InMemoryPeopleService.recordSettlement` to enforce strict notes payload equality on duplicate IDs (`ConflictError`), matching the PostgreSQL stored procedure | Complete ✅ |
+| Database Operations Runbook Update | Updated `docs/DATABASE_OPERATIONS.md` with account/profile deletion protocol, clear labeling of in-memory benchmark metrics vs blocked live container benchmarks, and explicit disaster recovery readiness (PITR Pro plan requirement, DR protocol status, Phase 02 Sheets worker) | Complete ✅ |
+| Real Database vs In-Memory Audit | Verified local host environment: Docker daemon is inactive; recorded live PostgreSQL pgTAP container test gate as **BLOCKED** while verifying 100% of Node.js and schema tests | Complete ✅ |
+
+**Acceptance criteria**:
+- [x] Hard DELETE privileges on `people` and `person_money_records` revoked from `authenticated` in PostgreSQL schema
+- [x] Direct delete RLS policies removed; archiving is the sole supported lifecycle
+- [x] Account and profile deletion behavior with retained financial history documented
+- [x] Settlement idempotency checks include notes; identical retry succeeds; conflicting notes raise 23505 conflict
+- [x] Concurrent identical settlement retries serialize cleanly under row lock via post-lock re-check
+- [x] Stored procedure privileges revoked from `PUBLIC` and `anon`; granted exclusively to `authenticated`
+- [x] Live PostgreSQL vs in-memory benchmark boundaries and environment blockers honestly reported
+- [x] 100% of workspace tests pass (108/108 tests across 12 test suites)
+
 ### 01-M · Dashboard (read-only)
 
 | Task | Details |

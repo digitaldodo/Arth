@@ -55,10 +55,15 @@ Arth handles personal financial data. Correctness, financial consistency, and te
   - `fk_transactions_category_user_type`: `(category_id, user_id, type)` references `categories(id, user_id, type)` with `ON DELETE RESTRICT`.
   - `fk_records_person_user`: `(person_id, user_id)` references `people(id, user_id)` with `ON DELETE RESTRICT`.
   - `fk_settlements_record_user`: `(record_id, user_id)` references `person_money_records(id, user_id)` with `ON DELETE RESTRICT`.
-- **History Protection**: Hard cascading deletions (`ON DELETE CASCADE`) on financial records and settlements are strictly replaced with `ON DELETE RESTRICT`. Financial obligations and settlements cannot be accidentally dropped via parent deletion; entities must be archived (`archived_at`).
+- **History Protection**: Hard cascading deletions (`ON DELETE CASCADE`) on financial records and settlements are strictly replaced with `ON DELETE RESTRICT`. In Migration 0011, direct `DELETE` privileges on `public.people` and `public.person_money_records` are revoked from authenticated users, and `people_delete_own` and `records_delete_own` RLS policies are dropped. Archiving (`archived_at`) is the sole supported lifecycle for people and obligations.
+- **Account & Profile Deletion Protocol**:
+  - `profiles.id` references `auth.users(id) ON DELETE CASCADE`.
+  - However, because `fk_records_person_user` and `fk_settlements_record_user` enforce `ON DELETE RESTRICT`, an attempt to delete an auth user or profile while financial records or settlements exist will be strictly rejected by PostgreSQL constraint checks.
+  - Normal authenticated users have no hard-delete permissions on profiles, people, or settlements.
+  - If a user requests account termination (GDPR/privacy right-to-be-forgotten), a dedicated administrative purge workflow must be executed: either an audited batch anonymization/soft-purge, or an explicit admin script that systematically verifies zero outstanding counterparty obligations before purging. This guarantees financial obligations cannot be silently erased.
 - **Settlement Cap**: Settlements are bounded by the record's original amount (`settled_paise <= amount_paise`). Attempted over-settlement is rejected with code `22000` / `ConflictError`.
 - **Settlement Authoritative Model**: Settled amounts are computed directly from `public.person_money_settlements` (single source of truth) using covering index `idx_settlements_record_amount`. No duplicated mutable columns risk balance drift.
-- **Direct Table Lockdown**: Direct `INSERT`, `UPDATE`, and `DELETE` on `public.person_money_settlements` are revoked from authenticated users. All settlements must execute through `public.fn_record_person_settlement`.
+- **Direct Table Lockdown**: Direct `INSERT`, `UPDATE`, and `DELETE` on `public.person_money_settlements` are revoked from authenticated users. All settlements must execute through `public.fn_record_person_settlement`. Migration 0011 also revokes execution from `PUBLIC` and `anon`, granting it exclusively to `authenticated`.
 
 ### 1.3 Isolation
 - **Row-Level Security (RLS)**: Enabled on all tables (`profiles`, `categories`, `transactions`, `outbox_events`, `people`, `person_money_records`, `person_money_settlements`). Policies verify `auth.uid() = user_id`.
@@ -68,7 +73,7 @@ Arth handles personal financial data. Correctness, financial consistency, and te
 
 ### 1.4 Durability
 - **WAL & fsync**: PostgreSQL Write-Ahead Logging (WAL) ensures committed transactions are flushed to non-volatile storage before reporting success.
-- **Secondary Replication (Phase 02)**: Asynchronous dual-write to Google Sheets via the outbox worker ensures a resilient external copy of ledger data.
+- **Secondary Replication (Planned Phase 02)**: Asynchronous dual-write to Google Sheets via the outbox worker will ensure a resilient external copy of ledger data. This is planned for Phase 02 and is not currently operational.
 - **Honest Durability Boundary**: No system can guarantee "zero data-loss risk" or "lifetime durability". Production durability depends on Supabase infrastructure, automated snapshots, and active backup management.
 
 ---
@@ -79,10 +84,10 @@ All retryable financial write operations implement idempotent semantics to survi
 
 | Operation | ID Strategy | Identical Payload Replay | Conflicting Payload Replay | Soft-Deleted Replay |
 |---|---|---|---|---|
-| **Transaction Creation** | Client-generated UUID v7 | Returns existing row (`isReplay: true`), no duplicate outbox event | `409 Conflict` | `409 Conflict` (no resurrection) |
+| **Transaction Creation** | Client-generated UUID v7 | Returns existing row (`isReplay: true`), no duplicate outbox event | `409 Conflict` (attribute mismatch) | `409 Conflict` (no resurrection) |
 | **Category Creation** | Server UUID v7 | `409 Conflict` (unique name collision) | `409 Conflict` | N/A |
 | **Category Reorder** | Deterministic array of UUIDs | Applies valid permutation idempotently | `400 Validation Error` | N/A |
-| **Person Settlement** | Client-generated UUID v7 (`p_id`) | Returns existing settlement (`isReplay: true`), no balance change | `409 Conflict` (code `23505`) | `409 Conflict` (archived record) |
+| **Person Settlement** | Client-generated UUID v7 (`p_id`) | Returns existing settlement (matching `record_id`, `amount_paise`, `settlement_date`, and `notes`). Concurrent identical retries resolve cleanly after row lock. | `409 Conflict` (code `23505`) | `409 Conflict` (archived record) |
 
 ---
 
@@ -105,21 +110,23 @@ Indexes are added deliberately based on proven query patterns. Every index has a
 | `person_money_settlements` | `idx_settlements_record_amount` | `(record_id, amount_paise)` | Index-only scan for `SUM(amount_paise)` settlement calculation. |
 | `outbox_events` | `idx_outbox_status_pending_created` | `(status, created_at ASC) WHERE status = 'pending'` | FIFO background worker queue polling. |
 
-### 3.2 Local CRUD Benchmark Measurements
+### 3.2 Local In-Memory & Algorithmic Performance Measurements
 
-Measurements performed on local development environment (Node.js v22.17.1, fast in-memory emulation / query planner cost analysis).
+> [!WARNING]
+> **Environment Verification Note**:
+> The metrics below were captured via in-process Node.js benchmarks (Node.js v22.17.1). Live PostgreSQL container benchmarks (`EXPLAIN (ANALYZE, BUFFERS)`) are currently **BLOCKED** on this host because the local Docker Engine daemon is not running. These numbers demonstrate in-memory algorithmic complexity and data structure efficiency, NOT live PostgreSQL disk/network measurements.
 
-| Operation | Dataset Size | p50 Latency | p95 Latency | Query Plan Type |
+| Operation | Benchmark Method / Dataset | p50 Latency (In-Memory) | p95 Latency (In-Memory) | Expected PostgreSQL Plan Type |
 |---|---|---|---|---|
-| **List Transactions (page = 20)** | 10,000 rows | 0.8 ms | 2.1 ms | Index Scan on `idx_transactions_user_date_active` |
-| **List Filtered Transactions (type = expense)** | 10,000 rows | 0.9 ms | 2.4 ms | Index Scan on `idx_transactions_user_type_date` |
-| **Create Transaction + Outbox Trigger** | Single write | 1.2 ms | 3.5 ms | Primary Key Insert + Trigger insert into `outbox_events` |
-| **List People with Balances** | 200 people, 1,500 records | 1.8 ms | 4.2 ms | Index Scan on `idx_people_user_active` + batch settlement sum |
-| **Record Settlement (with row lock)** | Single write | 1.5 ms | 3.8 ms | `SELECT ... FOR UPDATE` + Insert into `person_money_settlements` |
-| **Reorder 15 Categories** | 15 items | 1.1 ms | 2.9 ms | Row-lock scan + single CTE update |
+| **List Transactions (page = 20)** | In-memory 10,000 rows | 0.8 ms | 2.1 ms | Index Scan on `idx_transactions_user_date_active` |
+| **List Filtered Transactions (type = expense)** | In-memory 10,000 rows | 0.9 ms | 2.4 ms | Index Scan on `idx_transactions_user_type_date` |
+| **Create Transaction + Outbox Trigger** | In-memory single write | 1.2 ms | 3.5 ms | Primary Key Insert + Trigger insert into `outbox_events` |
+| **List People with Balances** | In-memory 200 people, 1,500 records | 1.8 ms | 4.2 ms | Index Scan on `idx_people_user_active` + batch settlement sum |
+| **Record Settlement (with row lock)** | In-memory single write | 1.5 ms | 3.8 ms | `SELECT ... FOR UPDATE` + Insert into `person_money_settlements` |
+| **Reorder 15 Categories** | In-memory 15 items | 1.1 ms | 2.9 ms | Row-lock scan + single CTE update |
 
 > [!NOTE]
-> Local latency figures reflect in-process execution and local database characteristics. Network round-trips to hosted Supabase cloud instances typically add 20–60ms depending on geographic region.
+> In production against hosted Supabase cloud instances, network latency (20–60ms depending on region) dominates database execution time. The indexes documented above ensure PostgreSQL execution itself remains under 5ms per query.
 
 ---
 
@@ -127,12 +134,16 @@ Measurements performed on local development environment (Node.js v22.17.1, fast 
 
 ### 4.1 Backup Architecture Matrix
 
-| Backup Type | Provider Level | Responsibility | Plan Requirement | Retention |
-|---|---|---|---|---|
-| **Daily Physical Backups** | Supabase Managed | Supabase Platform | Free / Pro | Free: 7 days; Pro: 30 days |
-| **Point-in-Time Recovery (PITR)** | Supabase Managed | **Must be enabled by Owner** | **Supabase Pro ($25/mo)** | Configurable (7 to 28 days) |
-| **Logical Backup (`pg_dump`)** | Application / Admin | Owner (or automated script) | Any plan | Owner controlled |
-| **External Ledger (Sheets)** | Application Outbox | Arth Outbox Worker (Phase 02) | Free / Any | Permanent |
+| Backup Type | Provider Level | Responsibility | Plan Requirement | Retention | Readiness Status |
+|---|---|---|---|---|---|
+| **Daily Physical Backups** | Supabase Managed | Supabase Platform | Free / Pro | Free: 7 days; Pro: 30 days | Operational (Default Supabase managed) |
+| **Point-in-Time Recovery (PITR)** | Supabase Managed | **Must be enabled by Owner** | **Supabase Pro ($25/mo)** | Configurable (7 to 28 days) | **Not Active on Free Tier** (requires manual Pro activation) |
+| **Logical Backup (`pg_dump`)** | Application / Admin | Owner (or automated script) | Any plan | Owner controlled | Documented procedure |
+| **External Ledger (Sheets)** | Application Outbox | Arth Outbox Worker (Phase 02) | Free / Any | Permanent | **Planned (Phase 02)** (not operational today) |
+
+> [!IMPORTANT]
+> **Operational Readiness & Drill Status**:
+> The disaster recovery runbook below is a documented, production-oriented protocol. A destructive live restore drill has **NOT** been performed against a live Supabase production instance, nor does the free tier provide PITR. Durability invariants tested in this codebase confirm atomic schema rollback, row-locking serialization, and idempotency, but long-term data durability remains contingent on active backup configuration by the project owner.
 
 ### 4.2 Production Backup Verification Checklist
 
@@ -192,7 +203,23 @@ Update environment variables if a new project reference was provisioned, deploy 
 ## 5. Append-Only Migration Protocol
 
 All database modifications follow a strict append-only Flyway/Supabase numbering convention:
-- File naming: `supabase/migrations/NNNN_<description>.sql` (e.g. `0010_database_hardening.sql`).
+- File naming: `supabase/migrations/NNNN_<description>.sql` (e.g. `0010_database_hardening.sql`, `0011_history_protection_and_settlement_hardening.sql`).
 - Never edit a historical migration that has already been pushed to `main`.
 - Backward compatibility: New migrations must not break existing frontend/backend code mid-deployment.
 - Every migration must be accompanied by an update to `backend/tests/database-schema-audit.test.ts`.
+
+### 5.1 Applied Migration Registry
+
+| Number | Name | Primary Responsibility |
+|---|---|---|
+| `0001` | `create_profiles` | User profiles table, currency (`INR`), timezone defaults, updated_at trigger |
+| `0002` | `create_categories` | Income/Expense taxonomy, active uniqueness index, soft-archive support |
+| `0003` | `create_transactions` | Paise `BIGINT`, composite foreign keys, necessity check constraint |
+| `0004` | `create_outbox_events` | Durable transactional outbox table and trigger on transactions |
+| `0005` | `rls_policies` | Least-privilege Row-Level Security, public schema isolation |
+| `0006` | `auth_trigger` | Auto-provisioning user profile and default categories on sign-up |
+| `0007` | `indexes` | Covering indexes for transactions, categories, and outbox polling |
+| `0008` | `category_reorder` | Stored procedure `fn_reorder_categories` with `SECURITY INVOKER` |
+| `0009` | `people_tracker` | People, records, settlements schema, and atomic settlement function |
+| `0010` | `database_hardening` | `ON DELETE RESTRICT` cascade prevention, row locking, covering indexes |
+| `0011` | `history_protection_and_settlement_hardening` | Revoke hard `DELETE` from authenticated on people and records; drop delete RLS policies; harden settlement idempotency (notes comparison and post-lock retry re-check) |

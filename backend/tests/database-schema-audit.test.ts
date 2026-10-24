@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 10 numbered migration files exist in sequential order', () => {
+  test('All 11 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -20,7 +20,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0007_indexes.sql',
       '0008_category_reorder.sql',
       '0009_people_tracker.sql',
-      '0010_database_hardening.sql'
+      '0010_database_hardening.sql',
+      '0011_history_protection_and_settlement_hardening.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -115,5 +116,18 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('idx_people_user_direction_active'), 'Direction index must exist for people');
     assert.ok(sql.includes('idx_records_person_active'), 'Active records index must exist for person_money_records');
     assert.ok(sql.includes('idx_settlements_record_amount'), 'Covering amount index must exist for person_money_settlements');
+  });
+
+  test('0011_history_protection_and_settlement_hardening.sql revokes direct deletes and hardens settlement concurrency', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0011_history_protection_and_settlement_hardening.sql'), 'utf-8');
+    assert.ok(sql.includes('REVOKE DELETE ON public.people FROM authenticated;'), 'Direct DELETE on people must be revoked');
+    assert.ok(sql.includes('REVOKE DELETE ON public.person_money_records FROM authenticated;'), 'Direct DELETE on person_money_records must be revoked');
+    assert.ok(sql.includes('DROP POLICY IF EXISTS "people_delete_own" ON public.people;'), 'people_delete_own policy must be dropped');
+    assert.ok(sql.includes('DROP POLICY IF EXISTS "records_delete_own" ON public.person_money_records;'), 'records_delete_own policy must be dropped');
+    assert.ok(sql.includes('v_existing_settlement.notes IS NULL AND p_notes IS NULL'), 'Settlement idempotency must strictly compare notes');
+    assert.ok(sql.includes('Post-Lock Re-check for Concurrent Identical Retries'), 'Settlement function must re-check ID after acquiring FOR UPDATE lock');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) FROM PUBLIC;'), 'Revoke from PUBLIC');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) FROM anon;'), 'Revoke from anon');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) TO authenticated;'), 'Grant only to authenticated');
   });
 });

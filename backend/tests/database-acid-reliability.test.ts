@@ -221,6 +221,73 @@ describe('Database ACID Guarantees, Reliability & Concurrency Hardening', () => 
       );
     });
 
+    test('Settlement idempotency: reusing same ID with conflicting notes throws ConflictError', async () => {
+      const person = await peopleService.createPerson(userA, {
+        name: 'Karan Johar',
+        direction: 'they_owe_me',
+      });
+
+      const recordRes = await peopleService.createRecord(userA, person.id, {
+        name: 'Event passes',
+        amount_paise: 80000n, // ₹800.00
+        record_date: '2026-10-25',
+      });
+
+      const settlementId = uuidv7();
+
+      // First settlement with notes
+      await peopleService.recordSettlement(userA, recordRes.record.id, {
+        id: settlementId,
+        amount_paise: 30000n,
+        settlement_date: '2026-10-25',
+        notes: 'UPI transfer reference #1234',
+      });
+
+      // Second call with same ID, same amount, but different notes: Conflict!
+      await assert.rejects(
+        () =>
+          peopleService.recordSettlement(userA, recordRes.record.id, {
+            id: settlementId,
+            amount_paise: 30000n,
+            settlement_date: '2026-10-25',
+            notes: 'Cash handover',
+          }),
+        (err: Error) => {
+          assert.ok(err instanceof ConflictError);
+          assert.match(err.message, /already exists with different attributes/);
+          return true;
+        }
+      );
+
+      // Third call with same ID, same amount, but null notes: Conflict!
+      await assert.rejects(
+        () =>
+          peopleService.recordSettlement(userA, recordRes.record.id, {
+            id: settlementId,
+            amount_paise: 30000n,
+            settlement_date: '2026-10-25',
+            notes: null,
+          }),
+        (err: Error) => {
+          assert.ok(err instanceof ConflictError);
+          assert.match(err.message, /already exists with different attributes/);
+          return true;
+        }
+      );
+
+      // Identical retry with matching notes: Replay succeeds!
+      const replayRes = await peopleService.recordSettlement(userA, recordRes.record.id, {
+        id: settlementId,
+        amount_paise: 30000n,
+        settlement_date: '2026-10-25',
+        notes: 'UPI transfer reference #1234',
+      });
+      assert.equal(replayRes.settlement.id, settlementId);
+      assert.equal(replayRes.settlement.notes, 'UPI transfer reference #1234');
+      assert.equal(peopleService.settlements.length, 1, 'No duplicate settlement created');
+      assert.equal(replayRes.record.settled_paise, 30000);
+    });
+
     test('Transaction idempotency: duplicate ID replay returns isReplay without duplicating outbox events', async () => {
       const txId = uuidv7();
       const cat = (await txService.listCategories(userA, {})).categories[0];
@@ -447,6 +514,45 @@ describe('Database ACID Guarantees, Reliability & Concurrency Hardening', () => 
           }),
         ConflictError
       );
+    });
+
+    test('Recording settlement on an archived record is strictly rejected', async () => {
+      const person = await peopleService.createPerson(userA, {
+        name: 'Past Client',
+        direction: 'they_owe_me',
+      });
+
+      const rec = await peopleService.createRecord(userA, person.id, {
+        name: 'Consulting invoice',
+        amount_paise: 1500000n, // ₹15,000
+        record_date: '2026-09-01',
+      });
+
+      // Directly mark record archived in storage
+      const storedRec = peopleService.records.find((r) => r.id === rec.record.id)!;
+      storedRec.archived_at = new Date().toISOString();
+
+      await assert.rejects(
+        () =>
+          peopleService.recordSettlement(userA, rec.record.id, {
+            amount_paise: 500000n,
+            settlement_date: '2026-10-25',
+          }),
+        (err: Error) => {
+          assert.ok(err instanceof ConflictError);
+          assert.match(err.message, /Cannot record settlement for an archived record/);
+          return true;
+        }
+      );
+    });
+
+    test('PeopleService exposes no hard-delete methods, enforcing non-destructive archival', () => {
+      // In accordance with Migration 0011 revoking DELETE privileges, verify interface contract
+      const untypedService = peopleService as unknown as Record<string, unknown>;
+      assert.equal(typeof untypedService.deletePerson, 'undefined', 'deletePerson must not exist');
+      assert.equal(typeof untypedService.deleteRecord, 'undefined', 'deleteRecord must not exist');
+      assert.equal(typeof untypedService.deleteSettlement, 'undefined', 'deleteSettlement must not exist');
+      assert.equal(typeof peopleService.archivePerson, 'function', 'archivePerson is the canonical lifecycle');
     });
   });
 });
