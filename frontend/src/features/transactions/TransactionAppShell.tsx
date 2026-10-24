@@ -8,6 +8,7 @@ import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -189,6 +190,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     Application settings, category customization, and account details
                   </p>
                 </div>
+
+                <InstallPromptCard />
 
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl divide-y divide-[var(--border-hairline)] overflow-hidden">
                   <button

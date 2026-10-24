@@ -5,7 +5,7 @@ import { buildApp } from '../src/app.js';
 import { InMemoryTransactionService } from '../src/modules/transactions/transaction.service.js';
 import { InMemoryCategoryService } from '../src/modules/categories/category.service.js';
 import { InMemoryPeopleService } from '../src/modules/people/people.service.js';
-import { InMemoryDashboardService } from '../src/modules/dashboard/dashboard.service.js';
+import { InMemoryDashboardService, SupabaseDashboardService } from '../src/modules/dashboard/dashboard.service.js';
 import type { FastifyInstance } from 'fastify';
 import type { DashboardSummaryResponse } from '@arth/contracts';
 
@@ -422,5 +422,83 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
     assert.equal(body.recent_transactions[0].transaction_date, '2026-08-12');
     // 10th transaction should be August 03
     assert.equal(body.recent_transactions[9].transaction_date, '2026-08-03');
+  });
+
+  describe('SupabaseDashboardService Error Propagation & Fallback Elimination', () => {
+    test('throws cleanly when fn_dashboard_summary RPC returns an error without attempting raw queries', async () => {
+      let fromCallCount = 0;
+      let rpcCallCount = 0;
+
+      const mockClient = {
+        rpc: async (fnName: string, _params: Record<string, unknown>) => {
+          rpcCallCount++;
+          assert.equal(fnName, 'fn_dashboard_summary');
+          return {
+            data: null,
+            error: {
+              code: 'P0001',
+              message: 'Database connection timeout during dashboard aggregation',
+            },
+          };
+        },
+        from: (_table: string) => {
+          fromCallCount++;
+          throw new Error('Fallback table query should not be called!');
+        },
+      };
+
+      const svc = new SupabaseDashboardService(
+        { env: 'test', supabaseUrl: 'http://mock', supabaseAnonKey: 'mock' } as any,
+        mockClient as any
+      );
+
+      await assert.rejects(
+        async () => {
+          await svc.getSummary(userA.userId, {
+            start_date: '2026-10-01',
+            end_date: '2026-10-31',
+          });
+        },
+        {
+          name: 'Error',
+          message: /Failed to retrieve dashboard summary from database: Database connection timeout/,
+        }
+      );
+
+      assert.equal(rpcCallCount, 1, 'RPC should be called once');
+      assert.equal(fromCallCount, 0, 'Must never silently fall back to raw transaction queries');
+    });
+
+    test('throws cleanly when fn_dashboard_summary returns null data without error object', async () => {
+      let fromCallCount = 0;
+
+      const mockClient = {
+        rpc: async () => ({ data: null, error: null }),
+        from: () => {
+          fromCallCount++;
+          throw new Error('Fallback table query should not be called!');
+        },
+      };
+
+      const svc = new SupabaseDashboardService(
+        { env: 'test', supabaseUrl: 'http://mock', supabaseAnonKey: 'mock' } as any,
+        mockClient as any
+      );
+
+      await assert.rejects(
+        async () => {
+          await svc.getSummary(userA.userId, {
+            start_date: '2026-10-01',
+            end_date: '2026-10-31',
+          });
+        },
+        {
+          name: 'Error',
+          message: /Failed to retrieve dashboard summary from database: Empty response/,
+        }
+      );
+
+      assert.equal(fromCallCount, 0);
+    });
   });
 });

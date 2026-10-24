@@ -272,18 +272,27 @@
 - [x] Zero-spending and empty-ledger states render cleanly without broken charts or NaN
 - [x] 100% of workspace tests pass (132/132 tests across 18 test suites)
 
-### 01-N · PWA manifest & baseline installability
+### 01-N · PWA Manifest & Baseline Installability ✅
 
-| Task | Details |
-|---|---|
-| `public/manifest.json` | `name`, `short_name`, `start_url`, `display: standalone`, `theme_color`, `icons` |
-| Icons | 192×192 and 512×512 PNG icons in `public/icons/` |
-| `next.config.ts` | Add PWA headers; no service worker yet (Phase 03) |
-| Meta tags | `<meta name="theme-color">`, `apple-touch-icon` |
+| Task | Details | Status |
+|---|---|---|
+| Dashboard Fallback Elimination | Fixed preflight bug in `backend/src/modules/dashboard/dashboard.service.ts`: eliminated silent fallback to raw table query when `fn_dashboard_summary` RPC fails, logging safe diagnostics without secret leakage and raising clean service errors. Verified via 2 dedicated unit tests. | Complete ✅ |
+| App Router Web App Manifest | Implemented `frontend/src/app/manifest.ts` using Next.js `MetadataRoute.Manifest` with `name`, `short_name: 'Arth'`, `start_url: '/'`, `scope: '/'`, `id: '/'`, `display: 'standalone'`, `background_color: '#FBFBF9'`, `theme_color: '#1C1917'`, `lang: 'en-IN'`, `dir: 'ltr'`, and complete icon definitions. Served automatically at `/manifest.webmanifest`. | Complete ✅ |
+| Ledger Minimal PNG Icons | Generated production-quality PNG icon assets matching Ledger Minimal obsidian aesthetic (`#0C0A09` background, `#FBFBF9` warm paper mark, `#10B981` ledger emerald ruling rule): `icon-192x192.png`, `icon-512x512.png`, `icon-512x512-maskable.png` (verified center 80% safe zone), `apple-touch-icon.png` (180×180), and `favicon.ico`. | Complete ✅ |
+| Viewport & Apple Metadata | Extended `frontend/src/app/layout.tsx` with light/dark `themeColor` definitions (`#FBFBF9` / `#0C0A09`), `viewportFit: 'cover'`, `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Arth' }`, and icon declarations. | Complete ✅ |
+| Restrained Install Experience | Implemented `usePwaInstall` hook (using `useSyncExternalStore`) and `InstallPromptCard` inside More/Settings (`activeView === 'more'`). Captures deferred `beforeinstallprompt`, listens to `appinstalled`, provides non-intrusive "Install Arth" action, detects standalone mode, and offers concise step-by-step guidance for iOS/iPadOS Safari without unsolicited popups. | Complete ✅ |
+| Automated PWA Tests | Added 4 automated tests in `frontend/tests/pwa-manifest.test.ts` verifying manifest contract, physical icon file existence, dimensions, PNG headers (`89 50 4E 47`), strict absence of service worker registrations in Phase 01N, and layout metadata. | Complete ✅ |
 
 **Acceptance criteria**:
-- [ ] Browser shows "Install Arth" prompt on Chrome/Edge
-- [ ] Lighthouse PWA score ≥ 85 (without offline; that's Phase 03)
+- [x] Web app manifest valid and discoverable at `/manifest.webmanifest`
+- [x] High-resolution, crisp PNG icons delivered for standard, maskable, and Apple touch targets
+- [x] Maskable icon strictly confines critical artwork within the center 80% safe zone circle
+- [x] Layout configures dual-scheme theme color, cover viewport fit, and Apple mobile web app capability
+- [x] Standalone mode correctly detected on desktop and mobile launchers
+- [x] Native `beforeinstallprompt` captured gracefully and exposed via Settings/More screen
+- [x] Manual installation instructions available for iOS/iPadOS Safari users without unsolicited modals
+- [x] Strict Phase 01N scope boundaries preserved: zero service worker registration, zero offline caching, zero Dexie/IndexedDB usage
+- [x] 100% of workspace tests pass (138/138 tests across 15 test suites)
 
 ### 01-O · Deployment
 

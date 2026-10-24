@@ -24,26 +24,28 @@ The repository is structured as a **modular monorepo** with strict physical boun
 arth/
 ├── frontend/                     # Next.js 16 App Router (@arth/frontend)
 │   ├── src/
-│   │   ├── app/                  # App Router layouts, pages, globals.css
+│   │   ├── app/                  # App Router layouts, pages, globals.css, manifest.ts
 │   │   │   ├── api/backend/auth/ # BFF thin proxy forwarding Bearer JWTs to Fastify
 │   │   │   ├── auth/callback/    # Supabase PKCE OAuth callback handler
 │   │   │   ├── auth/logout/      # Session invalidation & cookie clearance
 │   │   │   ├── login/            # Ledger Minimal sign-in UI
+│   │   │   ├── manifest.ts       # W3C Web App Manifest (standalone, theme colors)
 │   │   │   └── page.tsx          # Authenticated session display & foundation
 │   │   ├── components/
 │   │   │   ├── ui/               # Reusable UI primitives (ThemeToggle)
 │   │   │   └── layout/           # Shared page layouts & navigation
 │   │   ├── features/             # Feature-sliced modules
-│   │   │   ├── dashboard/
-│   │   │   ├── transactions/
-│   │   │   ├── categories/
-│   │   │   └── settings/
+│   │   │   ├── dashboard/        # Net cash flow summary, composition, recent activity
+│   │   │   ├── transactions/     # Ledger, Quick Add entry modal & AppShell
+│   │   │   ├── categories/       # Category taxonomy, ordering, and archive
+│   │   │   ├── people/           # People & Money tracker with settlement engine
+│   │   │   └── pwa/              # PWA install prompt card & hook
 │   │   └── lib/
-│   │       ├── api-client/       # Typed backend API client (fetchCurrentUser, etc.)
+│   │       ├── api-client/       # Typed backend API client
 │   │       ├── format.ts         # Paise-to-INR & date formatters
 │   │       └── supabase/         # SSR Supabase client (HTTP-only cookies)
-│   ├── tests/                    # Frontend Route Handler & proxy test suite
-│   ├── public/                   # Static assets & icons
+│   ├── tests/                    # Frontend test suite (proxies, date logic, PWA manifest)
+│   ├── public/                   # Static assets & icons (192, 512, maskable, apple)
 │   ├── package.json
 │   ├── next.config.ts
 │   └── tsconfig.json

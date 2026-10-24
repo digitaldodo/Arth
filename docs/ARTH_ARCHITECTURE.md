@@ -455,16 +455,32 @@ Transaction write (client)
 
 ---
 
-## 6. Offline and PWA strategy (Phase 03)
+## 6. PWA & Offline Strategy
+
+### 6.0 Baseline Installability (Phase 01N — Implemented)
+
+Arth provides baseline Progressive Web App installability via the Next.js App Router:
+- **Web App Manifest**: Exported via `frontend/src/app/manifest.ts` using `MetadataRoute.Manifest` with `id: '/'`, `scope: '/'`, `start_url: '/'`, `display: 'standalone'`, and Ledger Minimal branding (`#FBFBF9` background, `#1C1917` theme color, `lang: 'en-IN'`). Served at `/manifest.webmanifest`.
+- **Application Icons**: Crisp PNG icons in `frontend/public/icons/`:
+  - `icon-192x192.png` (192×192 standard launcher)
+  - `icon-512x512.png` (512×512 standard launcher/splash)
+  - `icon-512x512-maskable.png` (512×512 maskable, with all critical geometry strictly enclosed inside the center 80% safe zone circle)
+  - `apple-touch-icon.png` (180×180 iOS home screen)
+  - `favicon.ico` (browser tab icon)
+- **Viewport & Apple Meta**: Configured in `frontend/src/app/layout.tsx` with light/dark `themeColor` media queries, `viewportFit: 'cover'`, and `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Arth' }`.
+- **Subtle Install Experience**: Managed via `usePwaInstall` hook and `InstallPromptCard` rendered in Settings/More (`activeView === 'more'`). Captures `beforeinstallprompt`, provides clean "Install Arth" action, detects standalone mode via `matchMedia('(display-mode: standalone)')`, and provides manual installation steps for iOS/iPadOS Safari without intrusive unsolicited modals.
+- **Strict Scope Boundaries**: Phase 01N implements **zero** service workers, zero offline caching, and zero IndexedDB/Dexie usage.
+
+### 6.1 Service Worker & Offline Strategy (Deferred to Phase 03)
 
 > **Not implemented in Phase 01. Documented here to prevent conflicting design decisions.**
 
-### 6.1 Service worker
+#### 6.1.1 Service worker
 
 - Use Workbox (via `next-pwa` or custom `sw.js`) for static asset caching.
 - Cache-first for UI shell; network-first for data.
 
-### 6.2 IndexedDB (Dexie.js)
+#### 6.1.2 IndexedDB (Dexie.js)
 
 ```typescript
 // src/lib/db.ts  (Phase 03)
