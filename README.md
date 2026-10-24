@@ -228,9 +228,8 @@ Arth is designed for cost-effective, high-reliability deployment using managed p
 
 ### 2. Next.js Frontend &rarr; Vercel (Next.js Platform)
 - **Configuration**: Root [`vercel.json`](./vercel.json) configures monorepo build delegation.
-- **Root Directory**: `.` (monorepo root)
-- **Build Command**: `pnpm build:frontend` (automatically compiles `@arth/contracts` then `@arth/frontend`)
-- **Output Directory**: `frontend/.next`
+- **Build Command**: `pnpm --filter @arth/contracts build && pnpm --filter @arth/frontend build`
+- **Output Directory**: `.next`
 - **Required Environment Variables**:
   - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
   - `NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co`

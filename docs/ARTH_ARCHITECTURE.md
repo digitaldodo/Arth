@@ -645,9 +645,8 @@ CSV and JSON export. JSON import for recovery. No bulk bank-statement import in 
      - `CORS_ORIGIN=https://<your-frontend-domain>`
 4. **Frontend Service (Vercel Next.js Deployment)**:
    - Connect repository `https://github.com/digitaldodo/Arth.git` to Vercel using `vercel.json`.
-   - Root Directory: `.` (repository root).
-   - Build Command: `pnpm build:frontend` (builds `@arth/contracts` then `@arth/frontend`).
-   - Output Directory: `frontend/.next`.
+   - Build Command: `pnpm --filter @arth/contracts build && pnpm --filter @arth/frontend build`.
+   - Output Directory: `.next`.
    - Configure Environment Variables in Vercel Dashboard:
      - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
      - `NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co`
