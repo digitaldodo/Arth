@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arth — Screen-Level Design Prototype (Ledger Minimal)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* CSS Variables matching docs/ARTH_DESIGN_SYSTEM.md */
+    :root, .theme-light {
+      --bg-canvas: #FBFBF9;
+      --bg-surface: #FFFFFF;
+      --bg-surface-subtle: #F4F4F1;
+      --bg-surface-elevated: #FFFFFF;
+      --border-hairline: #E7E5E4;
+      --border-subtle: #D6D3D1;
+      --border-strong: #A8A29E;
+      --text-primary: #1C1917;
+      --text-secondary: #57534E;
+      --text-muted: #78716C;
+      --text-inverse: #FFFFFF;
+      --action-primary-bg: #1C1917;
+      --action-primary-fg: #FFFFFF;
+      --action-primary-hover: #292524;
+      --focus-ring: #1C1917;
+      --income-fg: #15803D;
+      --income-bg: #F0FDF4;
+      --income-border: #BBF7D0;
+      --expense-fg: #B91C1C;
+      --expense-bg: #FEF2F2;
+      --expense-border: #FECACA;
+      --nec-essential-fg: #292524;
+      --nec-essential-bg: #F5F5F4;
+      --nec-optional-fg: #0369A1;
+      --nec-optional-bg: #F0F9FF;
+      --nec-luxury-fg: #7E22CE;
+      --nec-luxury-bg: #FAF5FF;
+      --status-warning-fg: #B45309;
+      --status-warning-bg: #FFFBEB;
+      --status-error-fg: #DC2626;
+      --status-error-bg: #FEF2F2;
+      --status-success-fg: #15803D;
+      --radius-sm: 2px;
+      --radius-md: 3px;
+      --radius-lg: 4px;
+      --radius-sheet: 8px 8px 0 0;
+      --shadow-dialog: 0 4px 20px rgba(0, 0, 0, 0.08);
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+
+    .theme-dark {
+      --bg-canvas: #0C0A09;
+      --bg-surface: #171513;
+      --bg-surface-subtle: #221F1C;
+      --bg-surface-elevated: #1E1B18;
+      --border-hairline: #292524;
+      --border-subtle: #3F3B37;
+      --border-strong: #57534E;
+      --text-primary: #F5F5F4;
+      --text-secondary: #A8A29E;
+      --text-muted: #78716C;
+      --text-inverse: #0C0A09;
+      --action-primary-bg: #F5F5F4;
+      --action-primary-fg: #0C0A09;
+      --action-primary-hover: #E7E5E4;
+      --focus-ring: #F5F5F4;
+      --income-fg: #4ADE80;
+      --income-bg: rgba(74, 222, 128, 0.12);
+      --income-border: rgba(74, 222, 128, 0.25);
+      --expense-fg: #F87171;
+      --expense-bg: rgba(248, 113, 113, 0.12);
+      --expense-border: rgba(248, 113, 113, 0.25);
+      --nec-essential-fg: #E7E5E4;
+      --nec-essential-bg: #292524;
+      --nec-optional-fg: #38BDF8;
+      --nec-optional-bg: rgba(56, 189, 248, 0.12);
+      --nec-luxury-fg: #C084FC;
+      --nec-luxury-bg: rgba(192, 132, 252, 0.12);
+      --status-warning-fg: #FBBF24;
+      --status-warning-bg: rgba(251, 191, 36, 0.12);
+      --status-error-fg: #F87171;
+      --status-error-bg: rgba(248, 113, 113, 0.15);
+      --status-success-fg: #4ADE80;
+      --shadow-dialog: 0 4px 24px rgba(0, 0, 0, 0.6);
+    }
+
+    body {
+      font-family: var(--font-ui);
+      background-color: #121110;
+      color: #EDECE9;
+    }
+
+    .proto-canvas {
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .font-mono-numbers {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Hairline borders */
+    .border-hairline { border: 1px solid var(--border-hairline); }
+    .border-hairline-t { border-top: 1px solid var(--border-hairline); }
+    .border-hairline-b { border-bottom: 1px solid var(--border-hairline); }
+    .border-hairline-l { border-left: 1px solid var(--border-hairline); }
+    .border-hairline-r { border-right: 1px solid var(--border-hairline); }
+
+    .border-subtle { border: 1px solid var(--border-subtle); }
+    .bg-surface { background-color: var(--bg-surface); }
+    .bg-surface-subtle { background-color: var(--bg-surface-subtle); }
+    .bg-surface-elevated { background-color: var(--bg-surface-elevated); }
+    .text-primary-token { color: var(--text-primary); }
+    .text-secondary-token { color: var(--text-secondary); }
+    .text-muted-token { color: var(--text-muted); }
+
+    .radius-sm { border-radius: var(--radius-sm); }
+    .radius-md { border-radius: var(--radius-md); }
+    .radius-lg { border-radius: var(--radius-lg); }
+
+    .btn-primary-action {
+      background-color: var(--action-primary-bg);
+      color: var(--action-primary-fg);
+      border-radius: var(--radius-md);
+      font-weight: 500;
+      transition: background-color 0.1s ease, transform 0.05s ease;
+    }
+    .btn-primary-action:hover {
+      background-color: var(--action-primary-hover);
+    }
+    .btn-primary-action:active {
+      transform: scale(0.99);
+    }
+
+    /* Focus visible */
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ========================================================================= */
+    /* RESPONSIVE LAYOUT ENGINE (Mobile <768px, Tablet 768-1023px, Desktop >=1024px) */
+    /* ========================================================================= */
+
+    /* 1. Mobile First Defaults (< 768px or .is-mobile-view) */
+    #app-nav-sidebar {
+      display: none !important;
+    }
+    #mobile-app-header {
+      display: flex !important;
+    }
+    #mobile-nav-bar {
+      display: flex !important;
+    }
+    #app-layout-wrapper {
+      flex-direction: column !important;
+    }
+    #screen-container {
+      padding-bottom: 5.5rem !important;
+    }
+    .desktop-table-container {
+      display: none !important;
+    }
+    .mobile-ledger-cards {
+      display: block !important;
+    }
+
+    /* 2. Tablet Layout (768px - 1023px) */
+    @media (min-width: 768px) and (max-width: 1023px) {
+      #app-nav-sidebar {
+        display: flex !important;
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+        padding: 12px 6px !important;
+        align-items: center !important;
+      }
+      #mobile-app-header {
+        display: none !important;
+      }
+      #mobile-nav-bar {
+        display: none !important;
+      }
+      #app-layout-wrapper {
+        flex-direction: row !important;
+      }
+      #screen-container {
+        padding-bottom: 1.5rem !important;
+      }
+      .sidebar-brand {
+        justify-content: center !important;
+        padding: 0 !important;
+      }
+      .sidebar-text {
+        display: none !important;
+      }
+      .sidebar-add-btn {
+        width: 44px !important;
+        height: 44px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+      }
+      .sidebar-nav-btn {
+        width: 44px !important;
+        height: 44px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+      }
+      .sidebar-footer .desktop-mx-0 {
+        margin: 0 auto !important;
+      }
+      .desktop-table-container {
+        display: none !important;
+      }
+      .mobile-ledger-cards {
+        display: block !important;
+      }
+    }
+
+    /* 3. Desktop Layout (>= 1024px) */
+    @media (min-width: 1024px) {
+      #app-nav-sidebar {
+        display: flex !important;
+        width: 240px !important;
+        min-width: 240px !important;
+        max-width: 240px !important;
+        padding: 16px !important;
+        align-items: stretch !important;
+      }
+      #mobile-app-header {
+        display: none !important;
+      }
+      #mobile-nav-bar {
+        display: none !important;
+      }
+      #app-layout-wrapper {
+        flex-direction: row !important;
+      }
+      #screen-container {
+        padding-bottom: 1.5rem !important;
+      }
+      .sidebar-brand {
+        justify-content: flex-start !important;
+      }
+      .sidebar-text {
+        display: inline !important;
+      }
+      .sidebar-add-btn {
+        width: 100% !important;
+        height: auto !important;
+        padding: 8px 12px !important;
+        justify-content: space-between !important;
+      }
+      .sidebar-nav-btn {
+        width: 100% !important;
+        height: auto !important;
+        padding: 8px 10px !important;
+        justify-content: flex-start !important;
+      }
+      .desktop-table-container {
+        display: block !important;
+      }
+      .mobile-ledger-cards {
+        display: none !important;
+      }
+    }
+
+    /* 4. Frame Simulator Explicit Mode Overrides (for testing any viewport on desktop) */
+    #viewport-frame.is-mobile-view #app-nav-sidebar {
+      display: none !important;
+    }
+    #viewport-frame.is-mobile-view #mobile-app-header {
+      display: flex !important;
+    }
+    #viewport-frame.is-mobile-view #mobile-nav-bar {
+      display: flex !important;
+    }
+    #viewport-frame.is-mobile-view #app-layout-wrapper {
+      flex-direction: column !important;
+    }
+    #viewport-frame.is-mobile-view #screen-container {
+      padding-bottom: 5.5rem !important;
+    }
+    #viewport-frame.is-mobile-view .desktop-table-container {
+      display: none !important;
+    }
+    #viewport-frame.is-mobile-view .mobile-ledger-cards {
+      display: block !important;
+    }
+
+    #viewport-frame.is-tablet-view #app-nav-sidebar {
+      display: flex !important;
+      width: 64px !important;
+      min-width: 64px !important;
+      max-width: 64px !important;
+      padding: 12px 6px !important;
+      align-items: center !important;
+    }
+    #viewport-frame.is-tablet-view #mobile-app-header {
+      display: none !important;
+    }
+    #viewport-frame.is-tablet-view #mobile-nav-bar {
+      display: none !important;
+    }
+    #viewport-frame.is-tablet-view #app-layout-wrapper {
+      flex-direction: row !important;
+    }
+    #viewport-frame.is-tablet-view #screen-container {
+      padding-bottom: 1.5rem !important;
+    }
+    #viewport-frame.is-tablet-view .sidebar-brand {
+      justify-content: center !important;
+      padding: 0 !important;
+    }
+    #viewport-frame.is-tablet-view .sidebar-text {
+      display: none !important;
+    }
+    #viewport-frame.is-tablet-view .sidebar-add-btn {
+      width: 44px !important;
+      height: 44px !important;
+      padding: 0 !important;
+      justify-content: center !important;
+    }
+    #viewport-frame.is-tablet-view .sidebar-nav-btn {
+      width: 44px !important;
+      height: 44px !important;
+      padding: 0 !important;
+      justify-content: center !important;
+    }
+    #viewport-frame.is-tablet-view .sidebar-footer .desktop-mx-0 {
+      margin: 0 auto !important;
+    }
+    #viewport-frame.is-tablet-view .desktop-table-container {
+      display: none !important;
+    }
+    #viewport-frame.is-tablet-view .mobile-ledger-cards {
+      display: block !important;
+    }
+
+    #viewport-frame.is-desktop-view #app-nav-sidebar {
+      display: flex !important;
+      width: 240px !important;
+      min-width: 240px !important;
+      max-width: 240px !important;
+      padding: 16px !important;
+      align-items: stretch !important;
+    }
+    #viewport-frame.is-desktop-view #mobile-app-header {
+      display: none !important;
+    }
+    #viewport-frame.is-desktop-view #mobile-nav-bar {
+      display: none !important;
+    }
+    #viewport-frame.is-desktop-view #app-layout-wrapper {
+      flex-direction: row !important;
+    }
+    #viewport-frame.is-desktop-view #screen-container {
+      padding-bottom: 1.5rem !important;
+    }
+    #viewport-frame.is-desktop-view .sidebar-brand {
+      justify-content: flex-start !important;
+    }
+    #viewport-frame.is-desktop-view .sidebar-text {
+      display: inline !important;
+    }
+    #viewport-frame.is-desktop-view .sidebar-add-btn {
+      width: 100% !important;
+      height: auto !important;
+      padding: 8px 12px !important;
+      justify-content: space-between !important;
+    }
+    #viewport-frame.is-desktop-view .sidebar-nav-btn {
+      width: 100% !important;
+      height: auto !important;
+      padding: 8px 10px !important;
+      justify-content: flex-start !important;
+    }
+    #viewport-frame.is-desktop-view .desktop-table-container {
+      display: block !important;
+    }
+    #viewport-frame.is-desktop-view .mobile-ledger-cards {
+      display: none !important;
+    }
+
+    /* 5. Real Mobile Screen Body Styling (< 768px) */
+    @media (max-width: 767px) {
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        background-color: var(--bg-canvas) !important;
+      }
+      .studio-header-wrap {
+        border-radius: 0 !important;
+        margin-bottom: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-top: none !important;
+        padding: 8px 12px !important;
+      }
+      .studio-notice-wrap {
+        display: none !important;
+      }
+      #viewport-frame {
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        min-height: 100vh !important;
+        height: 100vh !important;
+      }
+    }
+  </style>
+</head>
+<body class="p-2 sm:p-4 min-h-screen flex flex-col items-center">
+
+  <!-- ========================================================================= -->
+  <!-- TOP STUDIO CONTROLLER BAR (Viewport Switcher, Theme, Reset Demo Data)     -->
+  <!-- ========================================================================= -->
+  <header class="studio-header-wrap w-full max-w-6xl mb-3 bg-[#1C1A17] border border-[#2D2A26] rounded-xl p-3 shadow-lg flex flex-col md:flex-row items-center justify-between gap-3 text-xs z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-6 h-6 bg-white text-stone-900 rounded-[3px] font-bold flex items-center justify-center font-mono text-xs">A</div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold tracking-tight text-stone-100 text-sm">Arth Design Prototype</span>
+          <span class="px-1.5 py-0.2 bg-stone-800 text-stone-400 border border-stone-700 rounded text-[10px] uppercase font-mono">Phase 01D</span>
+        </div>
+        <p class="text-[11px] text-stone-400">Concept 1: Ledger Minimal • In-Memory Demonstration</p>
+      </div>
+    </div>
+
+    <!-- Controls Cluster -->
+    <div class="flex flex-wrap items-center gap-2.5">
+      
+      <!-- Viewport Frame Switcher -->
+      <div class="flex items-center bg-[#141210] p-0.5 rounded-[4px] border border-[#2D2A26]">
+        <button id="btn-vp-mobile" onclick="setViewport('mobile')" class="px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="5" y="2" width="14" height="20" rx="2" stroke-width="2"/><line x1="12" y1="18" x2="12" y2="18.01" stroke-width="2"/></svg>
+          Mobile (390px)
+        </button>
+        <button id="btn-vp-tablet" onclick="setViewport('tablet')" class="px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="4" y="3" width="16" height="18" rx="2" stroke-width="2"/></svg>
+          Tablet (768px)
+        </button>
+        <button id="btn-vp-desktop" onclick="setViewport('desktop')" class="px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2"/><line x1="8" y1="21" x2="16" y2="21" stroke-width="2"/><line x1="12" y1="17" x2="12" y2="21" stroke-width="2"/></svg>
+          Desktop (1120px)
+        </button>
+        <button id="btn-vp-fluid" onclick="setViewport('fluid')" class="px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200">
+          Fluid
+        </button>
+      </div>
+
+      <!-- Theme Selector -->
+      <div class="flex items-center bg-[#141210] p-0.5 rounded-[4px] border border-[#2D2A26]">
+        <button id="btn-theme-light" onclick="setTheme('light')" class="px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="4" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41m14.14-14.14l-1.41 1.41"/></svg>
+          Light
+        </button>
+        <button id="btn-theme-dark" onclick="setTheme('dark')" class="px-2.5 py-1 rounded-[3px] font-medium bg-stone-200 text-stone-900 shadow-sm flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          Dark
+        </button>
+      </div>
+
+      <!-- Reset Demo Data -->
+      <button onclick="resetDemoData()" class="px-2.5 py-1.5 border border-stone-700 bg-stone-800 text-stone-300 hover:text-white rounded-[3px] text-[11px] font-medium" title="Restore initial fictional dataset">
+        ↻ Reset Demo
+      </button>
+
+    </div>
+  </header>
+
+  <!-- Prototype Notice Banner -->
+  <div class="studio-notice-wrap w-full max-w-6xl mb-3 px-3 py-1.5 bg-[#1C1A17] border border-amber-900/40 text-amber-300/80 rounded-[4px] text-[11px] flex items-center justify-between font-mono">
+    <span>Notice: Demonstration sandbox with fictional records only. All actions (Add, Edit, Soft-delete, Reorder) run in-memory.</span>
+    <span class="opacity-75">Asia/Kolkata (IST)</span>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN PROTOTYPE APPLICATION FRAME CONTAINER                                -->
+  <!-- ========================================================================= -->
+  <div id="viewport-frame" class="w-full proto-canvas theme-dark border border-hairline rounded-[6px] shadow-2xl flex flex-col relative overflow-hidden transition-all duration-200" style="min-height: 780px;">
+
+    <!-- COMPACT MOBILE HEADER (Visible only on mobile <768px or in .is-mobile-view) -->
+    <header id="mobile-app-header" class="h-12 bg-surface border-hairline-b px-3.5 flex items-center justify-between shrink-0 z-30 select-none">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 bg-surface border border-hairline rounded-[2px] flex items-center justify-center font-bold text-xs text-primary-token font-mono">A</div>
+        <span class="font-bold tracking-tight text-sm text-primary-token">Arth</span>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1 bg-surface-subtle px-2 py-0.5 border border-hairline rounded-[2px]">
+          <select id="mobile-period-select" onchange="changePeriod(this.value)" class="text-[11px] font-mono font-medium uppercase tracking-wider text-muted-token bg-transparent border-none p-0 cursor-pointer focus:ring-0">
+            <option value="2026-10">Oct 2026</option>
+            <option value="2026-09">Sep 2026</option>
+            <option value="2026-08">Aug 2026</option>
+          </select>
+        </div>
+        <button onclick="navigate('settings')" class="w-7 h-7 rounded-[2px] border border-hairline bg-surface-subtle flex items-center justify-center text-xs font-mono font-semibold text-primary-token" title="Settings">
+          A
+        </button>
+      </div>
+    </header>
+
+    <!-- DESKTOP / TABLET SIDEBAR LAYOUT WRAPPER -->
+    <div id="app-layout-wrapper" class="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+      
+      <!-- RESPONSIVE NAVIGATION SIDEBAR & RAIL (Hidden on mobile <768px, 64px rail on tablet 768-1023px, 240px on desktop >=1024px) -->
+      <aside id="app-nav-sidebar" class="flex flex-col justify-between border-hairline-r bg-surface-subtle select-none shrink-0 transition-all duration-200">
+        <div class="flex flex-col items-center w-full">
+          <!-- Brand -->
+          <div class="sidebar-brand flex items-center gap-2.5 px-1 mb-5 w-full">
+            <div class="w-8 h-8 bg-surface border border-hairline rounded-[3px] flex items-center justify-center font-bold text-sm text-primary-token font-mono shrink-0">A</div>
+            <div class="sidebar-text truncate">
+              <span class="font-bold tracking-tight text-base block text-primary-token leading-tight">Arth</span>
+              <span class="text-[10px] text-muted-token font-mono uppercase tracking-wider">Ledger Minimal</span>
+            </div>
+          </div>
+
+          <!-- Primary Add CTA -->
+          <button onclick="openAddModal()" class="sidebar-add-btn btn-primary-action text-xs flex items-center shadow-sm mb-5" title="Add Transaction (Hotkey: N)">
+            <span class="flex items-center gap-2 shrink-0">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span class="sidebar-text font-semibold">Add Transaction</span>
+            </span>
+            <kbd class="sidebar-text px-1 py-0.5 text-[9px] bg-black/20 rounded font-mono">N</kbd>
+          </button>
+
+          <!-- Nav Links -->
+          <nav class="space-y-1 w-full text-xs">
+            <button onclick="navigate('dashboard')" id="d-nav-dashboard" class="sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-semibold text-primary-token bg-surface border border-hairline text-left transition-colors" title="Dashboard">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+              <span class="sidebar-text">Dashboard</span>
+            </button>
+            <button onclick="navigate('ledger')" id="d-nav-ledger" class="sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-medium text-muted-token hover:text-primary-token text-left transition-colors" title="Transaction Ledger">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              <span class="sidebar-text">Ledger</span>
+            </button>
+            <button onclick="navigate('categories')" id="d-nav-categories" class="sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-medium text-muted-token hover:text-primary-token text-left transition-colors" title="Category Manager">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+              <span class="sidebar-text">Categories</span>
+            </button>
+            <button onclick="navigate('settings')" id="d-nav-settings" class="sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-medium text-muted-token hover:text-primary-token text-left transition-colors" title="Settings & Parameters">
+              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <span class="sidebar-text">Settings</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Sidebar Footer Info -->
+        <div class="sidebar-footer pt-3 border-hairline-t text-xs w-full">
+          <div class="flex items-center justify-between text-[11px] text-muted-token mb-1">
+            <span class="sidebar-text">Owner Account</span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0 mx-auto desktop-mx-0" title="Ready • Asia/Kolkata"></span>
+          </div>
+          <div class="sidebar-text font-mono text-[10px] text-secondary-token">Asia/Kolkata (IST)</div>
+        </div>
+      </aside>
+
+      <!-- ACTIVE SCREEN CONTENT REGION -->
+      <main id="screen-container" class="flex-1 flex flex-col h-full overflow-y-auto relative min-w-0">
+        
+        <!-- =================================================================== -->
+        <!-- SCREEN A: DASHBOARD                                                 -->
+        <!-- =================================================================== -->
+        <section id="screen-dashboard" class="p-4 md:p-6 space-y-4 flex-1">
+          
+          <!-- Period Selector & Header -->
+          <div class="flex items-center justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <select id="dash-period-select" onchange="changePeriod(this.value)" class="text-xs font-mono font-medium uppercase tracking-wider text-muted-token bg-transparent border-none p-0 cursor-pointer focus:ring-0">
+                  <option value="2026-10">October 2026</option>
+                  <option value="2026-09">September 2026</option>
+                  <option value="2026-08">August 2026</option>
+                </select>
+                <span class="text-[10px] text-muted-token">▾</span>
+              </div>
+              <h1 class="text-xl md:text-2xl font-bold tracking-tight text-primary-token truncate">Financial Overview</h1>
+            </div>
+          </div>
+
+          <!-- Primary Financial Pulse Card: Net cash flow -->
+          <div class="bg-surface border border-hairline p-4 radius-md">
+            <div class="flex items-center justify-between text-xs text-secondary-token mb-1">
+              <span class="font-medium">Net cash flow</span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 bg-surface-subtle text-muted-token radius-sm">October 2026</span>
+            </div>
+            
+            <div id="dash-net-amount" class="text-2xl md:text-3xl font-bold font-mono-numbers tracking-tight" style="color: var(--income-fg)">
+              +₹42,850.00
+            </div>
+
+            <!-- Inflow vs Outflow Split -->
+            <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-hairline-t text-xs">
+              <div>
+                <span class="text-muted-token block text-[11px] mb-0.5">Total Inflow</span>
+                <span id="dash-income-amount" class="font-semibold text-sm font-mono-numbers" style="color: var(--income-fg)">+₹95,000.00</span>
+              </div>
+              <div class="border-hairline-l pl-3">
+                <span class="text-muted-token block text-[11px] mb-0.5">Total Outflow</span>
+                <span id="dash-expense-amount" class="font-semibold text-sm font-mono-numbers" style="color: var(--expense-fg)">−₹52,150.00</span>
+              </div>
+            </div>
+
+            <!-- Today's Spend Micro-bar -->
+            <div class="mt-3 pt-2 border-hairline-t flex items-center justify-between text-xs text-muted-token">
+              <span>Today's Outflow</span>
+              <span id="dash-today-amount" class="font-semibold font-mono-numbers text-primary-token">₹1,450.00</span>
+            </div>
+          </div>
+
+          <!-- Progressive Disclosure Level 2: Spending Breakdown Disclosure Trigger -->
+          <div class="bg-surface border border-hairline p-3.5 radius-md">
+            <div class="flex items-center justify-between gap-2 min-w-0">
+              <div class="flex items-center gap-2 min-w-0 truncate">
+                <span class="text-xs font-semibold uppercase tracking-wider text-muted-token font-mono truncate">Spending composition</span>
+                <span class="text-[10px] px-1.5 py-0.2 bg-surface-subtle text-muted-token radius-sm font-mono shrink-0">Level 2</span>
+              </div>
+              <button id="btn-toggle-composition" onclick="toggleCompositionSection()" class="text-xs text-primary-token font-medium flex items-center gap-1 hover:underline shrink-0">
+                <span id="label-toggle-composition">Show</span>
+                <span id="icon-toggle-composition">▾</span>
+              </button>
+            </div>
+
+            <!-- Collapsible Section Body (Collapsed by default) -->
+            <div id="composition-section-body" class="hidden mt-3 space-y-3">
+              <!-- Necessity Proportional Bar -->
+              <div>
+                <div class="flex justify-between text-[11px] text-muted-token mb-1 font-mono">
+                  <span>Necessity Ratio (Expenses)</span>
+                  <span id="dash-nec-total">₹52,150.00 Outflow</span>
+                </div>
+                <!-- Proportional Bar Container -->
+                <div class="h-2 w-full bg-surface-subtle rounded-none overflow-hidden flex gap-0.5 border border-hairline">
+                  <div id="bar-essential" style="width: 62%" class="h-full bg-stone-700 dark:bg-stone-300" title="Essential: 62%"></div>
+                  <div id="bar-optional" style="width: 26%" class="h-full bg-sky-600 dark:bg-sky-400" title="Optional: 26%"></div>
+                  <div id="bar-luxury" style="width: 12%" class="h-full bg-purple-600 dark:bg-purple-400" title="Luxury: 12%"></div>
+                </div>
+                <!-- Dual-encoded Legend -->
+                <div class="flex flex-wrap gap-x-2 gap-y-1 justify-between text-[11px] mt-2 font-mono-numbers">
+                  <span class="flex items-center gap-1 text-primary-token">
+                    <span>▲</span> Essential: <b id="pct-essential">62%</b>
+                  </span>
+                  <span class="flex items-center gap-1 text-sky-600 dark:text-sky-400">
+                    <span>●</span> Optional: <b id="pct-optional">26%</b>
+                  </span>
+                  <span class="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                    <span>◆</span> Luxury: <b id="pct-luxury">12%</b>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Top 3 Categories Split -->
+              <div class="pt-2 border-hairline-t">
+                <span class="text-[11px] text-muted-token block mb-2 font-mono">Top Categories this Period</span>
+                <div id="dash-top-categories" class="space-y-1.5 text-xs">
+                  <!-- Injected via JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Transactions Section -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-xs uppercase tracking-wider font-semibold text-muted-token font-mono">Recent Activity</h2>
+              <button onclick="navigate('ledger')" class="text-xs text-primary-token font-medium hover:underline">
+                View all in Ledger →
+              </button>
+            </div>
+
+            <!-- List of 5 Recent Items -->
+            <div id="dash-recent-list" class="bg-surface border border-hairline radius-md divide-y divide-hairline overflow-hidden">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+
+        </section>
+
+
+        <!-- =================================================================== -->
+        <!-- SCREEN B: LEDGER                                                    -->
+        <!-- =================================================================== -->
+        <section id="screen-ledger" class="hidden p-4 md:p-6 space-y-4 flex-1">
+          
+          <!-- Ledger Title & Controls -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="min-w-0">
+              <h1 class="text-xl md:text-2xl font-bold tracking-tight text-primary-token truncate">Transaction Ledger</h1>
+              <p class="text-xs text-muted-token">Browse, search, edit, and recover records.</p>
+            </div>
+            
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="openAddModal()" class="hidden sm:inline-flex btn-primary-action px-3 py-1.5 text-xs items-center gap-1.5 shadow-sm">
+                <span>+</span> Add Entry
+              </button>
+              <button onclick="openRecoveryDrawer()" class="px-2.5 py-1.5 border border-subtle bg-surface text-secondary-token text-xs radius-md hover:bg-surface-subtle" title="Inspect soft-deleted records">
+                Recovery Box (<span id="recovery-count" class="font-mono font-bold">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <!-- Search & Filter Bar (Level 1 + Level 2 Disclosure) -->
+          <div class="bg-surface border border-hairline p-3 radius-md space-y-2.5">
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1 min-w-0">
+                <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-muted-token">
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2"/></svg>
+                </span>
+                <input id="ledger-search-input" type="text" oninput="applyFilters()" placeholder="Search description, note, or category..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-subtle border border-hairline radius-md text-primary-token placeholder-muted focus:bg-surface" />
+              </div>
+
+              <!-- Filter Drawer Toggle -->
+              <button id="btn-toggle-filters" onclick="toggleFilterDrawer()" class="px-3 py-1.5 border border-hairline bg-surface-subtle text-primary-token text-xs radius-md font-medium flex items-center gap-1.5 hover:bg-surface shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                <span>Filter</span>
+                <span id="active-filter-badge" class="hidden w-2 h-2 rounded-full bg-blue-500"></span>
+              </button>
+            </div>
+
+            <!-- Collapsible Filter Drawer (Level 2) -->
+            <div id="ledger-filter-drawer" class="hidden pt-2.5 border-hairline-t grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div>
+                <label class="block text-[10px] uppercase font-mono text-muted-token mb-1">Type</label>
+                <select id="filter-type" onchange="applyFilters()" class="w-full p-1.5 text-xs bg-surface-subtle border border-hairline radius-md text-primary-token">
+                  <option value="all">All Types</option>
+                  <option value="expense">Expense Only</option>
+                  <option value="income">Income Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[10px] uppercase font-mono text-muted-token mb-1">Payment</label>
+                <select id="filter-payment" onchange="applyFilters()" class="w-full p-1.5 text-xs bg-surface-subtle border border-hairline radius-md text-primary-token">
+                  <option value="all">All Methods</option>
+                  <option value="online">Online Only</option>
+                  <option value="cash">Cash Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[10px] uppercase font-mono text-muted-token mb-1">Necessity</label>
+                <select id="filter-necessity" onchange="applyFilters()" class="w-full p-1.5 text-xs bg-surface-subtle border border-hairline radius-md text-primary-token">
+                  <option value="all">All Classes</option>
+                  <option value="essential">Essential (▲)</option>
+                  <option value="optional">Optional (●)</option>
+                  <option value="luxury">Luxury (◆)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[10px] uppercase font-mono text-muted-token mb-1">Category</label>
+                <select id="filter-category" onchange="applyFilters()" class="w-full p-1.5 text-xs bg-surface-subtle border border-hairline radius-md text-primary-token">
+                  <option value="all">All Categories</option>
+                  <!-- Populated via JS -->
+                </select>
+              </div>
+
+              <div class="col-span-1 sm:col-span-2 md:col-span-4 flex justify-end gap-2 pt-1">
+                <button onclick="clearFilters()" class="text-[11px] text-muted-token hover:underline">Clear all filters</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ledger Table Container (Desktop Tabular + Mobile Row Cards) -->
+          <div class="bg-surface border border-hairline radius-md overflow-hidden">
+            
+            <!-- Table Header Stats Strip -->
+            <div class="px-4 py-2 bg-surface-subtle border-hairline-b flex items-center justify-between text-xs text-muted-token font-mono">
+              <span id="ledger-count-indicator">Showing 0 records</span>
+              <span id="ledger-sum-indicator">Net: ₹0.00</span>
+            </div>
+
+            <!-- Desktop View: 40px Standard Row Table -->
+            <div class="desktop-table-container overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="border-hairline-b text-secondary-token bg-surface-subtle uppercase text-[10px] font-mono tracking-wider">
+                  <tr>
+                    <th class="py-2.5 px-4 font-semibold">Date (IST)</th>
+                    <th class="py-2.5 px-4 font-semibold">Description</th>
+                    <th class="py-2.5 px-4 font-semibold">Category</th>
+                    <th class="py-2.5 px-4 font-semibold">Payment</th>
+                    <th class="py-2.5 px-4 font-semibold">Necessity</th>
+                    <th class="py-2.5 px-4 font-semibold text-right">Amount (INR)</th>
+                    <th class="py-2.5 px-3 text-center w-16">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-desktop-tbody" class="divide-y divide-hairline">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mobile View: Carefully Formatted Ledger Row Cards -->
+            <div id="ledger-mobile-list" class="mobile-ledger-cards divide-y divide-hairline">
+              <!-- Injected via JS -->
+            </div>
+
+            <!-- Empty State / No Match State Container -->
+            <div id="ledger-empty-state" class="hidden p-8 text-center space-y-2">
+              <div class="w-10 h-10 mx-auto rounded border border-hairline bg-surface-subtle flex items-center justify-center text-muted-token">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8" stroke-width="1.5"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="1.5"/></svg>
+              </div>
+              <h3 class="text-sm font-semibold text-primary-token" id="empty-state-title">No transactions match your query</h3>
+              <p class="text-xs text-muted-token" id="empty-state-desc">Try clearing your filters or record a new transaction.</p>
+              <button onclick="clearFilters()" class="px-3 py-1.5 border border-hairline bg-surface-subtle text-xs radius-md text-primary-token font-medium hover:bg-surface">
+                Clear Filters
+              </button>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- =================================================================== -->
+        <!-- SCREEN D: CATEGORIES                                                -->
+        <!-- =================================================================== -->
+        <section id="screen-categories" class="hidden p-4 md:p-6 space-y-4 flex-1">
+          
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-xl md:text-2xl font-bold tracking-tight text-primary-token">Category Manager</h1>
+              <p class="text-xs text-muted-token">Organize predefined categories. Reordering updates Quick Add.</p>
+            </div>
+            
+            <button onclick="promptAddCategory()" class="btn-primary-action px-3 py-1.5 text-xs flex items-center gap-1">
+              <span>+</span> Add Category
+            </button>
+          </div>
+
+          <!-- Type Tabs: Expense Categories vs Income Categories -->
+          <div class="flex p-0.5 bg-surface-subtle border border-hairline radius-md text-xs w-full max-w-xs">
+            <button id="cat-tab-expense" onclick="switchCategoryTab('expense')" class="flex-1 py-1.5 text-center font-semibold bg-surface border border-hairline radius-sm text-primary-token shadow-sm">
+              Expense (Outflow)
+            </button>
+            <button id="cat-tab-income" onclick="switchCategoryTab('income')" class="flex-1 py-1.5 text-center font-medium text-muted-token hover:text-primary-token">
+              Income (Inflow)
+            </button>
+          </div>
+
+          <!-- Notice on Historical Records Integrity -->
+          <div class="p-3 bg-surface-subtle border border-hairline radius-md text-xs text-secondary-token flex items-start gap-2">
+            <span class="text-blue-500 font-bold">ℹ</span>
+            <p>
+              <b>Data Safety Guarantee:</b> Archiving a category removes it from future transaction entry forms, but <b>never breaks historical records</b>. Past transactions remain associated with their original category.
+            </p>
+          </div>
+
+          <!-- Category Reordering List -->
+          <div class="bg-surface border border-hairline radius-md overflow-hidden">
+            <div class="px-4 py-2.5 bg-surface-subtle border-hairline-b flex items-center justify-between text-xs font-mono text-muted-token">
+              <span>ACTIVE CATEGORIES (DRAG OR MOVE)</span>
+              <span id="cat-count-badge">0 Categories</span>
+            </div>
+
+            <div id="category-list-container" class="divide-y divide-hairline">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+
+          <!-- Quick Add Order Preview (Demonstrating alignment) -->
+          <div class="bg-surface border border-hairline p-4 radius-md">
+            <div class="text-xs font-mono uppercase tracking-wider text-muted-token mb-2 flex items-center justify-between">
+              <span>Quick Add Grid Preview (Top 6 Items)</span>
+              <span class="text-[10px] text-primary-token font-sans">Synced with custom sort order</span>
+            </div>
+            <div id="cat-preview-grid" class="grid grid-cols-3 gap-2 text-xs">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+
+          <!-- Archived Categories Section (Progressive Disclosure Level 3) -->
+          <div class="pt-2">
+            <button onclick="toggleArchivedCategories()" class="text-xs text-muted-token font-mono flex items-center gap-1 hover:text-primary-token">
+              <span id="archived-icon">▸</span> Archived Categories (<span id="archived-count">0</span>)
+            </button>
+            <div id="archived-list-container" class="hidden mt-2 bg-surface border border-hairline radius-md divide-y divide-hairline">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+
+        </section>
+
+
+        <!-- =================================================================== -->
+        <!-- SCREEN E: SETTINGS                                                  -->
+        <!-- =================================================================== -->
+        <section id="screen-settings" class="hidden p-4 md:p-6 space-y-4 flex-1">
+          
+          <div>
+            <h1 class="text-xl md:text-2xl font-bold tracking-tight text-primary-token">Settings & System</h1>
+            <p class="text-xs text-muted-token">Configure appearance, inspect diagnostics, and view future roadmap.</p>
+          </div>
+
+          <!-- Appearance / Theme Selector Card -->
+          <div class="bg-surface border border-hairline p-4 radius-md space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-primary-token">Appearance Theme</h3>
+                <p class="text-xs text-muted-token">Ledger Minimal supports deliberate Light and Dark palettes.</p>
+              </div>
+              <span id="settings-theme-indicator" class="text-xs font-mono px-2 py-0.5 border border-hairline bg-surface-subtle radius-sm text-secondary-token">Dark</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <button onclick="setTheme('light')" class="p-3 border border-hairline radius-md text-left bg-white text-stone-900 flex items-center justify-between shadow-sm">
+                <div>
+                  <span class="font-bold block">Warm Paper (Light)</span>
+                  <span class="text-[10px] text-stone-600 font-mono">#FBFBF9 Canvas</span>
+                </div>
+                <span id="check-theme-light" class="hidden text-stone-900 font-bold">✓</span>
+              </button>
+
+              <button onclick="setTheme('dark')" class="p-3 border border-stone-800 radius-md text-left bg-[#171513] text-stone-100 flex items-center justify-between shadow-sm">
+                <div>
+                  <span class="font-bold block">Obsidian Stone (Dark)</span>
+                  <span class="text-[10px] text-stone-400 font-mono">#0C0A09 Canvas</span>
+                </div>
+                <span id="check-theme-dark" class="text-stone-100 font-bold">✓</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Account & Locale Information -->
+          <div class="bg-surface border border-hairline p-4 radius-md space-y-2 text-xs">
+            <h3 class="text-sm font-semibold text-primary-token">Application Parameters</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-hairline-t">
+              <div>
+                <span class="text-muted-token block text-[11px] font-mono">OPERATIONAL CURRENCY</span>
+                <span class="font-semibold text-primary-token font-mono">INR (Indian Rupee - ₹)</span>
+              </div>
+              <div>
+                <span class="text-muted-token block text-[11px] font-mono">AUTHORITATIVE TIMEZONE</span>
+                <span class="font-semibold text-primary-token font-mono">Asia/Kolkata (IST, UTC+5:30)</span>
+              </div>
+              <div>
+                <span class="text-muted-token block text-[11px] font-mono">MONEY ARITHMETIC</span>
+                <span class="font-semibold text-primary-token font-mono">Integer Paise (100 = ₹1)</span>
+              </div>
+              <div>
+                <span class="text-muted-token block text-[11px] font-mono">PRIMARY KEY IDENTIFIER</span>
+                <span class="font-semibold text-primary-token font-mono">UUID v7 (Time-Ordered)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Future Modules & Status (Explicitly Marked Planned / Not Connected) -->
+          <div class="bg-surface border border-hairline p-4 radius-md space-y-3 text-xs">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-primary-token">Synchronization & Storage</h3>
+              <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 radius-sm font-bold">Roadmap Status</span>
+            </div>
+
+            <div class="space-y-2 pt-1 border-hairline-t">
+              <!-- Item 1: Supabase Database -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 bg-surface-subtle border border-hairline radius-sm">
+                <div class="min-w-0">
+                  <span class="font-semibold block text-primary-token">Supabase PostgreSQL (Authoritative)</span>
+                  <span class="text-[11px] text-muted-token block">Primary persistent data store with Row-Level Security</span>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 bg-stone-500/10 text-muted-token border border-hairline radius-sm font-medium self-start sm:self-auto shrink-0">Phase 01 Implementation</span>
+              </div>
+
+              <!-- Item 2: Google Sheets Sync -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 bg-surface-subtle border border-hairline radius-sm">
+                <div class="min-w-0">
+                  <span class="font-semibold block text-primary-token">Google Sheets Dual-Copy Sync</span>
+                  <span class="text-[11px] text-muted-token block">Transactional outbox queue & near-real-time Sheets sync</span>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 radius-sm font-semibold self-start sm:self-auto shrink-0">Planned — Not Connected</span>
+              </div>
+
+              <!-- Item 3: Local Offline Dexie DB -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 bg-surface-subtle border border-hairline radius-sm">
+                <div class="min-w-0">
+                  <span class="font-semibold block text-primary-token">Offline Storage (IndexedDB / Dexie.js)</span>
+                  <span class="text-[11px] text-muted-token block">Local offline queue and background synchronization worker</span>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 radius-sm font-semibold self-start sm:self-auto shrink-0">Planned — Phase 03</span>
+              </div>
+
+              <!-- Item 4: Data Export -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 bg-surface-subtle border border-hairline radius-sm">
+                <div class="min-w-0">
+                  <span class="font-semibold block text-primary-token">Data Export (CSV / JSON)</span>
+                  <span class="text-[11px] text-muted-token block">Self-contained backup and portable data extraction</span>
+                </div>
+                <span class="text-[10px] font-mono px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 radius-sm font-semibold self-start sm:self-auto shrink-0">Planned — Phase 02</span>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MOBILE BOTTOM NAVIGATION (Integrated Center Action, 5 Destinations)       -->
+    <!-- ========================================================================= -->
+    <nav id="mobile-nav-bar" class="mobile-only-dock absolute bottom-0 left-0 right-0 h-16 bg-surface border-hairline-t px-2 flex items-center justify-around z-40 select-none">
+      
+      <!-- 1. Home / Dashboard -->
+      <button onclick="navigate('dashboard')" id="m-nav-dashboard" class="flex flex-col items-center justify-center w-14 h-full text-primary-token">
+        <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span class="text-[10px] font-semibold">Home</span>
+      </button>
+
+      <!-- 2. Ledger -->
+      <button onclick="navigate('ledger')" id="m-nav-ledger" class="flex flex-col items-center justify-center w-14 h-full text-muted-token">
+        <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span class="text-[10px] font-medium">Ledger</span>
+      </button>
+
+      <!-- 3. Integrated Center Add Pill (No floating protrusion) -->
+      <button onclick="openAddModal()" class="w-12 h-10 btn-primary-action shadow-md flex items-center justify-center text-lg font-bold" title="Add Transaction">
+        +
+      </button>
+
+      <!-- 4. Categories -->
+      <button onclick="navigate('categories')" id="m-nav-categories" class="flex flex-col items-center justify-center w-14 h-full text-muted-token">
+        <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+        <span class="text-[10px] font-medium">Categories</span>
+      </button>
+
+      <!-- 5. Settings -->
+      <button onclick="navigate('settings')" id="m-nav-settings" class="flex flex-col items-center justify-center w-14 h-full text-muted-token">
+        <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="text-[10px] font-medium">Settings</span>
+      </button>
+
+    </nav>
+
+
+    <!-- ========================================================================= -->
+    <!-- SCREEN C: QUICK ADD / EDIT MODAL DRAWER OVERLAY                           -->
+    <!-- ========================================================================= -->
+    <div id="quick-add-modal" class="hidden absolute inset-0 bg-black/60 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-4 backdrop-blur-[1px]">
+      
+      <!-- Modal Box / Bottom Sheet -->
+      <div class="w-full md:max-w-lg bg-surface border-hairline md:border rounded-t-[8px] md:radius-md shadow-2xl p-4 md:p-6 overflow-y-auto max-h-[92vh] space-y-4 animate-in">
+        
+        <!-- Sheet Header + Drag Indicator -->
+        <div class="md:hidden w-10 h-1 bg-stone-500/30 rounded-full mx-auto -mt-1 mb-2"></div>
+
+        <div class="flex items-center justify-between border-hairline-b pb-3">
+          <div>
+            <h2 id="modal-form-title" class="text-base font-bold text-primary-token">New Transaction</h2>
+            <span class="text-[11px] text-muted-token font-mono">Asia/Kolkata (IST)</span>
+          </div>
+
+          <!-- Type Switcher: Expense vs Income -->
+          <div class="flex p-0.5 bg-surface-subtle border border-hairline radius-md text-xs">
+            <button id="form-type-expense" onclick="setFormType('expense')" class="px-3 py-1 font-semibold bg-surface text-primary-token border border-hairline radius-sm shadow-sm">
+              Expense
+            </button>
+            <button id="form-type-income" onclick="setFormType('income')" class="px-3 py-1 font-medium text-muted-token hover:text-primary-token">
+              Income
+            </button>
+          </div>
+
+          <button onclick="closeAddModal()" class="w-7 h-7 rounded border border-hairline flex items-center justify-center text-xs text-muted-token hover:text-primary-token" title="Close (Esc)">✕</button>
+        </div>
+
+        <!-- Validation Error Alert Banner -->
+        <div id="modal-val-error" class="hidden p-2.5 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 radius-md text-xs">
+          <!-- Text set via JS -->
+        </div>
+
+        <!-- 1. Hero Amount Input (Decimal pad on mobile) -->
+        <div>
+          <label class="block text-[11px] font-mono uppercase text-muted-token mb-1">Amount in INR</label>
+          <div class="relative flex items-center bg-surface-subtle border border-hairline radius-md px-3 py-2 focus-within:border-primary-token">
+            <span class="text-xl font-mono text-muted-token mr-2">₹</span>
+            <input id="input-amount" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" placeholder="0.00" class="w-full bg-transparent font-mono-numbers text-2xl font-bold text-primary-token tracking-tight border-none p-0 focus:ring-0" />
+          </div>
+        </div>
+
+        <!-- 2. Transaction Date (Defaults to Today in IST) -->
+        <div class="flex items-center justify-between text-xs">
+          <label class="text-secondary-token font-medium">Date (Asia/Kolkata)</label>
+          <div class="flex items-center gap-1.5">
+            <input id="input-date" type="date" class="bg-surface-subtle border border-hairline radius-md px-2 py-1 text-xs font-mono text-primary-token" />
+            <button onclick="setDateToday()" class="text-[10px] font-mono text-muted-token hover:underline">Set Today</button>
+          </div>
+        </div>
+
+        <!-- 3. Category Selection (Top 6 + All popover) -->
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1.5">
+            <label class="text-secondary-token font-medium">Category</label>
+            <button onclick="toggleAllCategoriesPopover()" class="text-[11px] text-muted-token hover:underline font-mono">
+              View All (<span id="modal-all-cat-count">14</span>) ▾
+            </button>
+          </div>
+
+          <!-- Top 6 Quick Chips Grid -->
+          <div id="modal-cat-quick-chips" class="grid grid-cols-3 gap-1.5 text-xs">
+            <!-- Injected via JS based on current type (expense vs income) -->
+          </div>
+
+          <!-- Collapsible All Categories Drawer -->
+          <div id="modal-all-categories-drawer" class="hidden mt-2 p-2 bg-surface-subtle border border-hairline radius-md max-h-36 overflow-y-auto grid grid-cols-2 gap-1 text-xs">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- 4. Payment Method: Exactly Online or Cash -->
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1">
+            <label class="text-secondary-token font-medium">Payment Method</label>
+            <span class="text-[10px] text-muted-token font-mono">Remembers last used</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button id="pay-btn-online" type="button" onclick="setPaymentMethod('online')" class="py-2 px-3 border border-strong bg-surface text-primary-token radius-md font-semibold text-center flex items-center justify-center gap-1.5">
+              <span>💳</span> Online (UPI / Card)
+            </button>
+            <button id="pay-btn-cash" type="button" onclick="setPaymentMethod('cash')" class="py-2 px-3 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center flex items-center justify-center gap-1.5">
+              <span>💵</span> Cash
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. Necessity Classification (Hidden immediately when Income is active) -->
+        <div id="section-necessity">
+          <label class="block text-xs text-secondary-token font-medium mb-1">Necessity Classification (Expense)</label>
+          <div class="grid grid-cols-3 gap-1.5 text-xs">
+            <button id="nec-btn-essential" type="button" onclick="setNecessity('essential')" class="py-2 px-1 border border-strong bg-surface text-primary-token radius-md font-semibold text-center">
+              ▲ Essential
+            </button>
+            <button id="nec-btn-optional" type="button" onclick="setNecessity('optional')" class="py-2 px-1 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center">
+              ● Optional
+            </button>
+            <button id="nec-btn-luxury" type="button" onclick="setNecessity('luxury')" class="py-2 px-1 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center">
+              ◆ Luxury
+            </button>
+          </div>
+        </div>
+
+        <!-- 6. Progressive Disclosure: Optional Note Field -->
+        <div>
+          <div class="flex items-center justify-between">
+            <button id="btn-toggle-note" type="button" onclick="toggleNoteField()" class="text-xs text-muted-token hover:text-primary-token flex items-center gap-1">
+              <span>+</span> Add optional description / note
+            </button>
+          </div>
+          <div id="section-note-field" class="hidden mt-2">
+            <input id="input-note" type="text" maxlength="200" placeholder="e.g. Nature's Basket weekly vegetables & dairy" class="w-full px-3 py-1.5 bg-surface-subtle border border-hairline radius-md text-xs text-primary-token placeholder-muted" />
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="pt-2 pb-6 sm:pb-2 border-hairline-t flex items-center gap-2">
+          <button id="btn-submit-transaction" onclick="saveTransaction()" class="flex-1 py-3 btn-primary-action text-xs font-semibold shadow-md flex items-center justify-center gap-1.5">
+            Save Record
+          </button>
+          <button onclick="closeAddModal()" class="px-4 py-3 border border-subtle bg-surface text-secondary-token text-xs radius-md hover:bg-surface-subtle font-medium">
+            Cancel
+          </button>
+        </div>
+
+        <!-- Delete button (visible when editing existing record) -->
+        <div id="section-edit-delete" class="hidden pt-1 text-center">
+          <button onclick="deleteCurrentEditingRecord()" class="text-xs text-red-600 dark:text-red-400 hover:underline">
+            Delete this transaction (Soft-delete with recovery)
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- REVERSIBLE DELETION RECOVERY DRAWER                                       -->
+    <!-- ========================================================================= -->
+    <div id="recovery-drawer" class="hidden absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div class="w-full max-w-md bg-surface border border-hairline radius-md p-4 space-y-3 shadow-2xl">
+        <div class="flex items-center justify-between border-hairline-b pb-2">
+          <div>
+            <h3 class="text-sm font-bold text-primary-token">Recovery Box (Soft-Deleted Records)</h3>
+            <span class="text-[11px] text-muted-token">Records marked deleted_at = now()</span>
+          </div>
+          <button onclick="closeRecoveryDrawer()" class="text-xs text-muted-token hover:text-primary-token">✕</button>
+        </div>
+
+        <p class="text-xs text-secondary-token">
+          In Arth, deletion is <b>non-destructive</b>. You can restore records anytime from here, not just during the 5-second notification pill.
+        </p>
+
+        <div id="recovery-list" class="max-h-60 overflow-y-auto divide-y divide-hairline border border-hairline radius-sm">
+          <!-- Injected via JS -->
+        </div>
+
+        <div class="flex justify-end pt-1">
+          <button onclick="closeRecoveryDrawer()" class="px-3 py-1.5 btn-primary-action text-xs">Done</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- GLOBAL TOAST SNACKBAR (Undoable Deletion & Confirmations)                  -->
+    <!-- ========================================================================= -->
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-200 opacity-0 -translate-y-2">
+      <div class="bg-surface border border-strong px-4 py-2.5 radius-md shadow-2xl flex items-center gap-3 text-xs text-primary-token pointer-events-auto">
+        <span id="toast-message">Transaction saved</span>
+        <button id="toast-undo-btn" onclick="executeToastUndo()" class="hidden px-2 py-0.5 bg-surface-subtle border border-hairline radius-sm font-bold text-[11px] text-primary-token hover:bg-surface">
+          Undo (5s)
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT PROTOTYPE APPLICATION LOGIC (In-Memory Reactive State)         -->
+  <!-- ========================================================================= -->
+  <script>
+    // Initial Realistic Demonstration Dataset (October 2026, IST)
+    const INITIAL_TRANSACTIONS = [
+      { id: 'tx-01', date: '2026-10-25', desc: "Nature's Basket Organic Groceries", category: 'Groceries', type: 'expense', payment: 'online', necessity: 'essential', amount: 1450.00, note: 'Vegetables, milk, sourdough' },
+      { id: 'tx-02', date: '2026-10-24', desc: "Acme Tech Advisory Consulting", category: 'Salary', type: 'income', payment: 'online', necessity: null, amount: 95000.00, note: 'October retainer' },
+      { id: 'tx-03', date: '2026-10-24', desc: "Blue Tokai Coffee Roasters", category: 'Food & Dining', type: 'expense', payment: 'online', necessity: 'luxury', amount: 340.00, note: 'Flat white + croissant' },
+      { id: 'tx-04', date: '2026-10-23', desc: "Uber Premier Airport Drop", category: 'Transport', type: 'expense', payment: 'cash', necessity: 'optional', amount: 410.00, note: 'Toll paid in cash' },
+      { id: 'tx-05', date: '2026-10-22', desc: "Apartment Maintenance Society", category: 'Housing', type: 'expense', payment: 'online', necessity: 'essential', amount: 4500.00, note: 'Q4 maintenance dues' },
+      { id: 'tx-06', date: '2026-10-20', desc: "Tata Power Electricity Bill", category: 'Utilities', type: 'expense', payment: 'online', necessity: 'essential', amount: 2890.00, note: 'Consumer No 49102' },
+      { id: 'tx-07', date: '2026-10-18', desc: "Apollo Pharmacy Wellness", category: 'Healthcare', type: 'expense', payment: 'online', necessity: 'essential', amount: 820.00, note: 'Supplements' },
+      { id: 'tx-08', date: '2026-10-15', desc: "Freelance UI Architecture Sprint", category: 'Freelance', type: 'income', payment: 'online', necessity: null, amount: 35000.00, note: 'Milestone 2 payout' },
+      { id: 'tx-09', date: '2026-10-12', desc: "Zara Inditex Autumn Jacket", category: 'Shopping', type: 'expense', payment: 'online', necessity: 'luxury', amount: 5990.00, note: 'Discretionary apparel' },
+      { id: 'tx-10', date: '2026-10-10', desc: "Local Auto Rickshaw Cash Ride", category: 'Transport', type: 'expense', payment: 'cash', necessity: 'essential', amount: 70.00, note: 'Station to home' },
+      { id: 'tx-11', date: '2026-10-08', desc: "Blinkit Instant Groceries", category: 'Groceries', type: 'expense', payment: 'online', necessity: 'essential', amount: 480.00, note: 'Emergency staples' },
+      { id: 'tx-12', date: '2026-10-05', desc: "PVR Director's Cut IMAX Cinema", category: 'Entertainment', type: 'expense', payment: 'online', necessity: 'luxury', amount: 1600.00, note: 'Weekend cinema' }
+    ];
+
+    const INITIAL_CATEGORIES = {
+      expense: [
+        { id: 'c-groc', name: 'Groceries', icon: '🛒', order: 1, archived: false },
+        { id: 'c-dine', name: 'Food & Dining', icon: '🍽️', order: 2, archived: false },
+        { id: 'c-tran', name: 'Transport', icon: '🚗', order: 3, archived: false },
+        { id: 'c-util', name: 'Utilities', icon: '💡', order: 4, archived: false },
+        { id: 'c-hous', name: 'Housing', icon: '🏠', order: 5, archived: false },
+        { id: 'c-hlth', name: 'Healthcare', icon: '🏥', order: 6, archived: false },
+        { id: 'c-shop', name: 'Shopping', icon: '🛍️', order: 7, archived: false },
+        { id: 'c-ent',  name: 'Entertainment', icon: '🎟️', order: 8, archived: false },
+        { id: 'c-trav', name: 'Travel', icon: '✈️', order: 9, archived: false },
+        { id: 'c-edu',  name: 'Education', icon: '📚', order: 10, archived: false }
+      ],
+      income: [
+        { id: 'c-sal',  name: 'Salary', icon: '💼', order: 1, archived: false },
+        { id: 'c-free', name: 'Freelance', icon: '💻', order: 2, archived: false },
+        { id: 'c-inv',  name: 'Investments', icon: '📈', order: 3, archived: false },
+        { id: 'c-oth',  name: 'Other Income', icon: '🪙', order: 4, archived: false }
+      ]
+    };
+
+    // State
+    let transactions = JSON.parse(JSON.stringify(INITIAL_TRANSACTIONS));
+    let softDeletedTransactions = [];
+    let categories = JSON.parse(JSON.stringify(INITIAL_CATEGORIES));
+    
+    let currentScreen = 'dashboard';
+    let currentTheme = 'dark';
+    let currentViewport = 'mobile';
+    let currentPeriod = '2026-10';
+
+    // Quick Add Modal State
+    let lastUsedPaymentMethod = 'online'; // Remembers last used
+    let activeFormType = 'expense';
+    let activeSelectedCategory = 'Groceries';
+    let activePaymentMethod = 'online';
+    let activeNecessity = 'essential';
+    let editingRecordId = null;
+
+    // Toast Timer
+    let toastTimeout = null;
+    let pendingUndoAction = null;
+
+    // Filter State
+    let filterQuery = '';
+    let filterType = 'all';
+    let filterPayment = 'all';
+    let filterNecessity = 'all';
+    let filterCategory = 'all';
+
+    // Category Screen Tab
+    let activeCategoryTab = 'expense';
+
+    // =========================================================================
+    // INITIALIZATION & EVENT LISTENERS
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      // Hotkey: 'N' to open Add Transaction, 'Escape' to dismiss
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'n' || e.key === 'N') {
+          if (!document.getElementById('quick-add-modal').classList.contains('hidden')) return;
+          if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+          e.preventDefault();
+          openAddModal();
+        } else if (e.key === 'Escape') {
+          closeAddModal();
+          closeRecoveryDrawer();
+        }
+      });
+
+      setDateToday();
+      renderAll();
+
+      // Responsive initial viewport detection
+      const winW = window.innerWidth;
+      if (winW < 768) {
+        setViewport('mobile');
+      } else if (winW < 1024) {
+        setViewport('tablet');
+      } else {
+        setViewport('desktop');
+      }
+    });
+
+    function resetDemoData() {
+      transactions = JSON.parse(JSON.stringify(INITIAL_TRANSACTIONS));
+      softDeletedTransactions = [];
+      categories = JSON.parse(JSON.stringify(INITIAL_CATEGORIES));
+      lastUsedPaymentMethod = 'online';
+      renderAll();
+      showToast("Demonstration state reset to original records", false);
+    }
+
+    function renderAll() {
+      renderDashboard();
+      renderLedger();
+      renderCategories();
+      updateRecoveryBadge();
+    }
+
+    // =========================================================================
+    // NAVIGATION & VIEWPORT CONTROLS
+    // =========================================================================
+    function navigate(screenName) {
+      currentScreen = screenName;
+
+      // Update screen visibility
+      ['dashboard', 'ledger', 'categories', 'settings'].forEach(s => {
+        const el = document.getElementById(`screen-${s}`);
+        if (el) {
+          if (s === screenName) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+      });
+
+      // Update Desktop Nav
+      ['dashboard', 'ledger', 'categories', 'settings'].forEach(s => {
+        const dBtn = document.getElementById(`d-nav-${s}`);
+        if (dBtn) {
+          if (s === screenName) {
+            dBtn.className = "sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-semibold text-primary-token bg-surface border border-hairline text-left shadow-sm";
+          } else {
+            dBtn.className = "sidebar-nav-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[3px] font-medium text-muted-token hover:text-primary-token text-left";
+          }
+        }
+      });
+
+      // Update Mobile Nav
+      ['dashboard', 'ledger', 'categories', 'settings'].forEach(s => {
+        const mBtn = document.getElementById(`m-nav-${s}`);
+        if (mBtn) {
+          if (s === screenName) {
+            mBtn.className = "flex flex-col items-center justify-center w-14 h-full text-primary-token";
+            mBtn.querySelector('span').className = "text-[10px] font-semibold";
+          } else {
+            mBtn.className = "flex flex-col items-center justify-center w-14 h-full text-muted-token";
+            mBtn.querySelector('span').className = "text-[10px] font-medium";
+          }
+        }
+      });
+
+      // Re-render target screen
+      if (screenName === 'dashboard') renderDashboard();
+      if (screenName === 'ledger') renderLedger();
+      if (screenName === 'categories') renderCategories();
+    }
+
+    function setViewport(vp) {
+      currentViewport = vp;
+      const frame = document.getElementById('viewport-frame');
+
+      ['mobile', 'tablet', 'desktop', 'fluid'].forEach(v => {
+        const b = document.getElementById(`btn-vp-${v}`);
+        if (b) {
+          if (v === vp) b.className = "px-2.5 py-1 rounded-[3px] font-medium bg-stone-200 text-stone-900 shadow-sm flex items-center gap-1";
+          else b.className = "px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1";
+        }
+      });
+
+      frame.classList.remove('is-mobile-view', 'is-tablet-view', 'is-desktop-view', 'is-fluid-view');
+
+      if (vp === 'mobile') {
+        frame.style.maxWidth = '390px';
+        frame.style.width = '100%';
+        frame.classList.add('is-mobile-view');
+      } else if (vp === 'tablet') {
+        frame.style.maxWidth = '768px';
+        frame.style.width = '100%';
+        frame.classList.add('is-tablet-view');
+      } else if (vp === 'desktop') {
+        frame.style.maxWidth = '1120px';
+        frame.style.width = '100%';
+        frame.classList.add('is-desktop-view');
+      } else if (vp === 'fluid') {
+        frame.style.maxWidth = '100%';
+        frame.style.width = '100%';
+        frame.classList.add('is-fluid-view');
+      }
+    }
+
+    function setTheme(th) {
+      currentTheme = th;
+      const frame = document.getElementById('viewport-frame');
+      frame.classList.remove('theme-light', 'theme-dark');
+      frame.classList.add(`theme-${th}`);
+
+      // Update studio toggle buttons
+      const bLight = document.getElementById('btn-theme-light');
+      const bDark = document.getElementById('btn-theme-dark');
+      if (th === 'light') {
+        bLight.className = "px-2.5 py-1 rounded-[3px] font-medium bg-stone-200 text-stone-900 shadow-sm flex items-center gap-1";
+        bDark.className = "px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1";
+        document.getElementById('settings-theme-indicator').innerText = 'Warm Paper (Light)';
+        document.getElementById('check-theme-light').classList.remove('hidden');
+        document.getElementById('check-theme-dark').classList.add('hidden');
+      } else {
+        bDark.className = "px-2.5 py-1 rounded-[3px] font-medium bg-stone-200 text-stone-900 shadow-sm flex items-center gap-1";
+        bLight.className = "px-2.5 py-1 rounded-[3px] font-medium text-stone-400 hover:text-stone-200 flex items-center gap-1";
+        document.getElementById('settings-theme-indicator').innerText = 'Obsidian Stone (Dark)';
+        document.getElementById('check-theme-dark').classList.remove('hidden');
+        document.getElementById('check-theme-light').classList.add('hidden');
+      }
+    }
+
+    // =========================================================================
+    // SCREEN A: DASHBOARD RENDERING
+    // =========================================================================
+    function changePeriod(val) {
+      currentPeriod = val;
+      const dSelect = document.getElementById('dash-period-select');
+      const mSelect = document.getElementById('mobile-period-select');
+      if (dSelect) dSelect.value = val;
+      if (mSelect) mSelect.value = val;
+      renderDashboard();
+    }
+
+    function renderDashboard() {
+      // Filter transactions by period (e.g. '2026-10')
+      const periodTx = transactions.filter(t => t.date.startsWith(currentPeriod));
+
+      const totalIncome = periodTx.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+      const totalExpense = periodTx.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+      const netCashFlow = totalIncome - totalExpense;
+
+      // Today's expense
+      const todayStr = '2026-10-25';
+      const todayExpense = transactions.filter(t => t.date === todayStr && t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+
+      // Render figures
+      const netEl = document.getElementById('dash-net-amount');
+      netEl.innerText = (netCashFlow >= 0 ? '+' : '−') + formatINR(Math.abs(netCashFlow));
+      netEl.style.color = netCashFlow >= 0 ? 'var(--income-fg)' : 'var(--expense-fg)';
+
+      document.getElementById('dash-income-amount').innerText = '+' + formatINR(totalIncome);
+      document.getElementById('dash-expense-amount').innerText = '−' + formatINR(totalExpense);
+      document.getElementById('dash-today-amount').innerText = formatINR(todayExpense);
+
+      // Spending composition
+      const expenseTxs = periodTx.filter(t => t.type === 'expense');
+      const essAmt = expenseTxs.filter(t => t.necessity === 'essential').reduce((acc, t) => acc + t.amount, 0);
+      const optAmt = expenseTxs.filter(t => t.necessity === 'optional').reduce((acc, t) => acc + t.amount, 0);
+      const luxAmt = expenseTxs.filter(t => t.necessity === 'luxury').reduce((acc, t) => acc + t.amount, 0);
+      const necTotal = essAmt + optAmt + luxAmt || 1;
+
+      const essPct = Math.round((essAmt / necTotal) * 100);
+      const optPct = Math.round((optAmt / necTotal) * 100);
+      const luxPct = 100 - essPct - optPct;
+
+      document.getElementById('bar-essential').style.width = essPct + '%';
+      document.getElementById('bar-optional').style.width = optPct + '%';
+      document.getElementById('bar-luxury').style.width = luxPct + '%';
+      document.getElementById('pct-essential').innerText = essPct + '%';
+      document.getElementById('pct-optional').innerText = optPct + '%';
+      document.getElementById('pct-luxury').innerText = luxPct + '%';
+      document.getElementById('dash-nec-total').innerText = formatINR(totalExpense) + ' Outflow';
+
+      // Top categories
+      const catTotals = {};
+      expenseTxs.forEach(t => {
+        catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
+      });
+      const sortedCats = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).slice(0, 3);
+      
+      const topCatContainer = document.getElementById('dash-top-categories');
+      if (sortedCats.length === 0) {
+        topCatContainer.innerHTML = '<span class="text-muted-token">No expenses recorded for this period.</span>';
+      } else {
+        topCatContainer.innerHTML = sortedCats.map(([cat, amt]) => {
+          const share = Math.round((amt / (totalExpense || 1)) * 100);
+          return `
+            <div class="flex items-center justify-between">
+              <span class="text-primary-token font-medium">${cat}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-muted-token font-mono text-[11px]">${share}%</span>
+                <span class="font-mono-numbers font-semibold text-primary-token">${formatINR(amt)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Recent 5 transactions
+      const recentList = document.getElementById('dash-recent-list');
+      const recentFive = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+      
+      if (recentFive.length === 0) {
+        recentList.innerHTML = '<div class="p-4 text-center text-xs text-muted-token">No transactions recorded yet. Tap + to begin.</div>';
+      } else {
+        recentList.innerHTML = recentFive.map(t => {
+          const isIncome = t.type === 'income';
+          const sign = isIncome ? '+' : '−';
+          const amtColor = isIncome ? 'var(--income-fg)' : 'var(--expense-fg)';
+          const necGlyph = t.necessity === 'essential' ? '▲ Essential' : (t.necessity === 'optional' ? '● Optional' : '◆ Luxury');
+          return `
+            <div onclick="openEditRecord('${t.id}')" class="p-3 hover:bg-surface-subtle cursor-pointer flex items-center justify-between transition-colors">
+              <div class="flex items-center gap-2.5 max-w-[70%] min-w-0">
+                <div class="w-7 h-7 rounded border border-hairline bg-surface-subtle flex items-center justify-center text-xs font-mono shrink-0">
+                  ${isIncome ? '↑' : '↓'}
+                </div>
+                <div class="truncate">
+                  <div class="text-xs font-semibold text-primary-token leading-snug truncate">${t.desc}</div>
+                  <div class="text-[10px] text-muted-token font-mono flex items-center gap-1.5 truncate">
+                    <span>${t.category}</span>
+                    <span>•</span>
+                    <span class="uppercase">${t.payment}</span>
+                    ${!isIncome ? `<span>•</span><span>${necGlyph}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-xs font-bold font-mono-numbers" style="color: ${amtColor}">${sign}${formatINR(t.amount)}</div>
+                <div class="text-[10px] text-muted-token font-mono">${formatDateDisplay(t.date)}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function toggleCompositionSection() {
+      const body = document.getElementById('composition-section-body');
+      const label = document.getElementById('label-toggle-composition');
+      const icon = document.getElementById('icon-toggle-composition');
+      if (body.classList.contains('hidden')) {
+        body.classList.remove('hidden');
+        label.innerText = 'Hide';
+        icon.innerText = '▴';
+      } else {
+        body.classList.add('hidden');
+        label.innerText = 'Show';
+        icon.innerText = '▾';
+      }
+    }
+
+    // =========================================================================
+    // SCREEN B: LEDGER RENDERING, SEARCH & FILTERS
+    // =========================================================================
+    function toggleFilterDrawer() {
+      const drawer = document.getElementById('ledger-filter-drawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    function applyFilters() {
+      filterQuery = document.getElementById('ledger-search-input').value.toLowerCase().trim();
+      filterType = document.getElementById('filter-type').value;
+      filterPayment = document.getElementById('filter-payment').value;
+      filterNecessity = document.getElementById('filter-necessity').value;
+      filterCategory = document.getElementById('filter-category').value;
+
+      // Update badge
+      const isFiltered = filterType !== 'all' || filterPayment !== 'all' || filterNecessity !== 'all' || filterCategory !== 'all' || filterQuery !== '';
+      const badge = document.getElementById('active-filter-badge');
+      if (isFiltered) badge.classList.remove('hidden');
+      else badge.classList.add('hidden');
+
+      renderLedger();
+    }
+
+    function clearFilters() {
+      document.getElementById('ledger-search-input').value = '';
+      document.getElementById('filter-type').value = 'all';
+      document.getElementById('filter-payment').value = 'all';
+      document.getElementById('filter-necessity').value = 'all';
+      document.getElementById('filter-category').value = 'all';
+      applyFilters();
+    }
+
+    function renderLedger() {
+      // Populate category filter dropdown if empty
+      const catSelect = document.getElementById('filter-category');
+      if (catSelect.options.length <= 1) {
+        const allCats = [...categories.expense, ...categories.income];
+        allCats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.name;
+          opt.innerText = c.name;
+          catSelect.appendChild(opt);
+        });
+      }
+
+      // Filter dataset
+      let filtered = transactions.filter(t => {
+        if (filterType !== 'all' && t.type !== filterType) return false;
+        if (filterPayment !== 'all' && t.payment !== filterPayment) return false;
+        if (filterNecessity !== 'all' && t.necessity !== filterNecessity) return false;
+        if (filterCategory !== 'all' && t.category !== filterCategory) return false;
+        if (filterQuery) {
+          const str = (t.desc + ' ' + (t.note || '') + ' ' + t.category).toLowerCase();
+          if (!str.includes(filterQuery)) return false;
+        }
+        return true;
+      });
+
+      // Sort by date DESC
+      filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // Stats
+      const totalSum = filtered.reduce((acc, t) => t.type === 'income' ? acc + t.amount : acc - t.amount, 0);
+      document.getElementById('ledger-count-indicator').innerText = `Showing ${filtered.length} of ${transactions.length} records`;
+      document.getElementById('ledger-sum-indicator').innerText = `Net Total: ${(totalSum >= 0 ? '+' : '−')}${formatINR(Math.abs(totalSum))}`;
+
+      const emptyEl = document.getElementById('ledger-empty-state');
+      const desktopTbody = document.getElementById('ledger-desktop-tbody');
+      const mobileList = document.getElementById('ledger-mobile-list');
+
+      if (filtered.length === 0) {
+        emptyEl.classList.remove('hidden');
+        desktopTbody.innerHTML = '';
+        mobileList.innerHTML = '';
+        return;
+      }
+
+      emptyEl.classList.add('hidden');
+
+      // 1. Desktop Table Rows (Strict 40px height standard)
+      desktopTbody.innerHTML = filtered.map(t => {
+        const isIncome = t.type === 'income';
+        const sign = isIncome ? '+' : '−';
+        const amtColor = isIncome ? 'var(--income-fg)' : 'var(--expense-fg)';
+        const necText = t.necessity ? (t.necessity === 'essential' ? '▲ Essential' : (t.necessity === 'optional' ? '● Optional' : '◆ Luxury')) : '—';
+        return `
+          <tr class="h-10 hover:bg-surface-subtle cursor-pointer transition-colors" onclick="openEditRecord('${t.id}')">
+            <td class="py-2 px-4 font-mono text-muted-token whitespace-nowrap">${t.date}</td>
+            <td class="py-2 px-4 font-semibold text-primary-token max-w-[220px] truncate" title="${t.desc}">
+              ${t.desc}
+              ${t.note ? `<span class="block text-[10px] text-muted-token truncate font-normal">${t.note}</span>` : ''}
+            </td>
+            <td class="py-2 px-4 text-secondary-token">${t.category}</td>
+            <td class="py-2 px-4">
+              <span class="px-1.5 py-0.5 rounded-[2px] border border-hairline font-mono text-[10px] uppercase font-medium bg-surface-subtle">
+                ${t.payment}
+              </span>
+            </td>
+            <td class="py-2 px-4 font-mono text-[11px] text-secondary-token">${necText}</td>
+            <td class="py-2 px-4 text-right font-bold font-mono-numbers whitespace-nowrap" style="color: ${amtColor}">
+              ${sign}${formatINR(t.amount)}
+            </td>
+            <td class="py-2 px-3 text-center">
+              <button onclick="event.stopPropagation(); softDeleteTransaction('${t.id}')" class="text-muted-token hover:text-red-500 text-xs p-1" title="Soft Delete">
+                ✕
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // 2. Mobile Ledger Row Cards
+      mobileList.innerHTML = filtered.map(t => {
+        const isIncome = t.type === 'income';
+        const sign = isIncome ? '+' : '−';
+        const amtColor = isIncome ? 'var(--income-fg)' : 'var(--expense-fg)';
+        const necText = t.necessity ? (t.necessity === 'essential' ? '▲ Ess' : (t.necessity === 'optional' ? '● Opt' : '◆ Lux')) : '';
+        return `
+          <div onclick="openEditRecord('${t.id}')" class="p-3 hover:bg-surface-subtle cursor-pointer flex items-center justify-between transition-colors">
+            <div class="flex items-center gap-2.5 max-w-[70%]">
+              <div class="w-7 h-7 rounded border border-hairline bg-surface-subtle flex items-center justify-center text-xs font-mono shrink-0">
+                ${isIncome ? '↑' : '↓'}
+              </div>
+              <div class="truncate">
+                <div class="text-xs font-semibold text-primary-token truncate">${t.desc}</div>
+                <div class="text-[10px] text-muted-token font-mono flex items-center gap-1.5">
+                  <span>${t.category}</span>
+                  <span>•</span>
+                  <span class="uppercase">${t.payment}</span>
+                  ${necText ? `<span>•</span><span>${necText}</span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="text-xs font-bold font-mono-numbers" style="color: ${amtColor}">${sign}${formatINR(t.amount)}</div>
+              <div class="text-[10px] text-muted-token font-mono">${formatDateDisplay(t.date)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // SCREEN C: QUICK ADD & EDIT MODAL LOGIC
+    // =========================================================================
+    function openAddModal() {
+      editingRecordId = null;
+      document.getElementById('modal-form-title').innerText = "New Transaction";
+      document.getElementById('modal-val-error').classList.add('hidden');
+      document.getElementById('section-edit-delete').classList.add('hidden');
+
+      // Defaults
+      activeFormType = 'expense';
+      activePaymentMethod = lastUsedPaymentMethod; // Memory requirement
+      activeNecessity = 'essential';
+      
+      document.getElementById('input-amount').value = '';
+      document.getElementById('input-note').value = '';
+      document.getElementById('section-note-field').classList.add('hidden');
+      document.getElementById('btn-toggle-note').innerText = "+ Add optional description / note";
+      setDateToday();
+
+      syncFormUI();
+      document.getElementById('quick-add-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('input-amount').focus(), 50);
+    }
+
+    function openEditRecord(id) {
+      const record = transactions.find(t => t.id === id);
+      if (!record) return;
+
+      editingRecordId = id;
+      document.getElementById('modal-form-title').innerText = "Edit Transaction";
+      document.getElementById('modal-val-error').classList.add('hidden');
+      document.getElementById('section-edit-delete').classList.remove('hidden');
+
+      activeFormType = record.type;
+      activeSelectedCategory = record.category;
+      activePaymentMethod = record.payment;
+      activeNecessity = record.necessity || 'essential';
+
+      document.getElementById('input-amount').value = record.amount.toFixed(2);
+      document.getElementById('input-date').value = record.date;
+      document.getElementById('input-note').value = record.note || record.desc || '';
+      
+      if (record.note) {
+        document.getElementById('section-note-field').classList.remove('hidden');
+        document.getElementById('btn-toggle-note').innerText = "− Hide description / note";
+      } else {
+        document.getElementById('section-note-field').classList.add('hidden');
+        document.getElementById('btn-toggle-note').innerText = "+ Add optional description / note";
+      }
+
+      syncFormUI();
+      document.getElementById('quick-add-modal').classList.remove('hidden');
+    }
+
+    function closeAddModal() {
+      document.getElementById('quick-add-modal').classList.add('hidden');
+      document.getElementById('modal-all-categories-drawer').classList.add('hidden');
+    }
+
+    function setFormType(type) {
+      activeFormType = type;
+      syncFormUI();
+    }
+
+    function setPaymentMethod(method) {
+      activePaymentMethod = method;
+      lastUsedPaymentMethod = method; // Update memory
+      syncFormUI();
+    }
+
+    function setNecessity(nec) {
+      activeNecessity = nec;
+      syncFormUI();
+    }
+
+    function setDateToday() {
+      document.getElementById('input-date').value = '2026-10-25'; // Asia/Kolkata current local date
+    }
+
+    function toggleNoteField() {
+      const sec = document.getElementById('section-note-field');
+      const btn = document.getElementById('btn-toggle-note');
+      if (sec.classList.contains('hidden')) {
+        sec.classList.remove('hidden');
+        btn.innerText = "− Hide description / note";
+        document.getElementById('input-note').focus();
+      } else {
+        sec.classList.add('hidden');
+        btn.innerText = "+ Add optional description / note";
+      }
+    }
+
+    function toggleAllCategoriesPopover() {
+      const drawer = document.getElementById('modal-all-categories-drawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    function selectCategory(name) {
+      activeSelectedCategory = name;
+      syncFormUI();
+      document.getElementById('modal-all-categories-drawer').classList.add('hidden');
+    }
+
+    function syncFormUI() {
+      // 1. Type Switcher Buttons
+      const expBtn = document.getElementById('form-type-expense');
+      const incBtn = document.getElementById('form-type-income');
+      const necSection = document.getElementById('section-necessity');
+
+      if (activeFormType === 'expense') {
+        expBtn.className = "px-3 py-1 font-semibold bg-surface text-primary-token border border-hairline radius-sm shadow-sm";
+        incBtn.className = "px-3 py-1 font-medium text-muted-token hover:text-primary-token";
+        necSection.classList.remove('hidden');
+      } else {
+        incBtn.className = "px-3 py-1 font-semibold bg-surface text-primary-token border border-hairline radius-sm shadow-sm";
+        expBtn.className = "px-3 py-1 font-medium text-muted-token hover:text-primary-token";
+        necSection.classList.add('hidden'); // Removed on income
+      }
+
+      // 2. Categories matching current type (Sorted by custom sort_order)
+      const currentCatList = categories[activeFormType].filter(c => !c.archived).sort((a,b) => a.order - b.order);
+      if (!currentCatList.some(c => c.name === activeSelectedCategory)) {
+        activeSelectedCategory = currentCatList[0]?.name || '';
+      }
+
+      // Top 6 Quick Chips
+      const top6 = currentCatList.slice(0, 6);
+      const quickContainer = document.getElementById('modal-cat-quick-chips');
+      quickContainer.innerHTML = top6.map(c => {
+        const isSel = c.name === activeSelectedCategory;
+        const cls = isSel 
+          ? "border-strong bg-surface text-primary-token font-bold shadow-sm ring-1 ring-[var(--focus-ring)]"
+          : "border-hairline bg-surface-subtle text-secondary-token hover:bg-surface";
+        return `
+          <button type="button" onclick="selectCategory('${c.name}')" class="p-2 border radius-md text-left truncate flex items-center gap-1.5 ${cls}">
+            <span class="text-xs font-mono">${c.icon}</span>
+            <span class="truncate">${c.name}</span>
+          </button>
+        `;
+      }).join('');
+
+      // All categories popover drawer
+      document.getElementById('modal-all-cat-count').innerText = currentCatList.length;
+      document.getElementById('modal-all-categories-drawer').innerHTML = currentCatList.map(c => {
+        const isSel = c.name === activeSelectedCategory;
+        return `
+          <button type="button" onclick="selectCategory('${c.name}')" class="p-1.5 border border-hairline text-left radius-sm flex items-center justify-between ${isSel ? 'bg-surface font-bold text-primary-token' : 'text-secondary-token'}">
+            <span class="flex items-center gap-1"><span>${c.icon}</span>${c.name}</span>
+            ${isSel ? '<span class="text-[10px]">✓</span>' : ''}
+          </button>
+        `;
+      }).join('');
+
+      // 3. Payment Method Buttons
+      const onlineBtn = document.getElementById('pay-btn-online');
+      const cashBtn = document.getElementById('pay-btn-cash');
+      if (activePaymentMethod === 'online') {
+        onlineBtn.className = "py-2 px-3 border border-strong bg-surface text-primary-token radius-md font-semibold text-center flex items-center justify-center gap-1.5 shadow-sm";
+        cashBtn.className = "py-2 px-3 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center flex items-center justify-center gap-1.5";
+      } else {
+        cashBtn.className = "py-2 px-3 border border-strong bg-surface text-primary-token radius-md font-semibold text-center flex items-center justify-center gap-1.5 shadow-sm";
+        onlineBtn.className = "py-2 px-3 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center flex items-center justify-center gap-1.5";
+      }
+
+      // 4. Necessity Buttons
+      ['essential', 'optional', 'luxury'].forEach(n => {
+        const btn = document.getElementById(`nec-btn-${n}`);
+        if (activeNecessity === n) {
+          btn.className = "py-2 px-1 border border-strong bg-surface text-primary-token radius-md font-semibold text-center shadow-sm";
+        } else {
+          btn.className = "py-2 px-1 border border-hairline bg-surface-subtle text-muted-token radius-md font-medium text-center";
+        }
+      });
+    }
+
+    function saveTransaction() {
+      const rawAmt = document.getElementById('input-amount').value.trim();
+      const amt = parseFloat(rawAmt);
+      const date = document.getElementById('input-date').value;
+      const note = document.getElementById('input-note').value.trim();
+
+      const errEl = document.getElementById('modal-val-error');
+      errEl.classList.add('hidden');
+
+      // Validation
+      if (!rawAmt || isNaN(amt) || amt <= 0) {
+        errEl.innerText = "Please enter a valid amount greater than ₹0.00";
+        errEl.classList.remove('hidden');
+        document.getElementById('input-amount').focus();
+        return;
+      }
+      if (!activeSelectedCategory) {
+        errEl.innerText = "Please select a category";
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (!date) {
+        errEl.innerText = "Please select a valid date";
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      // Construct record
+      if (editingRecordId) {
+        // Update existing
+        const idx = transactions.findIndex(t => t.id === editingRecordId);
+        if (idx !== -1) {
+          transactions[idx] = {
+            ...transactions[idx],
+            type: activeFormType,
+            amount: amt,
+            date: date,
+            category: activeSelectedCategory,
+            payment: activePaymentMethod,
+            necessity: activeFormType === 'expense' ? activeNecessity : null,
+            note: note,
+            desc: note || `${activeSelectedCategory} entry`
+          };
+        }
+        showToast(`Transaction updated (${formatINR(amt)})`, false);
+      } else {
+        // Create new
+        const newRecord = {
+          id: 'tx-' + Date.now(),
+          type: activeFormType,
+          amount: amt,
+          date: date,
+          category: activeSelectedCategory,
+          payment: activePaymentMethod,
+          necessity: activeFormType === 'expense' ? activeNecessity : null,
+          note: note,
+          desc: note || `${activeSelectedCategory} entry`
+        };
+        transactions.unshift(newRecord);
+        showToast(`Saved ₹${amt.toFixed(2)} to ${activeSelectedCategory}`, false);
+      }
+
+      closeAddModal();
+      renderAll();
+    }
+
+    function deleteCurrentEditingRecord() {
+      if (!editingRecordId) return;
+      softDeleteTransaction(editingRecordId);
+      closeAddModal();
+    }
+
+    // =========================================================================
+    // REVERSIBLE SOFT-DELETION & RECOVERY LOGIC
+    // =========================================================================
+    function softDeleteTransaction(id) {
+      const idx = transactions.findIndex(t => t.id === id);
+      if (idx === -1) return;
+
+      const record = transactions[idx];
+      transactions.splice(idx, 1);
+      softDeletedTransactions.unshift({ ...record, deleted_at: new Date().toISOString() });
+
+      renderAll();
+
+      // Show Undo Toast
+      pendingUndoAction = () => {
+        const rIdx = softDeletedTransactions.findIndex(t => t.id === id);
+        if (rIdx !== -1) {
+          const restored = softDeletedTransactions.splice(rIdx, 1)[0];
+          transactions.unshift(restored);
+          renderAll();
+          showToast(`Transaction restored: ${formatINR(restored.amount)}`, false);
+        }
+      };
+
+      showToast(`Record deleted — Soft-deleted to Recovery Box`, true);
+    }
+
+    function showToast(message, allowUndo = false) {
+      const container = document.getElementById('toast-container');
+      document.getElementById('toast-message').innerText = message;
+      const undoBtn = document.getElementById('toast-undo-btn');
+
+      if (allowUndo) undoBtn.classList.remove('hidden');
+      else undoBtn.classList.add('hidden');
+
+      container.classList.remove('opacity-0', '-translate-y-2');
+      container.classList.add('opacity-100', 'translate-y-0');
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        container.classList.remove('opacity-100', 'translate-y-0');
+        container.classList.add('opacity-0', '-translate-y-2');
+        pendingUndoAction = null;
+      }, 5000);
+    }
+
+    function executeToastUndo() {
+      if (pendingUndoAction) {
+        pendingUndoAction();
+        const container = document.getElementById('toast-container');
+        container.classList.remove('opacity-100', 'translate-y-0');
+        container.classList.add('opacity-0', '-translate-y-2');
+      }
+    }
+
+    function openRecoveryDrawer() {
+      const list = document.getElementById('recovery-list');
+      if (softDeletedTransactions.length === 0) {
+        list.innerHTML = '<div class="p-4 text-center text-xs text-muted-token">No soft-deleted records. Recovery box is clean.</div>';
+      } else {
+        list.innerHTML = softDeletedTransactions.map(t => {
+          return `
+            <div class="p-2.5 flex items-center justify-between text-xs hover:bg-surface-subtle">
+              <div>
+                <span class="font-semibold block text-primary-token">${t.desc}</span>
+                <span class="text-[10px] text-muted-token font-mono">${t.date} • ${formatINR(t.amount)}</span>
+              </div>
+              <button onclick="restoreFromRecovery('${t.id}')" class="px-2 py-1 border border-hairline radius-sm text-[11px] font-medium hover:bg-surface text-primary-token">
+                Restore
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+      document.getElementById('recovery-drawer').classList.remove('hidden');
+    }
+
+    function closeRecoveryDrawer() {
+      document.getElementById('recovery-drawer').classList.add('hidden');
+    }
+
+    function restoreFromRecovery(id) {
+      const idx = softDeletedTransactions.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        const item = softDeletedTransactions.splice(idx, 1)[0];
+        transactions.unshift(item);
+        renderAll();
+        openRecoveryDrawer(); // Re-render recovery list
+        showToast("Record successfully restored", false);
+      }
+    }
+
+    function updateRecoveryBadge() {
+      document.getElementById('recovery-count').innerText = softDeletedTransactions.length;
+    }
+
+    // =========================================================================
+    // SCREEN D: CATEGORIES MANAGEMENT & REORDERING
+    // =========================================================================
+    function switchCategoryTab(tab) {
+      activeCategoryTab = tab;
+      const expBtn = document.getElementById('cat-tab-expense');
+      const incBtn = document.getElementById('cat-tab-income');
+
+      if (tab === 'expense') {
+        expBtn.className = "flex-1 py-1.5 text-center font-semibold bg-surface border border-hairline radius-sm text-primary-token shadow-sm";
+        incBtn.className = "flex-1 py-1.5 text-center font-medium text-muted-token hover:text-primary-token";
+      } else {
+        incBtn.className = "flex-1 py-1.5 text-center font-semibold bg-surface border border-hairline radius-sm text-primary-token shadow-sm";
+        expBtn.className = "flex-1 py-1.5 text-center font-medium text-muted-token hover:text-primary-token";
+      }
+      renderCategories();
+    }
+
+    function renderCategories() {
+      const activeList = categories[activeCategoryTab].filter(c => !c.archived).sort((a,b) => a.order - b.order);
+      const archivedList = categories[activeCategoryTab].filter(c => c.archived);
+
+      document.getElementById('cat-count-badge').innerText = `${activeList.length} Active`;
+      document.getElementById('archived-count').innerText = archivedList.length;
+
+      // Active Category Rows
+      const container = document.getElementById('category-list-container');
+      container.innerHTML = activeList.map((c, idx) => {
+        return `
+          <div class="px-3.5 py-2.5 flex items-center justify-between text-xs hover:bg-surface-subtle transition-colors gap-2">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+              <span class="text-muted-token font-mono text-[11px] w-4 shrink-0">${idx + 1}</span>
+              <span class="text-base shrink-0">${c.icon}</span>
+              <span class="font-semibold text-primary-token truncate">${c.name}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="moveCategory('${c.id}', -1)" ${idx === 0 ? 'disabled class="opacity-20 p-1"' : 'class="p-1 hover:text-primary-token text-muted-token"'} title="Move Up">↑</button>
+              <button onclick="moveCategory('${c.id}', 1)" ${idx === activeList.length - 1 ? 'disabled class="opacity-20 p-1"' : 'class="p-1 hover:text-primary-token text-muted-token"'} title="Move Down">↓</button>
+              <button onclick="renameCategory('${c.id}')" class="px-2 py-0.5 border border-hairline radius-sm text-[10px] text-secondary-token hover:bg-surface">Rename</button>
+              <button onclick="archiveCategory('${c.id}')" class="px-2 py-0.5 border border-hairline radius-sm text-[10px] text-muted-token hover:text-red-500">Archive</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Top 6 Preview Grid
+      const previewContainer = document.getElementById('cat-preview-grid');
+      previewContainer.innerHTML = activeList.slice(0, 6).map((c, idx) => `
+        <div class="p-2 border border-hairline radius-sm bg-surface-subtle text-secondary-token truncate text-[11px] flex items-center gap-1">
+          <span class="font-mono text-muted-token">${idx+1}.</span>
+          <span>${c.icon}</span>
+          <span class="truncate">${c.name}</span>
+        </div>
+      `).join('');
+
+      // Archived list
+      const archContainer = document.getElementById('archived-list-container');
+      if (archivedList.length === 0) {
+        archContainer.innerHTML = '<div class="p-3 text-center text-xs text-muted-token">No archived categories.</div>';
+      } else {
+        archContainer.innerHTML = archivedList.map(c => `
+          <div class="px-4 py-2 flex items-center justify-between text-xs text-muted-token">
+            <span class="flex items-center gap-2"><span>${c.icon}</span>${c.name}</span>
+            <button onclick="unarchiveCategory('${c.id}')" class="px-2 py-0.5 border border-hairline radius-sm text-[10px] text-primary-token hover:bg-surface-subtle">Unarchive</button>
+          </div>
+        `).join('');
+      }
+    }
+
+    function moveCategory(id, delta) {
+      const list = categories[activeCategoryTab].filter(c => !c.archived).sort((a,b) => a.order - b.order);
+      const idx = list.findIndex(c => c.id === id);
+      if (idx === -1) return;
+
+      const targetIdx = idx + delta;
+      if (targetIdx < 0 || targetIdx >= list.length) return;
+
+      // Swap orders
+      const temp = list[idx].order;
+      list[idx].order = list[targetIdx].order;
+      list[targetIdx].order = temp;
+
+      renderCategories();
+      showToast("Category order updated", false);
+    }
+
+    function renameCategory(id) {
+      const list = categories[activeCategoryTab];
+      const cat = list.find(c => c.id === id);
+      if (!cat) return;
+
+      const newName = prompt("Enter new name for category:", cat.name);
+      if (newName && newName.trim() && newName.trim() !== cat.name) {
+        cat.name = newName.trim();
+        renderCategories();
+        showToast("Category renamed", false);
+      }
+    }
+
+    function archiveCategory(id) {
+      const list = categories[activeCategoryTab];
+      const cat = list.find(c => c.id === id);
+      if (!cat) return;
+
+      if (confirm(`Archive "${cat.name}"? It will be hidden from new transaction entries, but past records will remain safe.`)) {
+        cat.archived = true;
+        renderCategories();
+        showToast(`Category "${cat.name}" archived`, false);
+      }
+    }
+
+    function unarchiveCategory(id) {
+      const list = categories[activeCategoryTab];
+      const cat = list.find(c => c.id === id);
+      if (!cat) return;
+      cat.archived = false;
+      renderCategories();
+      showToast(`Category "${cat.name}" unarchived`, false);
+    }
+
+    function promptAddCategory() {
+      const name = prompt("Enter category name:");
+      if (!name || !name.trim()) return;
+
+      const icon = prompt("Enter single emoji/icon symbol:", activeCategoryTab === 'expense' ? "🏷️" : "💰") || "🏷️";
+      const list = categories[activeCategoryTab];
+      const maxOrder = list.reduce((max, c) => Math.max(max, c.order), 0);
+
+      list.push({
+        id: 'c-' + Date.now(),
+        name: name.trim(),
+        icon: icon.trim(),
+        order: maxOrder + 1,
+        archived: false
+      });
+
+      renderCategories();
+      showToast(`Added "${name.trim()}" to ${activeCategoryTab} categories`, false);
+    }
+
+    function toggleArchivedCategories() {
+      const el = document.getElementById('archived-list-container');
+      const icon = document.getElementById('archived-icon');
+      if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        icon.innerText = '▾';
+      } else {
+        el.classList.add('hidden');
+        icon.innerText = '▸';
+      }
+    }
+
+    // =========================================================================
+    // UTILITY HELPERS: FORMATTING
+    // =========================================================================
+    function formatINR(val) {
+      return new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(val);
+    }
+
+    function formatDateDisplay(dStr) {
+      if (dStr === '2026-10-25') return 'Today';
+      if (dStr === '2026-10-24') return 'Yesterday';
+      return dStr;
+    }
+  </script>
+</body>
+</html>

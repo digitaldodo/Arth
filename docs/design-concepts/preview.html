@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arth — Visual Direction Concepts Preview</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    
+    .font-mono-numbers {
+      font-family: 'Geist Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .font-humanist {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .font-swiss {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Concept 1 Tokens: Ledger Minimal */
+    .theme-concept1-light {
+      --bg: #FBFBF9;
+      --surface: #FFFFFF;
+      --surface-subtle: #F4F4F2;
+      --border: #E7E5E4;
+      --border-strong: #A8A29E;
+      --text: #1C1917;
+      --text-muted: #78716C;
+      --accent: #1C1917;
+      --accent-text: #FFFFFF;
+      --income: #15803D;
+      --income-bg: #F0FDF4;
+      --expense: #B91C1C;
+      --expense-bg: #FEF2F2;
+      --radius: 3px;
+      --radius-sm: 2px;
+      --radius-lg: 4px;
+      --font-body: 'Inter', sans-serif;
+      --font-num: 'Geist Mono', monospace;
+      --shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .theme-concept1-dark {
+      --bg: #0C0A09;
+      --surface: #1C1917;
+      --surface-subtle: #292524;
+      --border: #292524;
+      --border-strong: #57534E;
+      --text: #F5F5F4;
+      --text-muted: #A8A29E;
+      --accent: #F5F5F4;
+      --accent-text: #0C0A09;
+      --income: #4ADE80;
+      --income-bg: rgba(74, 222, 128, 0.1);
+      --expense: #F87171;
+      --expense-bg: rgba(248, 113, 113, 0.1);
+      --radius: 3px;
+      --radius-sm: 2px;
+      --radius-lg: 4px;
+      --font-body: 'Inter', sans-serif;
+      --font-num: 'Geist Mono', monospace;
+      --shadow: none;
+    }
+
+    /* Concept 2 Tokens: Kintsugi Warm */
+    .theme-concept2-light {
+      --bg: #F7F4EE;
+      --surface: #FFFFFF;
+      --surface-subtle: #EFECE6;
+      --border: #E3DDD3;
+      --border-strong: #B8ADA0;
+      --text: #241C18;
+      --text-muted: #7C7267;
+      --accent: #99472A;
+      --accent-text: #FFFFFF;
+      --income: #2E6F40;
+      --income-bg: #EAF4EC;
+      --expense: #B23B22;
+      --expense-bg: #FCEFEA;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-num: 'Plus Jakarta Sans', sans-serif;
+      --shadow: 0 2px 8px rgba(36,28,24,0.05);
+    }
+    .theme-concept2-dark {
+      --bg: #151311;
+      --surface: #211E1B;
+      --surface-subtle: #2C2824;
+      --border: #36312B;
+      --border-strong: #595147;
+      --text: #EDE7DE;
+      --text-muted: #9E9487;
+      --accent: #D97746;
+      --accent-text: #151311;
+      --income: #62B877;
+      --income-bg: rgba(98, 184, 119, 0.12);
+      --expense: #E06D53;
+      --expense-bg: rgba(224, 109, 83, 0.12);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-num: 'Plus Jakarta Sans', sans-serif;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Concept 3 Tokens: Nordic Frost & Steel */
+    .theme-concept3-light {
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --surface-subtle: #F1F5F9;
+      --border: #E2E8F0;
+      --border-strong: #94A3B8;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --accent: #2563EB;
+      --accent-text: #FFFFFF;
+      --income: #059669;
+      --income-bg: #ECFDF5;
+      --expense: #DC2626;
+      --expense-bg: #FEF2F2;
+      --radius: 8px;
+      --radius-sm: 6px;
+      --radius-lg: 10px;
+      --font-body: 'Inter', sans-serif;
+      --font-num: 'Inter', sans-serif;
+      --shadow: 0 1px 3px rgba(15,23,42,0.06);
+    }
+    .theme-concept3-dark {
+      --bg: #090D16;
+      --surface: #111827;
+      --surface-subtle: #1E293B;
+      --border: #1F2937;
+      --border-strong: #475569;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent: #3B82F6;
+      --accent-text: #FFFFFF;
+      --income: #10B981;
+      --income-bg: rgba(16, 185, 129, 0.1);
+      --expense: #F43F5E;
+      --expense-bg: rgba(244, 63, 94, 0.1);
+      --radius: 8px;
+      --radius-sm: 6px;
+      --radius-lg: 10px;
+      --font-body: 'Inter', sans-serif;
+      --font-num: 'Inter', sans-serif;
+      --shadow: none;
+    }
+
+    .app-canvas {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      transition: all 0.2s ease-in-out;
+    }
+    .app-surface {
+      background-color: var(--surface);
+      border-color: var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .app-surface-subtle {
+      background-color: var(--surface-subtle);
+      border-radius: var(--radius-sm);
+    }
+    .app-border {
+      border-color: var(--border);
+    }
+    .app-accent-btn {
+      background-color: var(--accent);
+      color: var(--accent-text);
+      border-radius: var(--radius);
+    }
+    .app-radius {
+      border-radius: var(--radius);
+    }
+    .app-radius-sm {
+      border-radius: var(--radius-sm);
+    }
+    .app-radius-lg {
+      border-radius: var(--radius-lg);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 antialiased min-h-screen p-4 md:p-6 font-sans">
+
+  <!-- Master Controls Header -->
+  <header class="max-w-6xl mx-auto mb-6 bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 md:p-5 backdrop-blur-md sticky top-2 z-50 shadow-xl">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-widest font-semibold px-2 py-0.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded">Phase 01B Exploration</span>
+          <h1 class="text-lg md:text-xl font-bold tracking-tight text-white">Arth Visual Direction Interactive Studio</h1>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Compare the 3 visual personalities across Mobile Dashboard, Quick Entry Drawer, and Desktop Layout.</p>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Concept Selector -->
+        <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700 text-xs">
+          <button id="btn-c1" onclick="setConcept('concept1')" class="px-3 py-1.5 rounded-lg font-medium transition-all bg-white text-slate-900 shadow">1. Ledger Minimal</button>
+          <button id="btn-c2" onclick="setConcept('concept2')" class="px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white">2. Kintsugi Warm</button>
+          <button id="btn-c3" onclick="setConcept('concept3')" class="px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white">3. Nordic Frost</button>
+        </div>
+
+        <!-- Theme Mode Selector -->
+        <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700 text-xs">
+          <button id="btn-light" onclick="setTheme('light')" class="px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+            Light
+          </button>
+          <button id="btn-dark" onclick="setTheme('dark')" class="px-2.5 py-1.5 rounded-lg font-medium transition-all bg-white text-slate-900 shadow flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+            Dark
+          </button>
+        </div>
+
+        <!-- View Target Switcher -->
+        <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700 text-xs">
+          <button id="btn-view-dash" onclick="setView('mobile-dash')" class="px-2.5 py-1.5 rounded-lg font-medium transition-all bg-blue-600 text-white shadow">Mobile Dash</button>
+          <button id="btn-view-entry" onclick="setView('mobile-entry')" class="px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white">Quick Entry</button>
+          <button id="btn-view-desktop" onclick="setView('desktop')" class="px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white">Desktop</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Concept Description Strip -->
+    <div id="concept-descriptor" class="mt-3 pt-3 border-t border-slate-700/60 text-xs flex flex-wrap items-center justify-between gap-2 text-slate-300">
+      <div>
+        <span class="font-semibold text-white" id="desc-name">Concept 1: Ledger Minimal</span> — 
+        <span class="text-slate-400" id="desc-rationale">High-contrast, Swiss editorial precision. Hairline borders, monospaced tabular numerals, zero gratuitous shadows.</span>
+      </div>
+      <div class="flex items-center gap-3 font-mono text-[11px] text-slate-400">
+        <span>Font: <span id="desc-font" class="text-slate-200">Inter + Geist Mono</span></span>
+        <span>Corners: <span id="desc-corners" class="text-slate-200">Subtle 3px</span></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Interactive Sandbox Canvas Container -->
+  <main class="max-w-6xl mx-auto flex justify-center items-start pb-12">
+    
+    <!-- WRAPPER TARGET: Classes dynamically updated by JS -->
+    <div id="canvas-wrapper" class="theme-concept1-dark transition-all duration-300 w-full flex justify-center">
+
+      <!-- =================================================================== -->
+      <!-- VIEW 1: MOBILE DASHBOARD (375px phone frame)                        -->
+      <!-- =================================================================== -->
+      <div id="view-mobile-dash" class="w-full max-w-[390px] app-canvas border app-border overflow-hidden shadow-2xl rounded-[32px] p-4 flex flex-col min-h-[760px] relative">
+        
+        <!-- Status Bar Fake -->
+        <div class="flex justify-between items-center text-xs opacity-60 mb-3 px-2 pt-1 font-mono-numbers">
+          <span>09:41</span>
+          <div class="flex items-center gap-1.5">
+            <span>5G</span>
+            <div class="w-4 h-2.5 border border-current rounded-sm relative flex items-center p-0.5">
+              <div class="w-full h-full bg-current rounded-[1px]"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Header -->
+        <div class="flex justify-between items-center mb-4 px-1">
+          <div>
+            <span class="text-[10px] tracking-wider uppercase font-semibold text-muted opacity-75">October 2026</span>
+            <h2 class="text-xl font-bold tracking-tight">Arth</h2>
+          </div>
+          <button class="w-8 h-8 rounded-full border app-border flex items-center justify-center text-xs font-semibold opacity-90">
+            A
+          </button>
+        </div>
+
+        <!-- Compact Financial Pulse Card -->
+        <div class="app-surface border app-border p-4 mb-3">
+          <div class="text-xs text-muted mb-1 flex justify-between items-center">
+            <span>Net Balance this Month</span>
+            <span class="text-[11px] px-1.5 py-0.5 app-surface-subtle font-medium">Asia/Kolkata</span>
+          </div>
+          <div class="text-2xl font-bold tracking-tight font-mono-numbers text-[var(--income)]">
+            +₹42,850<span class="text-sm opacity-60">.00</span>
+          </div>
+
+          <!-- Income vs Expense Sub-row -->
+          <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t app-border text-xs">
+            <div>
+              <span class="text-muted block text-[11px]">Total Income</span>
+              <span class="font-semibold text-sm font-mono-numbers text-[var(--income)]">+₹95,000.00</span>
+            </div>
+            <div class="border-l app-border pl-3">
+              <span class="text-muted block text-[11px]">Total Expense</span>
+              <span class="font-semibold text-sm font-mono-numbers text-[var(--expense)]">−₹52,150.00</span>
+            </div>
+          </div>
+
+          <!-- Today Spent Micro-pill -->
+          <div class="mt-3 pt-2 flex items-center justify-between text-xs text-muted">
+            <span>Spent Today</span>
+            <span class="font-semibold font-mono-numbers text-[var(--text)]">₹750.00</span>
+          </div>
+        </div>
+
+        <!-- Progressive Disclosure Level 2: Proportional Necessity Split Bar -->
+        <div class="app-surface border app-border p-3.5 mb-3">
+          <div class="flex justify-between items-center text-xs mb-2">
+            <span class="font-semibold text-[11px] uppercase tracking-wider text-muted">Spending Discipline</span>
+            <span class="text-[11px] opacity-75">₹52,150 Total</span>
+          </div>
+          
+          <!-- Segmented Proportional Bar -->
+          <div class="h-2 w-full bg-[var(--surface-subtle)] rounded-full overflow-hidden flex gap-0.5">
+            <div style="width: 62%" class="bg-[var(--text)] opacity-90" title="Essential 62%"></div>
+            <div style="width: 26%" class="bg-[var(--text-muted)] opacity-60" title="Optional 26%"></div>
+            <div style="width: 12%" class="bg-[var(--accent)]" title="Luxury 12%"></div>
+          </div>
+
+          <!-- Breakdown Legend -->
+          <div class="flex justify-between text-[11px] mt-2 font-mono-numbers">
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-[var(--text)] inline-block"></span>
+              Essential: 62%
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-[var(--text-muted)] opacity-60 inline-block"></span>
+              Opt: 26%
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-[var(--accent)] inline-block"></span>
+              Lux: 12%
+            </span>
+          </div>
+        </div>
+
+        <!-- Recent Transactions Header -->
+        <div class="flex justify-between items-center px-1 mb-2">
+          <h3 class="text-xs uppercase tracking-wider font-semibold text-muted">Recent Transactions</h3>
+          <button class="text-xs text-[var(--accent)] font-medium">View all</button>
+        </div>
+
+        <!-- Transaction List (Fictional Sample Data) -->
+        <div class="space-y-2 mb-16 flex-1 overflow-y-auto pr-0.5">
+          
+          <!-- Item 1: Essential Groceries -->
+          <div class="app-surface border app-border p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded border app-border flex items-center justify-center text-xs font-semibold app-surface-subtle">
+                🛒
+              </div>
+              <div>
+                <div class="text-xs font-semibold leading-snug">Nature's Basket</div>
+                <div class="flex items-center gap-1.5 text-[10px] text-muted">
+                  <span>Groceries</span>
+                  <span>•</span>
+                  <span>Online</span>
+                  <span>•</span>
+                  <span class="px-1 py-0.2 border app-border rounded-sm text-[9px] uppercase font-medium">Essential</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold font-mono-numbers text-[var(--expense)]">−₹1,450.00</div>
+              <div class="text-[10px] text-muted font-mono-numbers">Today</div>
+            </div>
+          </div>
+
+          <!-- Item 2: Salary Income -->
+          <div class="app-surface border app-border p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded border app-border flex items-center justify-center text-xs font-semibold text-[var(--income)] bg-[var(--income-bg)]">
+                ↑
+              </div>
+              <div>
+                <div class="text-xs font-semibold leading-snug">Acme Tech Consulting</div>
+                <div class="flex items-center gap-1.5 text-[10px] text-muted">
+                  <span>Salary</span>
+                  <span>•</span>
+                  <span>Online</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold font-mono-numbers text-[var(--income)]">+₹95,000.00</div>
+              <div class="text-[10px] text-muted font-mono-numbers">Oct 24</div>
+            </div>
+          </div>
+
+          <!-- Item 3: Luxury Dining Out -->
+          <div class="app-surface border app-border p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded border app-border flex items-center justify-center text-xs font-semibold app-surface-subtle">
+                ☕
+              </div>
+              <div>
+                <div class="text-xs font-semibold leading-snug">Blue Tokai Coffee</div>
+                <div class="flex items-center gap-1.5 text-[10px] text-muted">
+                  <span>Food & Dining</span>
+                  <span>•</span>
+                  <span>Online</span>
+                  <span>•</span>
+                  <span class="px-1 py-0.2 border app-border rounded-sm text-[9px] uppercase font-medium text-[var(--accent)]">Luxury</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold font-mono-numbers text-[var(--expense)]">−₹340.00</div>
+              <div class="text-[10px] text-muted font-mono-numbers">Oct 24</div>
+            </div>
+          </div>
+
+          <!-- Item 4: Optional Transport -->
+          <div class="app-surface border app-border p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded border app-border flex items-center justify-center text-xs font-semibold app-surface-subtle">
+                🚕
+              </div>
+              <div>
+                <div class="text-xs font-semibold leading-snug">Uber Ride</div>
+                <div class="flex items-center gap-1.5 text-[10px] text-muted">
+                  <span>Transport</span>
+                  <span>•</span>
+                  <span>Cash</span>
+                  <span>•</span>
+                  <span class="px-1 py-0.2 border app-border rounded-sm text-[9px] uppercase font-medium">Optional</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-bold font-mono-numbers text-[var(--expense)]">−₹410.00</div>
+              <div class="text-[10px] text-muted font-mono-numbers">Oct 23</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Mobile Bottom Navigation Bar (Elevated / Integrated CTA) -->
+        <div class="absolute bottom-3 left-3 right-3 app-surface border app-border p-2 flex items-center justify-around shadow-xl rounded-2xl">
+          <button class="flex flex-col items-center text-[10px] font-medium text-[var(--accent)]">
+            <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            Home
+          </button>
+          <button class="flex flex-col items-center text-[10px] font-medium text-muted">
+            <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Ledger
+          </button>
+          
+          <!-- Elevated Central Add Action -->
+          <button onclick="setView('mobile-entry')" class="w-11 h-11 -mt-4 app-accent-btn shadow-lg flex items-center justify-center font-bold text-lg hover:scale-105 transition-transform" title="Quick Add Transaction">
+            +
+          </button>
+
+          <button class="flex flex-col items-center text-[10px] font-medium text-muted">
+            <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+            Categories
+          </button>
+          <button class="flex flex-col items-center text-[10px] font-medium text-muted">
+            <svg class="w-5 h-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Settings
+          </button>
+        </div>
+
+      </div>
+
+
+      <!-- =================================================================== -->
+      <!-- VIEW 2: MOBILE QUICK-ENTRY DRAWER (Overlay State)                   -->
+      <!-- =================================================================== -->
+      <div id="view-mobile-entry" class="hidden w-full max-w-[390px] app-canvas border app-border overflow-hidden shadow-2xl rounded-[32px] flex flex-col min-h-[760px] relative bg-black/40">
+        
+        <!-- Backdrop Dimmer simulation -->
+        <div class="flex-1 flex flex-col justify-end">
+          
+          <!-- Bottom Sheet Container -->
+          <div class="app-surface border-t border-x app-border rounded-t-[28px] p-5 shadow-2xl animate-fade-in">
+            
+            <!-- Drag Handle Pill -->
+            <div class="w-10 h-1 bg-current opacity-20 rounded-full mx-auto mb-4"></div>
+
+            <!-- Header + Type Toggle -->
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs uppercase tracking-wider font-semibold text-muted">New Entry</span>
+              
+              <!-- Segmented Type Selector -->
+              <div class="flex p-0.5 app-surface-subtle border app-border rounded-lg text-xs">
+                <button id="entry-type-exp" onclick="setEntryType('expense')" class="px-3 py-1 font-semibold rounded-md app-accent-btn shadow-sm">Expense</button>
+                <button id="entry-type-inc" onclick="setEntryType('income')" class="px-3 py-1 font-semibold rounded-md opacity-60 text-muted">Income</button>
+              </div>
+
+              <button onclick="setView('mobile-dash')" class="text-xs text-muted hover:text-white">✕</button>
+            </div>
+
+            <!-- Amount Input Display (Autofocus Target) -->
+            <div class="mb-4 text-center py-2 app-surface-subtle border app-border rounded-xl">
+              <span class="text-xs text-muted block mb-0.5">Amount in INR</span>
+              <div class="text-3xl font-extrabold font-mono-numbers tracking-tight flex items-center justify-center gap-1">
+                <span class="text-muted text-xl font-normal">₹</span>
+                <span>450</span><span class="text-lg opacity-40">.00</span>
+              </div>
+            </div>
+
+            <!-- Date Selector (Asia/Kolkata Default) -->
+            <div class="flex items-center justify-between text-xs mb-3 px-1">
+              <span class="text-muted">Transaction Date</span>
+              <div class="flex items-center gap-1.5 px-2.5 py-1 app-surface-subtle border app-border rounded-lg font-mono-numbers text-[11px] font-medium">
+                <span>Today (25 Oct)</span>
+                <span class="text-muted">IST</span>
+              </div>
+            </div>
+
+            <!-- Category Selector (Top 6 explicit sort_order chips) -->
+            <div class="mb-3">
+              <div class="flex justify-between items-center text-xs mb-1.5 px-1">
+                <span class="text-muted">Category</span>
+                <span class="text-[10px] text-[var(--accent)]">All (14)</span>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5 text-xs">
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium border-[var(--accent)] ring-1 ring-[var(--accent)] flex items-center gap-1.5">
+                  <span>🍽️</span> Dining
+                </button>
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium opacity-70 flex items-center gap-1.5">
+                  <span>🛒</span> Groceries
+                </button>
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium opacity-70 flex items-center gap-1.5">
+                  <span>🚗</span> Transport
+                </button>
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium opacity-70 flex items-center gap-1.5">
+                  <span>💡</span> Utilities
+                </button>
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium opacity-70 flex items-center gap-1.5">
+                  <span>🏥</span> Health
+                </button>
+                <button class="p-2 border app-border app-surface-subtle rounded-lg text-left font-medium opacity-70 flex items-center gap-1.5">
+                  <span>🛍️</span> Shopping
+                </button>
+              </div>
+            </div>
+
+            <!-- Payment Method (Online vs Cash) -->
+            <div class="mb-3">
+              <div class="text-xs text-muted mb-1 px-1">Payment Method</div>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <button class="py-2 px-3 border app-border rounded-lg font-medium text-center border-[var(--accent)] bg-[var(--surface-subtle)]">
+                  💳 Online (UPI/Card)
+                </button>
+                <button class="py-2 px-3 border app-border rounded-lg font-medium text-center opacity-60">
+                  💵 Cash
+                </button>
+              </div>
+            </div>
+
+            <!-- Necessity Classification (Hidden on Income) -->
+            <div id="entry-necessity-section" class="mb-4">
+              <div class="text-xs text-muted mb-1 px-1">Necessity Classification</div>
+              <div class="grid grid-cols-3 gap-1.5 text-xs">
+                <button class="py-2 px-2 border app-border rounded-lg text-center font-medium opacity-70">
+                  Essential
+                </button>
+                <button class="py-2 px-2 border app-border rounded-lg text-center font-medium border-[var(--accent)] bg-[var(--surface-subtle)] font-semibold">
+                  Optional
+                </button>
+                <button class="py-2 px-2 border app-border rounded-lg text-center font-medium opacity-70 text-[var(--accent)]">
+                  Luxury
+                </button>
+              </div>
+            </div>
+
+            <!-- Progressive Disclosure Level 2: Note Field Trigger -->
+            <div class="mb-4 px-1">
+              <button class="text-xs text-muted flex items-center gap-1 hover:text-[var(--text)]">
+                <span>+</span> Add optional note
+              </button>
+            </div>
+
+            <!-- Submit Primary CTA -->
+            <button onclick="simulateSave()" class="w-full py-3.5 app-accent-btn font-semibold text-sm shadow-lg flex items-center justify-center gap-2">
+              Save Expense (₹450.00)
+            </button>
+
+            <button onclick="setView('mobile-dash')" class="w-full py-2 mt-2 text-xs text-muted font-medium text-center">
+              Cancel
+            </button>
+
+          </div>
+        </div>
+
+      </div>
+
+
+      <!-- =================================================================== -->
+      <!-- VIEW 3: DESKTOP ADAPTATION (Wide Container)                         -->
+      <!-- =================================================================== -->
+      <div id="view-desktop" class="hidden w-full max-w-5xl app-canvas border app-border shadow-2xl rounded-2xl overflow-hidden flex min-h-[640px]">
+        
+        <!-- Left Desktop Sidebar (220px) -->
+        <aside class="w-56 border-r app-border p-4 flex flex-col justify-between app-surface-subtle">
+          <div>
+            <!-- Brand -->
+            <div class="flex items-center gap-2.5 px-2 mb-6">
+              <div class="w-7 h-7 rounded-lg app-accent-btn flex items-center justify-center font-bold text-sm">A</div>
+              <span class="font-bold tracking-tight text-base">Arth</span>
+            </div>
+
+            <!-- Primary Add CTA Button -->
+            <button onclick="setView('mobile-entry')" class="w-full py-2 px-3 mb-6 app-accent-btn font-semibold text-xs shadow flex items-center justify-center gap-1.5">
+              <span>+</span> New Transaction
+              <span class="opacity-50 text-[10px] ml-auto font-mono">N</span>
+            </button>
+
+            <!-- Navigation Links -->
+            <nav class="space-y-1 text-xs">
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-semibold border app-border app-surface">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                Dashboard
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium text-muted hover:text-[var(--text)]">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                Transactions
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium text-muted hover:text-[var(--text)]">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                Categories
+              </a>
+              <a href="#" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium text-muted hover:text-[var(--text)]">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Settings
+              </a>
+            </nav>
+          </div>
+
+          <!-- User Profile & Diagnostics -->
+          <div class="pt-4 border-t app-border flex items-center justify-between text-xs">
+            <div>
+              <span class="font-semibold block text-[11px]">Personal Account</span>
+              <span class="text-[10px] text-muted">Asia/Kolkata</span>
+            </div>
+            <div class="w-6 h-6 rounded-full border app-border flex items-center justify-center text-[10px] font-bold">A</div>
+          </div>
+        </aside>
+
+        <!-- Main Desktop Content Area -->
+        <main class="flex-1 p-6 overflow-y-auto">
+          
+          <!-- Desktop Header -->
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight">Financial Overview</h2>
+              <span class="text-xs text-muted">October 2026 • 24 Transactions</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3 py-1.5 text-xs font-medium border app-border rounded-lg app-surface">Filter History</button>
+              <button class="px-3 py-1.5 text-xs font-medium border app-border rounded-lg app-surface">Export CSV</button>
+            </div>
+          </div>
+
+          <!-- 3-Column Metric Cards -->
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="app-surface border app-border p-4">
+              <span class="text-xs text-muted block mb-1">Total Income</span>
+              <div class="text-xl font-bold font-mono-numbers text-[var(--income)]">+₹95,000.00</div>
+              <span class="text-[10px] text-muted mt-1 block">1 Salary entry</span>
+            </div>
+            <div class="app-surface border app-border p-4">
+              <span class="text-xs text-muted block mb-1">Total Expense</span>
+              <div class="text-xl font-bold font-mono-numbers text-[var(--expense)]">−₹52,150.00</div>
+              <span class="text-[10px] text-muted mt-1 block">23 Expense entries</span>
+            </div>
+            <div class="app-surface border app-border p-4">
+              <span class="text-xs text-muted block mb-1">Net Savings</span>
+              <div class="text-xl font-bold font-mono-numbers text-[var(--income)]">+₹42,850.00</div>
+              <span class="text-[10px] text-muted mt-1 block">45.1% Savings rate</span>
+            </div>
+          </div>
+
+          <!-- Tabular Desktop Transaction Ledger -->
+          <div class="app-surface border app-border overflow-hidden">
+            <div class="px-4 py-3 border-b app-border flex justify-between items-center text-xs">
+              <span class="font-semibold uppercase tracking-wider text-muted">Recent Ledger Activity</span>
+              <span class="text-muted font-mono-numbers">Showing 4 of 24 records</span>
+            </div>
+            <table class="w-full text-left text-xs">
+              <thead class="border-b app-border text-muted font-medium bg-[var(--surface-subtle)]">
+                <tr>
+                  <th class="py-2.5 px-4">Date</th>
+                  <th class="py-2.5 px-4">Description / Entity</th>
+                  <th class="py-2.5 px-4">Category</th>
+                  <th class="py-2.5 px-4">Payment</th>
+                  <th class="py-2.5 px-4">Necessity</th>
+                  <th class="py-2.5 px-4 text-right">Amount (INR)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y app-border">
+                <tr class="hover:bg-[var(--surface-subtle)]">
+                  <td class="py-3 px-4 font-mono-numbers text-muted">2026-10-25</td>
+                  <td class="py-3 px-4 font-semibold">Nature's Basket</td>
+                  <td class="py-3 px-4">Groceries</td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Online</span></td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Essential</span></td>
+                  <td class="py-3 px-4 text-right font-bold font-mono-numbers text-[var(--expense)]">−₹1,450.00</td>
+                </tr>
+                <tr class="hover:bg-[var(--surface-subtle)]">
+                  <td class="py-3 px-4 font-mono-numbers text-muted">2026-10-24</td>
+                  <td class="py-3 px-4 font-semibold">Acme Tech Consulting</td>
+                  <td class="py-3 px-4">Salary</td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Online</span></td>
+                  <td class="py-3 px-4 text-muted">—</td>
+                  <td class="py-3 px-4 text-right font-bold font-mono-numbers text-[var(--income)]">+₹95,000.00</td>
+                </tr>
+                <tr class="hover:bg-[var(--surface-subtle)]">
+                  <td class="py-3 px-4 font-mono-numbers text-muted">2026-10-24</td>
+                  <td class="py-3 px-4 font-semibold">Blue Tokai Coffee</td>
+                  <td class="py-3 px-4">Food & Dining</td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Online</span></td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px] text-[var(--accent)]">Luxury</span></td>
+                  <td class="py-3 px-4 text-right font-bold font-mono-numbers text-[var(--expense)]">−₹340.00</td>
+                </tr>
+                <tr class="hover:bg-[var(--surface-subtle)]">
+                  <td class="py-3 px-4 font-mono-numbers text-muted">2026-10-23</td>
+                  <td class="py-3 px-4 font-semibold">Uber Ride</td>
+                  <td class="py-3 px-4">Transport</td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Cash</span></td>
+                  <td class="py-3 px-4"><span class="px-1.5 py-0.5 rounded border app-border text-[10px]">Optional</span></td>
+                  <td class="py-3 px-4 text-right font-bold font-mono-numbers text-[var(--expense)]">−₹410.00</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </main>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    let currentConcept = 'concept1';
+    let currentTheme = 'dark';
+    let currentView = 'mobile-dash';
+    let currentEntryType = 'expense';
+
+    const conceptData = {
+      concept1: {
+        name: 'Concept 1: Ledger Minimal',
+        rationale: 'High-contrast, Swiss editorial precision. Hairline borders, monospaced tabular numerals, zero gratuitous shadows.',
+        font: 'Inter + Geist Mono',
+        corners: 'Subtle 3px'
+      },
+      concept2: {
+        name: 'Concept 2: Kintsugi Warm',
+        rationale: 'Warm terracotta, natural unbleached sandstone linen, tactile rounded corners. Calming financial peace of mind.',
+        font: 'Plus Jakarta Sans',
+        corners: 'Tactile 12px'
+      },
+      concept3: {
+        name: 'Concept 3: Nordic Frost & Steel',
+        rationale: 'Architectural slate and cool cobalt accents. Modern Scandinavian industrial precision and razor-sharp contrast.',
+        font: 'Inter (Geometric)',
+        corners: 'Medium 8px'
+      }
+    };
+
+    function updateCanvas() {
+      const wrapper = document.getElementById('canvas-wrapper');
+      wrapper.className = `theme-${currentConcept}-${currentTheme} transition-all duration-300 w-full flex justify-center`;
+
+      // Update descriptor
+      const data = conceptData[currentConcept];
+      document.getElementById('desc-name').innerText = data.name;
+      document.getElementById('desc-rationale').innerText = data.rationale;
+      document.getElementById('desc-font').innerText = data.font;
+      document.getElementById('desc-corners').innerText = data.corners;
+
+      // Update button styling
+      ['concept1', 'concept2', 'concept3'].forEach((c, idx) => {
+        const btn = document.getElementById(`btn-c${idx+1}`);
+        if (c === currentConcept) {
+          btn.className = 'px-3 py-1.5 rounded-lg font-medium transition-all bg-white text-slate-900 shadow';
+        } else {
+          btn.className = 'px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white';
+        }
+      });
+
+      // Update theme buttons
+      const btnLight = document.getElementById('btn-light');
+      const btnDark = document.getElementById('btn-dark');
+      if (currentTheme === 'light') {
+        btnLight.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all bg-white text-slate-900 shadow flex items-center gap-1.5';
+        btnDark.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
+      } else {
+        btnDark.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all bg-white text-slate-900 shadow flex items-center gap-1.5';
+        btnLight.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white flex items-center gap-1.5';
+      }
+
+      // Update view containers
+      ['mobile-dash', 'mobile-entry', 'desktop'].forEach(v => {
+        const el = document.getElementById(`view-${v}`);
+        if (v === currentView) {
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+
+      // Update view buttons
+      const btnVDash = document.getElementById('btn-view-dash');
+      const btnVEntry = document.getElementById('btn-view-entry');
+      const btnVDesk = document.getElementById('btn-view-desktop');
+      [btnVDash, btnVEntry, btnVDesk].forEach(b => b.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-white');
+      if (currentView === 'mobile-dash') btnVDash.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all bg-blue-600 text-white shadow';
+      if (currentView === 'mobile-entry') btnVEntry.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all bg-blue-600 text-white shadow';
+      if (currentView === 'desktop') btnVDesk.className = 'px-2.5 py-1.5 rounded-lg font-medium transition-all bg-blue-600 text-white shadow';
+    }
+
+    function setConcept(c) {
+      currentConcept = c;
+      updateCanvas();
+    }
+
+    function setTheme(t) {
+      currentTheme = t;
+      updateCanvas();
+    }
+
+    function setView(v) {
+      currentView = v;
+      updateCanvas();
+    }
+
+    function setEntryType(t) {
+      currentEntryType = t;
+      const expBtn = document.getElementById('entry-type-exp');
+      const incBtn = document.getElementById('entry-type-inc');
+      const necSection = document.getElementById('entry-necessity-section');
+      if (t === 'income') {
+        incBtn.className = 'px-3 py-1 font-semibold rounded-md app-accent-btn shadow-sm';
+        expBtn.className = 'px-3 py-1 font-semibold rounded-md opacity-60 text-muted';
+        necSection.classList.add('hidden');
+      } else {
+        expBtn.className = 'px-3 py-1 font-semibold rounded-md app-accent-btn shadow-sm';
+        incBtn.className = 'px-3 py-1 font-semibold rounded-md opacity-60 text-muted';
+        necSection.classList.remove('hidden');
+      }
+    }
+
+    function simulateSave() {
+      alert("Simulated Save: Validated Zod schema -> Atomic write -> Saved ₹450.00 to 'Dining'");
+      setView('mobile-dash');
+    }
+
+    // Init
+    updateCanvas();
+  </script>
+</body>
+</html>

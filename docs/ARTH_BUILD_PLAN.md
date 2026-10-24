@@ -1,0 +1,326 @@
+# Arth — Build Plan
+
+> Version 0.1 — Phase 00 Baseline  
+> Last updated: 2026-10-25
+
+---
+
+## Phase 00 — Audit & Architecture ✅
+
+**Status**: Complete  
+**Deliverables**:
+- [x] Workspace audit (empty repo confirmed)
+- [x] `ANTIGRAVITY.md` — persistent agent instruction file
+- [x] `docs/ARTH_ARCHITECTURE.md` — full architecture document
+- [x] `docs/ARTH_BUILD_PLAN.md` — this file
+- [x] `docs/ARTH_ROADMAP.md` — phase-level roadmap
+
+**Decisions locked in this phase**:
+- Next.js 15 App Router + TypeScript strict
+- shadcn/ui + Tailwind CSS v4
+- Supabase PostgreSQL + Auth
+- Paise-as-integer money storage
+- UUID v7 transaction IDs
+- Outbox pattern for Sheets sync
+- Dexie.js / IndexedDB deferred to Phase 03
+
+---
+
+## Phase 01 — Foundation (Scaffold, Auth, DB, Transaction CRUD)
+
+**Goal**: A working, deployed web app where the owner can log in, enter transactions, and view a basic dashboard. No Sheets sync yet. No offline. No bulk import.
+
+### 01-A · UX Architecture, IA & User Flows (Prerequisite) ✅
+
+| Task | Details |
+|---|---|
+| UX Blueprint | Complete `docs/ARTH_UX_BLUEPRINT.md` establishing IA, mobile-first navigation, progressive disclosure, 7 core user flows, and interaction rules |
+| UX Approval | Owner review and approval of `docs/ARTH_UX_BLUEPRINT.md` |
+
+### 01-B · Visual Direction Exploration ✅
+
+| Task | Details |
+|---|---|
+| Visual Exploration | Explore 3 distinct visual directions in `docs/ARTH_VISUAL_DIRECTION.md` and interactive preview |
+| Visual Decision | Owner selected Concept 1: Ledger Minimal |
+
+### 01-C · Ledger Minimal Design System ✅
+
+| Task | Details |
+|---|---|
+| Design System Spec | Complete `docs/ARTH_DESIGN_SYSTEM.md` establishing semantic color tokens, Inter/Geist Mono typography, 4px grid geometry, reusable component states, and approved UX decisions |
+| Design System Review| Owner review of design system specifications prior to prototype |
+
+### 01-D · Screen-Level Prototype ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Interactive Prototype | Screen-level prototype implementing Ledger Minimal across Dashboard, Quick Entry, Ledger, Categories, and Settings (`docs/design-concepts/arth-prototype.html`) | Complete ✅ |
+| Responsiveness & Review | Fixed mobile navigation, bottom sheet quick add, zero horizontal overflow at 360px, 390px, 768px, 1120px; 12 verification screenshots saved | Complete ✅ |
+| Prototype Approval | Owner sign-off documented in `docs/ARTH_PROTOTYPE_REVIEW.md` | Complete ✅ |
+
+### 01-E · Project Scaffold & Tooling Setup ✅
+
+| Task | Details | Status |
+|---|---|---|
+| Init Next.js App Router | Next.js 16 (App Router) + React 19 + TypeScript strict + Tailwind CSS v4 initialized in `d:\Forge\Per` with `pnpm` | Complete ✅ |
+| Project Structure | Established `src/app/`, `src/components/`, `src/lib/`, `src/features/`, `public/`, `docs/` | Complete ✅ |
+| Ledger Minimal Design Tokens | Semantic color tokens (Warm Paper `#FBFBF9` light, Obsidian `#0C0A09` dark) integrated into `src/app/globals.css` and Tailwind `@theme` | Complete ✅ |
+| Typography & Font Optimization | Configured `next/font/google` for `Inter` (UI) and `Geist Mono` (tabular financial figures) | Complete ✅ |
+| Currency Utility & Theme Toggle | Created `src/lib/format.ts` (paise to INR) and `src/components/ThemeToggle.tsx` (dual theme support) | Complete ✅ |
+| Deliberate Foundation Page | Rendered honest, minimal Arth foundation placeholder at `src/app/page.tsx` | Complete ✅ |
+| Core Tooling & Strict Config | `tsconfig.json` with strict mode and `@/*` alias, ESLint 9 (`next/core-web-vitals`), `README.md`, `.gitignore`, `.env.example` | Complete ✅ |
+| Quality Gates Verification | `pnpm install`, `pnpm lint` (0 errors), `pnpm typecheck` (0 errors), `pnpm build` (clean), and CDP browser inspection (0 console errors, exact RGB matches) | Complete ✅ |
+| Git Repository Init | Git initialized with verified `.gitignore` excluding build artifacts and secrets | Complete ✅ |
+
+### 01-F · Supabase project setup
+
+> These steps require the owner to perform manual actions in the Supabase dashboard. The agent documents what to do; it does not invent credentials.
+
+| Task | Details |
+|---|---|
+| Create Supabase project | Owner action: supabase.com → New project → copy URL + keys |
+| Enable Google OAuth | Supabase dashboard → Auth → Providers → Google → enter Client ID + Secret |
+| Apply migrations | `pnpm supabase db push` or paste SQL into Supabase SQL editor |
+| Seed categories | Run `supabase/seed.sql` — default categories only, no financial data |
+| Verify RLS | Test that unauthenticated requests return zero rows |
+
+**Migration files to create**:
+```
+supabase/migrations/
+  0001_create_profiles.sql
+  0002_create_categories.sql
+  0003_create_transactions.sql
+  0004_create_outbox_events.sql
+  0005_rls_policies.sql
+  0006_auth_trigger.sql
+  0007_indexes.sql
+```
+
+**Seed categories** (no financials — only taxonomy):
+```
+Food & Dining, Transport, Housing, Utilities, Healthcare,
+Entertainment, Shopping, Education, Personal Care, Travel,
+Investments, Salary, Freelance, Other Income, Other Expense
+```
+
+### 01-G · Authentication flow
+
+| Task | Details |
+|---|---|
+| Supabase SSR client | `src/lib/supabase/server.ts` — `createServerClient` |
+| Supabase browser client | `src/lib/supabase/client.ts` — `createBrowserClient` |
+| Middleware | `src/middleware.ts` — refresh session, redirect unauthenticated to `/login` |
+| Login page | `src/app/(auth)/login/page.tsx` — Google OAuth button + magic link fallback |
+| Auth callback | `src/app/auth/callback/route.ts` — exchange code for session |
+| Logout | Server Action in settings |
+| Profile auto-creation | DB trigger (Migration 0006) |
+
+**Acceptance criteria**:
+- [ ] Owner can log in with Google OAuth
+- [ ] Owner can log in with magic link email
+- [ ] Unauthenticated users are redirected to `/login`
+- [ ] Session persists across page refreshes
+- [ ] `profiles` row is created on first login
+
+### 01-H · Transaction entry form
+
+| Task | Details |
+|---|---|
+| Zod schema | `src/types/transaction.ts` — validates all fields including paise conversion |
+| Amount input | Accepts decimal INR (e.g., `150.50`) → converts to `15050` paise before submission |
+| Type selector | Toggle: Income / Expense |
+| Date picker | Defaults to today in Asia/Kolkata; editable; uses `date-fns-tz` |
+| Category selector | Dropdown from user's active categories; sorted by `sort_order` |
+| Payment method | Two-option selector: Online / Cash |
+| Necessity selector | Shown only when type = Expense; required; Essential / Optional / Luxury |
+| Note field | Optional free-text, max 500 chars |
+| UUID v7 generation | Client-side before submission |
+| Server Action | `src/modules/TransactionEntry/actions.ts` — validates, inserts transaction + outbox_event in DB transaction |
+| Success/error feedback | Toast notification via shadcn/ui Sonner |
+
+**Acceptance criteria**:
+- [ ] All required fields validated with Zod before submission
+- [ ] Necessity field hidden for Income, required for Expense
+- [ ] Amount entered as INR decimal, stored as paise integer
+- [ ] Date defaults to current date in IST
+- [ ] Transaction and outbox_event inserted atomically
+- [ ] Duplicate UUID submission is handled as a no-op (idempotent upsert)
+- [ ] Form resets after successful submission
+
+### 01-I · Category management
+
+| Task | Details |
+|---|---|
+| Category list UI | `src/modules/CategoryManager/` — list with drag-to-reorder (dnd-kit) |
+| Add category | Name, optional icon (emoji picker), optional color |
+| Edit category | Inline name edit |
+| Reorder | Drag handle; `sort_order` updated via Server Action |
+| Archive category | Soft delete (`is_archived = true`); hidden from transaction form |
+| Unarchive | Settings panel |
+| Default categories | Seeded by `supabase/seed.sql`; marked `is_default = true` |
+
+**Acceptance criteria**:
+- [ ] Categories are listed in `sort_order` order
+- [ ] New categories are appended after existing ones
+- [ ] Archived categories do not appear in transaction form
+- [ ] Category names are unique per user (enforced by DB + Zod)
+- [ ] Default categories cannot be hard-deleted
+
+### 01-J · Dashboard (read-only)
+
+| Task | Details |
+|---|---|
+| Route | `src/app/(app)/dashboard/page.tsx` |
+| Current month summary | Total income, total expense, net balance — computed server-side in SQL |
+| Transaction list | Paginated (20/page), sorted by `transaction_date DESC` then `created_at DESC` |
+| Filter bar | By type, category, payment method, date range |
+| Transaction row | Date, type badge, category, amount (formatted INR), necessity badge, note preview |
+| Edit transaction | Open same form pre-populated; same idempotent upsert |
+| Delete transaction | Soft delete (`deleted_at = now()`); outbox_event with `event_type = 'delete'` |
+
+**Acceptance criteria**:
+- [ ] Dashboard loads in < 2 s on Vercel production
+- [ ] Month summary shows correct totals (verified against raw DB values)
+- [ ] Pagination works correctly with filters applied
+- [ ] Soft-deleted transactions are invisible to the user
+- [ ] Edit pre-populates all fields correctly
+
+### 01-K · PWA manifest & baseline installability
+
+| Task | Details |
+|---|---|
+| `public/manifest.json` | `name`, `short_name`, `start_url`, `display: standalone`, `theme_color`, `icons` |
+| Icons | 192×192 and 512×512 PNG icons in `public/icons/` |
+| `next.config.ts` | Add PWA headers; no service worker yet (Phase 03) |
+| Meta tags | `<meta name="theme-color">`, `apple-touch-icon` |
+
+**Acceptance criteria**:
+- [ ] Browser shows "Install Arth" prompt on Chrome/Edge
+- [ ] Lighthouse PWA score ≥ 85 (without offline; that's Phase 03)
+
+### 01-L · Deployment
+
+| Task | Details |
+|---|---|
+| Vercel project | Connect GitHub repo |
+| Environment variables | Add all vars from `.env.local` in Vercel dashboard |
+| Preview deployments | Enabled per PR / push |
+| Production domain | Configure custom domain (optional) |
+| Vercel Analytics | Enable (free) |
+
+**Acceptance criteria**:
+- [ ] `pnpm build` succeeds with zero TypeScript errors
+- [ ] `pnpm lint` passes
+- [ ] Vitest unit tests pass (`pnpm test`)
+- [ ] App is deployed and reachable on Vercel
+
+---
+
+## Phase 02 — Sheets Sync & Export
+
+**Prerequisites**: Phase 01 fully deployed and stable.
+
+### Key tasks
+
+| Task | Module |
+|---|---|
+| Google Sheets API client | `src/server/sheets.ts` |
+| Outbox drain Route Handler | `/api/sync/sheets` — reads pending events, writes to Sheets, marks delivered |
+| Vercel Cron trigger | `vercel.json` cron → `/api/sync/sheets` every 5 minutes |
+| Weekly reconciliation | `/api/sync/reconcile` — full re-write of all rows; runs weekly via cron |
+| CSV export | `ImportExport` module — server-side streaming download |
+| JSON export | Full structured dump |
+| Manual sync trigger | Settings button → calls `/api/sync/sheets` on demand |
+
+**Acceptance criteria**:
+- [ ] New transaction appears in Google Sheet within 10 minutes
+- [ ] Edited transaction updates the correct row (matched by UUID)
+- [ ] Deleted transaction row is struck-through or removed in Sheet
+- [ ] Weekly reconciliation corrects any drift
+- [ ] CSV export downloads a valid file with correct INR formatting
+- [ ] JSON export is importable for recovery
+
+---
+
+## Phase 03 — Offline & Full PWA
+
+### Key tasks
+
+| Task | Details |
+|---|---|
+| Service worker | Workbox via next-pwa; cache-first for shell |
+| Dexie.js IndexedDB | Local transaction + outbox tables |
+| Offline form | Writes to IndexedDB; queued in local outbox |
+| Sync on reconnect | Local outbox flushed to server; UUID v7 deduplication |
+| Conflict resolution | `updated_at` server-wins strategy |
+| Offline indicator | UI banner when navigator.onLine = false |
+
+---
+
+## Phase 04 — Budget & Insights
+
+### Key tasks
+
+| Task | Module |
+|---|---|
+| Budget creation form | `BudgetManager` |
+| Budget vs actual chart | `BudgetManager` |
+| Monthly trend line chart | `SpendingInsights` |
+| Category breakdown pie | `SpendingInsights` |
+| Necessity ratio chart | `SpendingInsights` |
+| Payment method split | `SpendingInsights` |
+
+---
+
+## Phase 05 — Goals & Recurring
+
+### Key tasks
+
+| Task | Module |
+|---|---|
+| Goal definition form | `FinancialGoals` |
+| Goal progress tracker | `FinancialGoals` |
+| Recurring template CRUD | `RecurringTransactions` |
+| Recurring job (server cron) | `RecurringTransactions` |
+| Subscription entry | `SubscriptionTracker` |
+| Renewal alerts | `SubscriptionTracker` |
+
+---
+
+## Phase 06 — AI & Health
+
+### Key tasks
+
+| Task | Module |
+|---|---|
+| Health score formula | `FinancialHealth` |
+| Health dashboard | `FinancialHealth` |
+| AI prompt construction | `AIAdvisor` — aggregated data only, never raw rows |
+| AI response display | `AIAdvisor` |
+
+---
+
+## Testing strategy
+
+| Layer | Tool | Scope |
+|---|---|---|
+| Unit | Vitest | Zod schemas, paise conversion, date utils, outbox logic |
+| Component | Vitest + @testing-library/react | Form validation, conditional fields |
+| Integration | Vitest + Supabase local | DB constraints, RLS policies |
+| E2E | Playwright | Full login → enter transaction → verify dashboard flow |
+
+---
+
+## Definition of "done" per phase
+
+A phase is done when:
+1. All acceptance criteria checkboxes are checked.
+2. `pnpm build` passes with zero errors.
+3. `pnpm test` passes.
+4. Deployed to Vercel production and manually verified.
+5. `ANTIGRAVITY.md` updated with any new decisions.
+
+---
+
+*End of ARTH_BUILD_PLAN.md*

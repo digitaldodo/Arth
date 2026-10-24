@@ -1,0 +1,378 @@
+# Arth — Architecture Document
+
+> Version 0.1 — Phase 00 Baseline  
+> Last updated: 2026-10-25
+
+---
+
+## 1. System overview
+
+Arth is a single-user personal finance tracking Progressive Web App. The user manually enters income and expense transactions. There is no bank integration, no automatic import, and no multi-tenancy. Supabase PostgreSQL is the single authoritative database. Google Sheets is a read-only secondary copy kept in near-real-time sync. The app must remain functional offline (Phase 03+) with local-first storage that reconciles on reconnection.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        Browser                          │
+│  Next.js (React) — shadcn/ui — Tailwind CSS             │
+│  Zustand (UI state) ── Dexie.js IndexedDB (Phase 03+)  │
+└────────────┬────────────────────────┬───────────────────┘
+             │ HTTPS (anon key)       │ HTTPS (anon key)
+             ▼                        ▼
+┌────────────────────┐   ┌────────────────────────────────┐
+│  Next.js Server    │   │        Supabase                │
+│  Route Handlers /  │──▶│  PostgreSQL  │  Auth (RLS)     │
+│  Server Actions    │   │  Realtime    │  Storage         │
+│                    │   └────────────────────────────────┘
+│  service-role key  │
+│  Google SA creds   │──▶  Google Sheets API v4
+└────────────────────┘
+         │
+         ▼
+   Vercel Edge / Node.js runtime
+```
+
+---
+
+## 2. Data model
+
+### 2.1 Design principles
+
+- Amounts stored as **`BIGINT` paise** (1 INR = 100 paise). Never `DECIMAL` or `FLOAT`.
+- All timestamps as **`TIMESTAMPTZ`** in UTC; converted to Asia/Kolkata at render time.
+- Transaction primary keys are **UUID v7** (time-ordered) generated client-side for idempotent offline sync.
+- Categories are soft-deleted (never hard-deleted) to preserve historical integrity.
+- Row-Level Security (RLS) enabled on every table; policies gate on `auth.uid()`.
+
+### 2.2 Schema (authoritative — migrations enforce this)
+
+```sql
+-- ─── users (managed by Supabase Auth) ──────────────────────────────────────
+-- auth.users is provided by Supabase; we extend it with a profile.
+
+CREATE TABLE public.profiles (
+  id           UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name TEXT,
+  timezone     TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+  currency     TEXT NOT NULL DEFAULT 'INR',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ─── categories ─────────────────────────────────────────────────────────────
+CREATE TABLE public.categories (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  icon         TEXT,                      -- emoji or icon name
+  color        TEXT,                      -- hex color
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  is_default   BOOLEAN NOT NULL DEFAULT FALSE,
+  is_archived  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, name)
+);
+
+-- ─── transactions ────────────────────────────────────────────────────────────
+CREATE TYPE public.transaction_type    AS ENUM ('income', 'expense');
+CREATE TYPE public.payment_method      AS ENUM ('online', 'cash');
+CREATE TYPE public.necessity_class     AS ENUM ('essential', 'optional', 'luxury');
+
+CREATE TABLE public.transactions (
+  id                 UUID PRIMARY KEY,            -- UUID v7, client-generated
+  user_id            UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  type               public.transaction_type   NOT NULL,
+  amount_paise       BIGINT NOT NULL CHECK (amount_paise > 0),
+  category_id        UUID REFERENCES public.categories(id) ON DELETE SET NULL,
+  payment_method     public.payment_method     NOT NULL,
+  necessity          public.necessity_class,       -- required when type = 'expense'
+  note               TEXT,
+  transaction_date   DATE NOT NULL,               -- date in Asia/Kolkata
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at         TIMESTAMPTZ,                 -- soft delete
+  -- outbox tracking
+  sheets_synced_at   TIMESTAMPTZ,
+  CONSTRAINT expense_needs_necessity CHECK (
+    type = 'income' OR necessity IS NOT NULL
+  )
+);
+
+CREATE INDEX idx_transactions_user_date
+  ON public.transactions (user_id, transaction_date DESC)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX idx_transactions_outbox
+  ON public.transactions (user_id, sheets_synced_at)
+  WHERE deleted_at IS NULL AND sheets_synced_at IS NULL;
+
+-- ─── outbox_events ───────────────────────────────────────────────────────────
+CREATE TYPE public.outbox_event_type AS ENUM ('upsert', 'delete');
+CREATE TYPE public.outbox_status     AS ENUM ('pending', 'delivered', 'failed');
+
+CREATE TABLE public.outbox_events (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  entity_type      TEXT NOT NULL DEFAULT 'transaction',
+  entity_id        UUID NOT NULL,
+  event_type       public.outbox_event_type NOT NULL,
+  payload          JSONB NOT NULL,
+  status           public.outbox_status NOT NULL DEFAULT 'pending',
+  attempts         INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at  TIMESTAMPTZ,
+  delivered_at     TIMESTAMPTZ,
+  error_message    TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_outbox_pending
+  ON public.outbox_events (created_at ASC)
+  WHERE status = 'pending';
+```
+
+### 2.3 Constraints enforced
+
+| Rule | Mechanism |
+|---|---|
+| Expense must have necessity | `CHECK` constraint on `transactions` |
+| Amounts always positive | `CHECK (amount_paise > 0)` |
+| Unique category names per user | `UNIQUE (user_id, name)` |
+| User can only read/write own rows | RLS policies on all tables |
+| Soft deletes only | `deleted_at` column; `WHERE deleted_at IS NULL` in all queries |
+
+---
+
+## 3. Authentication
+
+- **Provider**: Supabase Auth
+- **Methods**: Google OAuth (primary), Magic Link email (fallback)
+- **Session**: HTTP-only cookie managed by `@supabase/ssr`
+- **Client**: `createBrowserClient` for browser, `createServerClient` for Server Components and Route Handlers
+- **Profile creation**: Database trigger on `auth.users` insert creates a matching `public.profiles` row
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name');
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+---
+
+## 4. Row-Level Security policies
+
+```sql
+-- profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own profile"
+  ON public.profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile"
+  ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+-- categories
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users CRUD own categories"
+  ON public.categories FOR ALL USING (auth.uid() = user_id);
+
+-- transactions
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users CRUD own transactions"
+  ON public.transactions FOR ALL USING (auth.uid() = user_id);
+
+-- outbox_events (server-role only for writes; user can read own)
+ALTER TABLE public.outbox_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own outbox"
+  ON public.outbox_events FOR SELECT USING (auth.uid() = user_id);
+-- Writes to outbox_events are performed by server via service-role key only
+```
+
+---
+
+## 5. Google Sheets synchronization strategy
+
+### 5.1 Architecture
+
+The outbox pattern decouples transaction writes from Sheets delivery.
+
+```
+Transaction write (client)
+  → INSERT transactions + INSERT outbox_events (same DB transaction)
+  → API Route Handler /api/sync/sheets (server, service-role)
+      → reads pending outbox_events
+      → calls Google Sheets API v4
+      → marks rows delivered / failed
+```
+
+### 5.2 Sheet structure (one sheet per month, or single flat sheet)
+
+| Column | Value |
+|---|---|
+| A | Transaction ID (UUID) |
+| B | Date (YYYY-MM-DD) |
+| C | Type (Income / Expense) |
+| D | Category |
+| E | Amount (INR, decimal display only) |
+| F | Payment Method |
+| G | Necessity |
+| H | Note |
+| I | Synced At |
+
+### 5.3 Conflict resolution
+
+- Supabase PostgreSQL is **always authoritative**.
+- Sheets is **write-once append + update**; a full reconciliation job (pg_cron or Vercel Cron) re-writes all rows weekly.
+- On conflict: Supabase wins. Stale Sheets rows are overwritten.
+
+### 5.4 Failure handling
+
+| Scenario | Handling |
+|---|---|
+| Sheets API rate-limit | Exponential backoff, max 5 attempts, then `status = 'failed'` |
+| Sheets API down | outbox_event stays `pending`; retried by cron |
+| Network interruption | Same as above |
+| Delivered but DB not updated | Idempotent upsert in Sheets (UUID as row key) |
+
+---
+
+## 6. Offline and PWA strategy (Phase 03)
+
+> **Not implemented in Phase 01. Documented here to prevent conflicting design decisions.**
+
+### 6.1 Service worker
+
+- Use Workbox (via `next-pwa` or custom `sw.js`) for static asset caching.
+- Cache-first for UI shell; network-first for data.
+
+### 6.2 IndexedDB (Dexie.js)
+
+```typescript
+// src/lib/db.ts  (Phase 03)
+const db = new Dexie('arth');
+db.version(1).stores({
+  transactions: '++id, type, transaction_date, synced',
+  outbox:       '++id, created_at, status',
+});
+```
+
+### 6.3 Sync reconciliation
+
+- On reconnect: flush local outbox to server Route Handler.
+- Server deduplicates using UUID v7 (idempotent upsert).
+- Conflict resolution: `updated_at` timestamp wins; server wins on tie.
+
+---
+
+## 7. Backup and export strategy
+
+### 7.1 Data export (Phase 02)
+
+- `ImportExport` module exposes:
+  - **CSV export**: all transactions with human-readable columns
+  - **JSON export**: full structured export including categories
+  - Triggered from Settings page; generated server-side as a streaming download
+
+### 7.2 Database backup
+
+- Supabase automatic daily backups (built-in, free tier: 7 days; Pro: 30 days)
+- Supplementary: weekly pg_dump via Vercel Cron → encrypted storage in Supabase Storage bucket `backups/`
+- Google Sheets acts as a human-readable secondary copy
+
+### 7.3 Recovery
+
+- Restore from Supabase backup dashboard (point-in-time on Pro)
+- Or restore from JSON export via `ImportExport` module
+
+---
+
+## 8. Transaction ID strategy
+
+```
+UUID v7 structure:
+  [48-bit unix_ts_ms][4-bit version=7][12-bit rand_a][2-bit variant][62-bit rand_b]
+
+Generation: client-side using `uuid` npm package (v7 method)
+Properties:
+  - Time-ordered → natural sort without secondary index
+  - Globally unique → safe for offline generation without coordination
+  - Idempotent → re-submitting the same UUID is a safe upsert (no duplicates)
+```
+
+---
+
+## 9. Calculation determinism
+
+- **All monetary arithmetic** is performed in paise (integers). No floating-point ever touches money values.
+- Totals and summaries are computed server-side in SQL (`SUM(amount_paise)`) or in pure integer arithmetic on the server.
+- Client displays amounts by dividing by 100 with `Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' })`.
+- Date defaults use `date-fns-tz` with explicit `Asia/Kolkata` timezone — never `new Date().toLocaleDateString()`.
+
+---
+
+## 10. Architectural risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **Offline data loss** | High | UUID v7 client-generated IDs + outbox pattern in IndexedDB (Phase 03) |
+| **Duplicate transactions** | High | UUID v7 primary key + server upsert (`ON CONFLICT DO UPDATE`) |
+| **Sheets sync failure** | Medium | Outbox with retry + weekly full reconciliation cron |
+| **Auth token expiry during long session** | Medium | `@supabase/ssr` automatic token refresh |
+| **RLS misconfiguration** | High | All tables have RLS from day 1; integration tests verify isolation |
+| **Float arithmetic errors** | High | Paise-as-integer mandate enforced in Zod schemas and DB constraints |
+| **Migration drift** | Medium | Append-only migration files; Supabase migration tracking |
+| **Service account key exposure** | Critical | Server-only env vars; never in client bundle; gitignored |
+| **Google API quota exhaustion** | Low | Batched writes; exponential backoff; weekly cron instead of per-tx polling |
+| **Category deletion breaking history** | Medium | Categories are soft-archived; `ON DELETE SET NULL` on FK |
+
+---
+
+## 11. Future modules — specification stubs
+
+> These modules are **documented but not implemented** until their assigned phase.
+
+### `BudgetManager`
+Set monthly/weekly spending budgets per category. Track actual vs budget. Alert on threshold breach (80%, 100%).
+
+### `SpendingInsights`
+Aggregate analytics: monthly trends, category breakdown, payment method split, necessity ratio charts. Read-only computation layer.
+
+### `FinancialGoals`
+Define saving targets with deadlines. Automatically compute required monthly contribution. Link to income transactions.
+
+### `RecurringTransactions`
+Template-based recurring entries. Generates transaction entries on schedule. Idempotency key prevents double-generation.
+
+### `SubscriptionTracker`
+Special-case recurring expense with renewal date, billing cycle, and cancellation tracking.
+
+### `FinancialHealth`
+Composite score from savings rate, expense ratio, necessity vs luxury split, and budget adherence.
+
+### `AIAdvisor`
+LLM-powered natural-language spend analysis. Receives read-only aggregated (not raw) data. Suggestions are advisory only.
+
+### `ImportExport`
+CSV and JSON export. JSON import for recovery. No bulk bank-statement import in v1.
+
+---
+
+## 12. External setup requirements
+
+Before Phase 01 can be deployed, the following must be provisioned manually:
+
+1. **Supabase project**: Create project at supabase.com; copy URL and anon key and service-role key into `.env.local`.
+2. **Supabase Auth**: Enable Google OAuth provider; configure redirect URL.
+3. **Google Cloud project**: Create project; enable Google Sheets API; create service account; download JSON key; extract email and private key into `.env.local`.
+4. **Google Sheet**: Create spreadsheet; share with service account email (Editor role); copy spreadsheet ID into `.env.local`.
+5. **Vercel project**: Connect repository; add all env vars in Vercel dashboard.
+6. **Vercel Cron**: Configure in `vercel.json` for outbox drain and weekly reconciliation (Phase 02+).
+
+---
+
+*End of ARTH_ARCHITECTURE.md*
