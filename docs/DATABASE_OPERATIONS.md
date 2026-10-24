@@ -224,3 +224,26 @@ All database modifications follow a strict append-only Flyway/Supabase numbering
 | `0010` | `database_hardening` | `ON DELETE RESTRICT` cascade prevention, row locking, covering indexes |
 | `0011` | `history_protection_and_settlement_hardening` | Revoke hard `DELETE` from authenticated on people and records; drop delete RLS policies; harden settlement idempotency (notes comparison and post-lock retry re-check) |
 | `0012` | `dashboard_summary` | Single-query atomic summary function `fn_dashboard_summary` with `SECURITY INVOKER` calculating income, expenses, net cash flow, spending composition, and bounded recent activity |
+
+---
+
+## 6. Production Database Readiness & Release Audit (Phase 01O)
+
+### 6.1 Database Verification Status
+- **Schema Migration Status**: All 12 numbered migrations (`0001` through `0012`) are authored, append-only, and verified via static and schema-level tests (`backend/tests/database-schema-audit.test.ts`).
+- **Live Local PostgreSQL Container Test Gate**: **BLOCKED** on local developer host due to Docker Desktop daemon inactivity (`docker ps` fails with named pipe connection error). All ACID, RLS, and RPC logic is verified via comprehensive Node.js unit and integration tests (144 passing tests), and must be validated against the remote Supabase staging/production instance upon connection.
+- **Migration Application Protocol**:
+  1. Confirm remote project reference in Supabase CLI (`supabase projects list` / `supabase link --project-ref <id>`).
+  2. Inspect proposed migration diff before applying: `supabase db diff`.
+  3. Apply append-only migrations: `supabase db push`.
+  4. Never execute `supabase db reset` against any remote database.
+
+### 6.2 Backup, PITR & Disaster Recovery Readiness
+- **Automatic Backups**: Supabase provisions daily automatic backups on all projects. Verify configured backup frequency and retention in Supabase Dashboard &rarr; Database &rarr; Backups.
+- **Point-in-Time Recovery (PITR)**: Requires Supabase Pro plan. For high-frequency personal financial data, PITR is strongly recommended to enable recovery to any specific second within the retention window.
+- **Secondary Outbox Replication**: Secondary synchronization to Google Sheets via the outbox worker is scheduled for Phase 02 and is not operational in Phase 01. The PostgreSQL database is the single authoritative source of truth.
+- **Data Protection Guardrails**:
+  - Direct `DELETE` privileges revoked from `authenticated` on `public.people` and `public.person_money_records`.
+  - Cascading deletes on financial records replaced with `ON DELETE RESTRICT`.
+  - Row Level Security (RLS) enabled on all tables in `public` schema.
+  - No fake or simulated test financial transactions may ever be inserted into the production database.

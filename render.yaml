@@ -1,0 +1,33 @@
+# ==============================================================================
+# Render Blueprint Specification for Arth Fastify API (@arth/backend)
+# ==============================================================================
+# Managed Node.js Web Service running the long-lived Fastify server.
+# Monorepo build installs from repository root to resolve @arth/contracts.
+# NEVER commit secrets or production tokens to this file.
+# ==============================================================================
+
+services:
+  - type: web
+    name: arth-backend
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build
+    startCommand: pnpm --filter @arth/backend start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: JWT_AUDIENCE
+        value: authenticated
+      # Configure in Render Dashboard (secrets must never be in source control)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false

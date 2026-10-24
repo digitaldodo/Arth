@@ -54,7 +54,12 @@ export const dashboardRoutes: FastifyPluginAsync<DashboardRouteOptions> = async 
             message: err.message,
           });
         }
-        throw err;
+        request.log.error(err, 'Failed to retrieve dashboard summary');
+        return reply.code(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while retrieving the dashboard summary',
+        });
       }
     }
   );

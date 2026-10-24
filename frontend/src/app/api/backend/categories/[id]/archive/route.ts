@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-const BACKEND_BASE_URL =
-  process.env.INTERNAL_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
+import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
 
 /**
  * BFF proxy PATCH /api/backend/categories/[id]/archive -> Fastify PATCH /api/v1/categories/:id/archive
@@ -31,10 +27,11 @@ export async function PATCH(
       );
     }
 
+    const backendBaseUrl = getBackendBaseUrl();
     const { id } = await params;
     const body = await req.json();
 
-    const backendRes = await fetch(`${BACKEND_BASE_URL}/api/v1/categories/${id}/archive`, {
+    const backendRes = await fetch(`${backendBaseUrl}/api/v1/categories/${id}/archive`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -48,14 +45,6 @@ export async function PATCH(
     const data = await backendRes.json();
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
-    );
+    return safeBackendErrorResponse(err, 'PATCH /api/backend/categories/[id]/archive');
   }
 }

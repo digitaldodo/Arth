@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
 
 /**
  * Narrowly scoped, authenticated BFF proxy endpoint for the identity route (GET /api/v1/auth/me).
@@ -25,10 +26,7 @@ export async function GET() {
       );
     }
 
-    const backendBaseUrl =
-      process.env.INTERNAL_API_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      'http://localhost:3001';
+    const backendBaseUrl = getBackendBaseUrl();
 
     const backendResponse = await fetch(`${backendBaseUrl}/api/v1/auth/me`, {
       method: 'GET',
@@ -45,14 +43,6 @@ export async function GET() {
       status: backendResponse.status,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
-    );
+    return safeBackendErrorResponse(err, 'GET /api/backend/auth/me');
   }
 }

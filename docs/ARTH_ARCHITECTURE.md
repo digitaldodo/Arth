@@ -592,16 +592,73 @@ CSV and JSON export. JSON import for recovery. No bulk bank-statement import in 
 
 ---
 
-## 12. External setup requirements
+## 12. Deployment Architecture & External Setup Requirements
 
-Before Phase 01 can be deployed, the following must be provisioned manually:
+### 12.1 Phase 01 Production Deployment Architecture
 
-1. **Supabase project**: Create project at supabase.com; copy URL and anon key and service-role key into `.env.local`.
-2. **Supabase Auth**: Enable Google OAuth provider; configure redirect URL.
-3. **Google Cloud project**: Create project; enable Google Sheets API; create service account; download JSON key; extract email and private key into `.env.local`.
-4. **Google Sheet**: Create spreadsheet; share with service account email (Editor role); copy spreadsheet ID into `.env.local`.
-5. **Vercel project**: Connect repository; add all env vars in Vercel dashboard.
-6. **Vercel Cron**: Configure in `vercel.json` for outbox drain and weekly reconciliation (Phase 02+).
+```
+                                  ┌────────────────────────┐
+                                  │      Client Device     │
+                                  │ (Browser / Desktop PWA)│
+                                  └───────────┬────────────┘
+                                              │ HTTPS
+                                              ▼
+                                  ┌────────────────────────┐
+                                  │  Next.js 16 Frontend   │
+                                  │   (Vercel Serverless)  │
+                                  │   • App Router Pages   │
+                                  │   • BFF Proxy Routes   │
+                                  └─────┬────────────┬─────┘
+                                        │            │
+                     Server Bearer JWT  │            │ Supabase SSR Cookie Auth
+                                        │            │
+                                        ▼            ▼
+┌────────────────────────┐        ┌─────────────┐  ┌─────────────────────────┐
+│  Fastify API Backend   │───────▶│ PostgreSQL  │◀─┤      Supabase Auth      │
+│ (Render Web Service)   │ PostgREST│ (Supabase)│  │ (Google OAuth & JWTs)   │
+│ • Long-lived Node.js   │  RPC   │ • 12 Migs   │  └─────────────────────────┘
+│ • Authoritative Engine │        │ • Strict RLS│
+└────────────────────────┘        └─────────────┘
+```
+
+### 12.2 Production Setup Requirements
+
+1. **Supabase Project**:
+   - Create/link project at supabase.com.
+   - Apply numbered migrations `0001` through `0012` via `supabase db push`.
+   - Never run `supabase db reset` on remote environments.
+   - Configure automatic daily backups (and PITR on Pro).
+2. **Supabase Auth (Google OAuth & Site URL)**:
+   - Configure Site URL: `https://<your-frontend-domain>` (e.g. `https://arth.vercel.app`).
+   - Configure Redirect URLs: `https://<your-frontend-domain>/auth/callback`.
+   - In Google Cloud Console OAuth Credentials: set Authorized Redirect URI to `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
+3. **Backend Service (Render Managed Node.js Web Service)**:
+   - Connect repository `https://github.com/digitaldodo/Arth.git` to Render using Blueprint `render.yaml` or Web Service.
+   - Set Build Command: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`.
+   - Set Start Command: `pnpm --filter @arth/backend start`.
+   - Health Check Path: `/health`.
+   - Configure Environment Variables in Render Dashboard:
+     - `NODE_ENV=production`
+     - `HOST=0.0.0.0`
+     - `SUPABASE_URL=https://<your-project-ref>.supabase.co`
+     - `SUPABASE_ANON_KEY=<anon-key>`
+     - `CORS_ORIGIN=https://<your-frontend-domain>`
+4. **Frontend Service (Vercel Next.js Deployment)**:
+   - Connect repository `https://github.com/digitaldodo/Arth.git` to Vercel using `vercel.json`.
+   - Root Directory: `.` (repository root).
+   - Build Command: `pnpm build:frontend` (builds `@arth/contracts` then `@arth/frontend`).
+   - Output Directory: `frontend/.next`.
+   - Configure Environment Variables in Vercel Dashboard:
+     - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
+     - `NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co`
+     - `NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>`
+     - `INTERNAL_API_URL=https://<your-render-backend-url>` (e.g. `https://arth-backend.onrender.com`)
+
+### 12.3 Subsequent Phases Setup (Deferred to Phase 02+)
+
+1. **Google Cloud Service Account**: Enable Google Sheets API; create service account and JSON key for the background outbox worker.
+2. **Google Sheet Spreadsheet**: Create spreadsheet; share with service account email; configure ID.
+3. **Outbox Worker / Cron**: Configure background processing worker.
 
 ---
 

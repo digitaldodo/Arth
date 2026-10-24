@@ -27,7 +27,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "Arth — Personal Finance Tracker",
   description:
-    "A fast, local-first personal finance tracker with dual-write synchronization and ledger clarity.",
+    "Fast, disciplined personal finance tracker with exact integer-paise calculations, PostgreSQL authoritative storage, and baseline installability.",
   applicationName: "Arth",
   appleWebApp: {
     capable: true,

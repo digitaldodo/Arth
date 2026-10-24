@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-const BACKEND_BASE_URL =
-  process.env.INTERNAL_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
+import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
 
 /**
  * BFF proxy GET /api/backend/dashboard -> Fastify GET /api/v1/dashboard/summary
@@ -50,7 +46,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const targetUrl = `${BACKEND_BASE_URL}/api/v1/dashboard/summary?${queryString}`;
+    const backendBaseUrl = getBackendBaseUrl();
+    const targetUrl = `${backendBaseUrl}/api/v1/dashboard/summary?${queryString}`;
 
     const backendRes = await fetch(targetUrl, {
       method: 'GET',
@@ -64,14 +61,6 @@ export async function GET(req: NextRequest) {
     const data = await backendRes.json();
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
-    );
+    return safeBackendErrorResponse(err, 'GET /api/backend/dashboard');
   }
 }

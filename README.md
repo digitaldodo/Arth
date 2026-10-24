@@ -1,6 +1,6 @@
 # Arth (अर्थ) — Modular Monorepo Architecture
 
-Arth is a fast, local-first personal finance tracker engineered for high-velocity transaction capture (< 5 seconds), dual-write synchronization to Google Sheets, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**).
+Arth is a fast, online personal finance tracker engineered for manual transaction capture, authoritative PostgreSQL persistence with exact integer-paise calculations, baseline PWA installability, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**). Asynchronous dual-write synchronization to Google Sheets and offline-first capabilities are planned for subsequent phases.
 
 The repository is structured as a **modular monorepo** with strict physical boundaries between frontend presentation, backend business logic, shared contracts, and database migrations.
 
@@ -10,10 +10,11 @@ The repository is structured as a **modular monorepo** with strict physical boun
 
 - **Separation of Concerns**: Pure Next.js frontend with zero direct database connections; Fastify backend service authoritatively enforces validation and business logic.
 - **Shared API Contracts**: Type-safe request/response DTOs defined in `@arth/contracts` consumed by both applications.
+- **Authoritative Database**: PostgreSQL (via Supabase) is the single authoritative source of truth for financial storage.
 - **Amounts in Integer Paise**: Financial values are stored as integers representing paise (1 INR = 100 paise) as `BIGINT` in PostgreSQL to prevent floating-point rounding errors.
 - **Deterministic Timezones**: Stored as UTC `TIMESTAMPTZ` in Supabase; formatted in `Asia/Kolkata` (IST) for user interfaces.
 - **Ledger Minimal Design System**: High-contrast, typography-driven financial clarity featuring warm archival paper in light mode (`#FBFBF9`) and restrained obsidian in dark mode (`#0C0A09`).
-- **Outbox Pattern**: Transaction mutations write to an authoritative `outbox_events` table before background asynchronous synchronization to Google Sheets.
+- **Outbox Pattern**: Transaction mutations write to an authoritative PostgreSQL `outbox_events` table for planned asynchronous background synchronization.
 - **Two-Layer Security**: Backend API authentication/authorization + PostgreSQL Row Level Security (RLS) enforcement.
 
 ---
@@ -203,9 +204,45 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 | `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
 | `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
 | `pnpm lint` | Runs ESLint across the frontend codebase |
-| `pnpm test` | Runs all automated test suites across backend (99 tests) and frontend (33 tests) — 132 tests passing |
+| `pnpm test` | Runs all automated test suites across backend (101 tests) and frontend (43 tests) — 144 tests passing |
 | `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
 | `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
+
+---
+
+## Production Deployment & Hosting
+
+Arth is designed for cost-effective, high-reliability deployment using managed platforms:
+
+### 1. Fastify Backend &rarr; Render (Managed Node.js Web Service)
+- **Blueprint**: Root [`render.yaml`](./render.yaml) defines the service specification.
+- **Build Command**: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`
+- **Start Command**: `pnpm --filter @arth/backend start`
+- **Health Check Path**: `/health`
+- **Required Environment Variables**:
+  - `NODE_ENV=production`
+  - `HOST=0.0.0.0`
+  - `SUPABASE_URL=https://<your-project-ref>.supabase.co`
+  - `SUPABASE_ANON_KEY=<your-anon-key>`
+  - `CORS_ORIGIN=https://<your-frontend-domain>`
+
+### 2. Next.js Frontend &rarr; Vercel (Next.js Platform)
+- **Configuration**: Root [`vercel.json`](./vercel.json) configures monorepo build delegation.
+- **Root Directory**: `.` (monorepo root)
+- **Build Command**: `pnpm build:frontend` (automatically compiles `@arth/contracts` then `@arth/frontend`)
+- **Output Directory**: `frontend/.next`
+- **Required Environment Variables**:
+  - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
+  - `NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>`
+  - `INTERNAL_API_URL=https://<your-render-backend-url>` (e.g. `https://arth-backend.onrender.com`)
+
+### 3. Supabase Database & Auth (PostgreSQL)
+- **Migrations**: 12 numbered migrations (`0001` through `0012`) applied via `supabase db push`.
+- **Site URL & Redirects**:
+  - Site URL: `https://<your-frontend-domain>`
+  - Redirect URLs: `https://<your-frontend-domain>/auth/callback`
+  - Google Cloud Console Authorized Redirect URI: `https://<supabase-project-ref>.supabase.co/auth/v1/callback`
 
 ---
 
@@ -223,4 +260,5 @@ Arth uses a defense-in-depth, zero-trust session architecture:
 - **Phase 01L**: Database Reliability, ACID & CRUD Performance Hardening (Completed)
 - **Phase 01L.1**: Close Database Reliability Gaps (Completed)
 - **Phase 01M**: Real Data Dashboard (Completed)
-- **Phase 01N**: PWA manifest & baseline installability (Next)
+- **Phase 01N**: PWA Manifest & Baseline Installability (Completed)
+- **Phase 01O**: Production Deployment & Release Readiness (Code & Config Ready / Dashboard Provisioning Pending)

@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-const BACKEND_BASE_URL =
-  process.env.INTERNAL_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
+import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
 
 /**
  * BFF proxy GET /api/backend/people/[id] -> Fastify GET /api/v1/people/:id
@@ -31,9 +27,10 @@ export async function GET(
       );
     }
 
+    const backendBaseUrl = getBackendBaseUrl();
     const { id } = await params;
 
-    const backendRes = await fetch(`${BACKEND_BASE_URL}/api/v1/people/${encodeURIComponent(id)}`, {
+    const backendRes = await fetch(`${backendBaseUrl}/api/v1/people/${encodeURIComponent(id)}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -45,15 +42,7 @@ export async function GET(
     const data = await backendRes.json();
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
-    );
+    return safeBackendErrorResponse(err, 'GET /api/backend/people/[id]');
   }
 }
 
@@ -82,10 +71,11 @@ export async function PATCH(
       );
     }
 
+    const backendBaseUrl = getBackendBaseUrl();
     const { id } = await params;
     const body = await req.json();
 
-    const backendRes = await fetch(`${BACKEND_BASE_URL}/api/v1/people/${encodeURIComponent(id)}`, {
+    const backendRes = await fetch(`${backendBaseUrl}/api/v1/people/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${session.access_token}`,
@@ -99,14 +89,6 @@ export async function PATCH(
     const data = await backendRes.json();
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
-    );
+    return safeBackendErrorResponse(err, 'PATCH /api/backend/people/[id]');
   }
 }

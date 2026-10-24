@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-const BACKEND_BASE_URL =
-  process.env.INTERNAL_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
+import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
 
 /**
  * BFF proxy POST /api/backend/people/records/[recordId]/settlements -> Fastify POST /api/v1/people/records/:recordId/settlements
@@ -31,11 +27,12 @@ export async function POST(
       );
     }
 
+    const backendBaseUrl = getBackendBaseUrl();
     const { recordId } = await params;
     const body = await req.json();
 
     const backendRes = await fetch(
-      `${BACKEND_BASE_URL}/api/v1/people/records/${encodeURIComponent(recordId)}/settlements`,
+      `${backendBaseUrl}/api/v1/people/records/${encodeURIComponent(recordId)}/settlements`,
       {
         method: 'POST',
         headers: {
@@ -51,14 +48,9 @@ export async function POST(
     const data = await backendRes.json();
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Backend proxy error';
-    return NextResponse.json(
-      {
-        statusCode: 502,
-        error: 'Bad Gateway',
-        message,
-      },
-      { status: 502 }
+    return safeBackendErrorResponse(
+      err,
+      'POST /api/backend/people/records/[recordId]/settlements'
     );
   }
 }

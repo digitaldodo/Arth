@@ -294,21 +294,28 @@
 - [x] Strict Phase 01N scope boundaries preserved: zero service worker registration, zero offline caching, zero Dexie/IndexedDB usage
 - [x] 100% of workspace tests pass (138/138 tests across 15 test suites)
 
-### 01-O · Deployment
+### 01-O · Production Deployment & Release Readiness ⚠️ (Code & Config Ready / Awaiting Dashboard Provisioning)
 
-| Task | Details |
-|---|---|
-| Vercel project | Connect GitHub repo |
-| Environment variables | Add all vars from `.env.local` in Vercel dashboard |
-| Preview deployments | Enabled per PR / push |
-| Production domain | Configure custom domain (optional) |
-| Vercel Analytics | Enable (free) |
+| Task | Details | Status |
+|---|---|---|
+| Product Claims Audit | Cleaned all inaccurate product claims in `frontend/src/app/layout.tsx` and `README.md`: eliminated claims of local-first or operational dual-write sync; documented PostgreSQL as authoritative financial database and Phase 01 as an online personal finance tracker with baseline PWA installability. | Complete ✅ |
+| Centralized Server Config & Safe Errors | Implemented `frontend/src/lib/server-config.ts` (`getBackendBaseUrl`, `safeBackendErrorResponse`). In production, strictly requires `INTERNAL_API_URL` and fails fast rather than silently falling back to localhost; sanitizes gateway error responses to prevent leaking URLs, credentials, network addresses, or stack traces. Updated all 11 BFF route handlers. Verified via 6 dedicated unit tests. | Complete ✅ |
+| Backend Monorepo Build & Render Blueprint | Authored `render.yaml` specification for managed Node.js web service on Render. Set build command: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`, start command: `pnpm --filter @arth/backend start`, health check: `GET /health`. Non-secret environment template provided. | Complete ✅ |
+| Frontend Vercel Monorepo Configuration | Authored `vercel.json` with `buildCommand: "pnpm build:frontend"` and `outputDirectory: "frontend/.next"`. Updated root `package.json` so `build:frontend` and `build:backend` automatically compile `@arth/contracts` before building downstream packages. | Complete ✅ |
+| Environment Template Standardization | Updated `.env.example` with clear, explicit demarcation between Frontend (Vercel), Backend (Render), and deferred Phase 02 background worker requirements. | Complete ✅ |
+| Quality Gates Verification | Verified 100% of workspace quality gates: `pnpm lint` (0 errors), `pnpm typecheck` (0 errors), `pnpm test` (144/144 tests passing across 16 test suites), `pnpm build` (clean Turbopack Next.js and Fastify tsc production builds). | Complete ✅ |
+| Remote Hosting & Live Database Status | External cloud dashboard linking (Vercel project linking, Render web service deployment, Supabase remote migration push) requires owner account credentials/linking. Docker daemon remains inactive on local host; live PostgreSQL pgTAP container test gate is recorded as **BLOCKED**. | Documented ⚠️ |
 
 **Acceptance criteria**:
-- [ ] `pnpm build` succeeds with zero TypeScript errors
-- [ ] `pnpm lint` passes
-- [ ] Vitest unit tests pass (`pnpm test`)
-- [ ] App is deployed and reachable on Vercel
+- [x] Product claims reflect true current capabilities (PostgreSQL authoritative storage, manual online transaction capture, baseline PWA installability)
+- [x] Centralized server configuration utility enforces `INTERNAL_API_URL` in production without silent localhost fallbacks
+- [x] All 11 Next.js BFF proxy routes sanitize gateway errors and prevent token/credential/network leakage
+- [x] Fastify dashboard routes catch unexpected errors, log securely, and return safe 500 error responses
+- [x] `render.yaml` blueprint created without secrets, binding to `0.0.0.0`, using `main` branch and `/health` health check
+- [x] `vercel.json` and root monorepo scripts build `@arth/contracts` cleanly before compiling `@arth/frontend`
+- [x] `.env.example` documents exact variable names and target services without secret values
+- [x] 100% of workspace quality gates pass (144 tests, clean lint, clean typecheck, clean production builds)
+- [x] Operational runbook and remaining owner deployment steps fully documented in `docs/DATABASE_OPERATIONS.md` and release reports
 
 ---
 
