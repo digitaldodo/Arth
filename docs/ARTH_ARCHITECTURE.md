@@ -634,7 +634,7 @@ CSV and JSON export. JSON import for recovery. No bulk bank-statement import in 
    - In Google Cloud Console OAuth Credentials: set Authorized Redirect URI to `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
 3. **Backend Service (Render Managed Node.js Web Service)**:
    - Connect repository `https://github.com/digitaldodo/Arth.git` to Render using Blueprint `render.yaml` or Web Service.
-   - Set Build Command: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`.
+   - Set Build Command: `pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`.
    - Set Start Command: `pnpm --filter @arth/backend start`.
    - Health Check Path: `/health`.
    - Configure Environment Variables in Render Dashboard:

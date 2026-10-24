@@ -12,7 +12,7 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build
     startCommand: pnpm --filter @arth/backend start
     healthCheckPath: /health
     envVars:

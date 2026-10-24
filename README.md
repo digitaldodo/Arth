@@ -216,7 +216,7 @@ Arth is designed for cost-effective, high-reliability deployment using managed p
 
 ### 1. Fastify Backend &rarr; Render (Managed Node.js Web Service)
 - **Blueprint**: Root [`render.yaml`](./render.yaml) defines the service specification.
-- **Build Command**: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`
+- **Build Command**: `pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`
 - **Start Command**: `pnpm --filter @arth/backend start`
 - **Health Check Path**: `/health`
 - **Required Environment Variables**:
