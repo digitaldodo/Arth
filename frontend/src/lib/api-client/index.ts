@@ -26,6 +26,8 @@ import type {
   CreatePersonRecordResponse,
   RecordSettlementRequest,
   RecordSettlementResponse,
+  DashboardSummaryQuery,
+  DashboardSummaryResponse,
 } from '@arth/contracts';
 
 const API_BASE_URL =
@@ -457,6 +459,36 @@ export async function recordSettlement(
     const error = new Error(data.message || `Failed to record settlement (${response.status})`) as Error & {
       statusCode?: number;
     };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Fetches the aggregated dashboard financial summary for the specified date range.
+ */
+export async function fetchDashboardSummary(
+  query: DashboardSummaryQuery
+): Promise<DashboardSummaryResponse> {
+  const params = new URLSearchParams({
+    start_date: query.start_date,
+    end_date: query.end_date,
+  });
+
+  const response = await fetch(`/api/backend/dashboard?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || `Failed to fetch dashboard summary (${response.status})`
+    ) as Error & { statusCode?: number };
     error.statusCode = response.status;
     throw error;
   }

@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 11 numbered migration files exist in sequential order', () => {
+  test('All 12 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -21,7 +21,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0008_category_reorder.sql',
       '0009_people_tracker.sql',
       '0010_database_hardening.sql',
-      '0011_history_protection_and_settlement_hardening.sql'
+      '0011_history_protection_and_settlement_hardening.sql',
+      '0012_dashboard_summary.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -129,5 +130,19 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) FROM PUBLIC;'), 'Revoke from PUBLIC');
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) FROM anon;'), 'Revoke from anon');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_record_person_settlement(UUID, UUID, BIGINT, DATE, TEXT) TO authenticated;'), 'Grant only to authenticated');
+  });
+
+  test('0012_dashboard_summary.sql enforces SECURITY INVOKER, date range validation, and authenticated-only grant', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0012_dashboard_summary.sql'), 'utf-8');
+    assert.ok(sql.includes('fn_dashboard_summary'), 'Dashboard summary function must exist');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Function must execute with caller permissions for RLS compliance');
+    assert.ok(sql.includes('SET search_path = public, auth'), 'Fixed search_path must be configured');
+    assert.ok(sql.includes('p_start_date > p_end_date'), 'Reversed date range must be rejected');
+    assert.ok(sql.includes("FILTER (WHERE type = 'income')"), 'Income aggregation must filter on income type');
+    assert.ok(sql.includes("FILTER (WHERE type = 'expense')"), 'Expense aggregation must filter on expense type');
+    assert.ok(!sql.includes('person_money'), 'People records and settlements must NOT be referenced');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM PUBLIC;'), 'Revoke from PUBLIC');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM anon;'), 'Revoke from anon');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_dashboard_summary(DATE, DATE) TO authenticated;'), 'Grant to authenticated');
   });
 });

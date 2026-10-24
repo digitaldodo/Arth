@@ -223,3 +223,4 @@ All database modifications follow a strict append-only Flyway/Supabase numbering
 | `0009` | `people_tracker` | People, records, settlements schema, and atomic settlement function |
 | `0010` | `database_hardening` | `ON DELETE RESTRICT` cascade prevention, row locking, covering indexes |
 | `0011` | `history_protection_and_settlement_hardening` | Revoke hard `DELETE` from authenticated on people and records; drop delete RLS policies; harden settlement idempotency (notes comparison and post-lock retry re-check) |
+| `0012` | `dashboard_summary` | Single-query atomic summary function `fn_dashboard_summary` with `SECURITY INVOKER` calculating income, expenses, net cash flow, spending composition, and bounded recent activity |

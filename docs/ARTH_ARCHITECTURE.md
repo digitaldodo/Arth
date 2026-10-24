@@ -280,6 +280,21 @@ The People tracker provides debt and loan tracking with strict financial invaria
    - **GREEN**: This person owes me money (`they_owe_me`).
    - Accompanied at all times with explicit text descriptions (e.g. "I owe Rahul ₹1,200.00" or "Rahul owes me ₹500.00").
 
+### 2.5 Real Data Dashboard & Financial Aggregation (Phase 01M)
+
+The Dashboard is the primary Home destination of Arth, answering four core financial questions for any selected period:
+1. **How much money came in?** Total Income in integer paise (`type = 'income'`).
+2. **How much money went out?** Total Expenses in integer paise (`type = 'expense'`).
+3. **What is my net cash flow?** Income minus expenses for the period (can be positive, negative, or zero). Explicitly labeled as "Net Cash Flow", never "Account Balance".
+4. **Where did my money go?** Spending composition grouped by category with exact paise sums, formatted INR, and share percentages.
+
+Key architectural invariants:
+1. **Physical Isolation from People Obligations**: People debts, loans, obligations (`person_money_records`), and settlements (`person_money_settlements`) are never merged with income or expenses and do not alter the Dashboard Net Cash Flow.
+2. **PostgreSQL-Side Snapshot Aggregation**: Stored procedure `public.fn_dashboard_summary(p_start_date DATE, p_end_date DATE)` (Migration 0012) calculates totals, category composition, and bounded recent activity in a single snapshot read using `SECURITY INVOKER` to enforce RLS boundaries.
+3. **Deterministic Date Ranges in `Asia/Kolkata` (IST)**: Presets (`today`, `this_week`, `this_month`, `last_month`, `this_year`, `custom`) are resolved using `Asia/Kolkata` calendar boundaries, ensuring deterministic inclusive ranges.
+4. **Soft-Delete Exclusions**: Soft-deleted transactions (`deleted_at IS NOT NULL`) are filtered in SQL.
+5. **Immediate Invalidation via Quick Add**: When Quick Add records a transaction, the dashboard shell triggers an immediate re-fetch so financial summaries update instantly.
+
 ---
 
 ## 3. Authentication & Session Architecture

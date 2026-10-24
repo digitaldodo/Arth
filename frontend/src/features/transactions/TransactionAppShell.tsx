@@ -7,6 +7,7 @@ import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
+import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -19,7 +20,7 @@ interface TransactionAppShellProps {
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
-  const [activeView, setActiveView] = useState<AppView>('ledger');
+  const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
@@ -60,6 +61,17 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             {/* Desktop Navigation Switcher */}
             {user && (
               <div className="hidden sm:flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-md border border-[var(--border-hairline)] ml-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('home')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                    activeView === 'home'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Dashboard
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveView('ledger')}
@@ -143,40 +155,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
         {user ? (
           <>
             {activeView === 'home' && (
-              <div className="space-y-6">
-                <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
-                    Overview
-                  </span>
-                  <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                    Welcome back, {user.email?.split('@')[0]}
-                  </h2>
-                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                    Arth is operating in personal finance mode with exact integer-paise calculations, isolated tenant security, and dedicated people obligation tracking.
-                  </p>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('ledger')}
-                      className="px-3.5 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors"
-                    >
-                      View Ledger &rarr;
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('people')}
-                      className="px-3.5 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md transition-colors"
-                    >
-                      People & Obligations &rarr;
-                    </button>
-                  </div>
-                </div>
-
-                <TransactionLedger
-                  onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-                  refreshTrigger={refreshTrigger}
-                />
-              </div>
+              <DashboardPage
+                onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+                onNavigateToLedger={() => setActiveView('ledger')}
+                refreshTrigger={refreshTrigger}
+              />
             )}
 
             {activeView === 'ledger' && (

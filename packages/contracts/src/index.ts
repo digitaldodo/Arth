@@ -4,3 +4,4 @@ export * from './money.js';
 export * from './categories.js';
 export * from './transactions.js';
 export * from './people.js';
+export * from './dashboard.js';
