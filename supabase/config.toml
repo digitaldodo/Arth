@@ -32,5 +32,29 @@ additional_redirect_urls = [
 jwt_expiry = 3600
 enable_signup = true
 
+[auth.email.template.confirmation]
+subject = "Confirm your Arth email address"
+content_path = "./templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Arth password"
+content_path = "./templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Your Arth sign-in link"
+content_path = "./templates/magic_link.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email address for Arth"
+content_path = "./templates/email_change.html"
+
+[auth.email.template.invite]
+subject = "You have been invited to Arth"
+content_path = "./templates/invite.html"
+
+[auth.email.template.reauthentication]
+subject = "Your Arth verification code"
+content_path = "./templates/reauthentication.html"
+
 [storage]
 enabled = false
