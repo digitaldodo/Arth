@@ -63,4 +63,138 @@ describe('Frontend Transaction Proxy & Utilities', () => {
     assert.equal(parseINRToPaise('250.50'), BigInt(25050));
     assert.equal(parseINRToPaise('0.01'), BigInt(1));
   });
+
+  test('BFF proxy POST forwards named transaction payload to backend', async () => {
+    const originalFetch = globalThis.fetch;
+    let backendPayloadReceived: Record<string, unknown> | null = null;
+
+    try {
+      (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+        {
+          name: 'sb-127-auth-token',
+          value: JSON.stringify({
+            access_token: 'valid.mock.jwt',
+            refresh_token: 'mock-refresh',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: '00000000-0000-7000-8000-000000000001', email: 'user@example.com' },
+          }),
+        },
+      ];
+
+      globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/auth/v1/user')) {
+          return new Response(
+            JSON.stringify({
+              id: '00000000-0000-7000-8000-000000000001',
+              email: 'user@example.com',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (urlStr.includes('/api/v1/transactions')) {
+          backendPayloadReceived = JSON.parse(opts?.body as string);
+          return new Response(
+            JSON.stringify({
+              transaction: {
+                id: '018f0000-0000-7000-8000-000000000001',
+                description: 'Lunch with friends',
+              },
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return originalFetch(url, opts);
+      };
+
+      const req = new NextRequest('http://localhost:3000/api/backend/transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: '018f0000-0000-7000-8000-000000000001',
+          amount: '450.00',
+          type: 'expense',
+          category_id: 'cat-1',
+          transaction_date: '2026-10-25',
+          payment_method: 'online',
+          necessity: 'essential',
+          description: 'Lunch with friends',
+        }),
+      });
+
+      const res = await handlePostTransaction(req);
+      assert.equal(res.status, 201);
+      assert.ok(backendPayloadReceived);
+      assert.equal((backendPayloadReceived as Record<string, unknown>).description, 'Lunch with friends');
+    } finally {
+      delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('BFF proxy POST forwards unnamed transaction payload with null description', async () => {
+    const originalFetch = globalThis.fetch;
+    let backendPayloadReceived: Record<string, unknown> | null = null;
+
+    try {
+      (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+        {
+          name: 'sb-127-auth-token',
+          value: JSON.stringify({
+            access_token: 'valid.mock.jwt',
+            refresh_token: 'mock-refresh',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            user: { id: '00000000-0000-7000-8000-000000000001', email: 'user@example.com' },
+          }),
+        },
+      ];
+
+      globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/auth/v1/user')) {
+          return new Response(
+            JSON.stringify({
+              id: '00000000-0000-7000-8000-000000000001',
+              email: 'user@example.com',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (urlStr.includes('/api/v1/transactions')) {
+          backendPayloadReceived = JSON.parse(opts?.body as string);
+          return new Response(
+            JSON.stringify({
+              transaction: {
+                id: '018f0000-0000-7000-8000-000000000002',
+                description: null,
+              },
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return originalFetch(url, opts);
+      };
+
+      const req = new NextRequest('http://localhost:3000/api/backend/transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: '018f0000-0000-7000-8000-000000000002',
+          amount: '120.00',
+          type: 'expense',
+          category_id: 'cat-2',
+          transaction_date: '2026-10-25',
+          payment_method: 'cash',
+          necessity: 'optional',
+          description: null,
+        }),
+      });
+
+      const res = await handlePostTransaction(req);
+      assert.equal(res.status, 201);
+      assert.ok(backendPayloadReceived);
+      assert.equal((backendPayloadReceived as Record<string, unknown>).description, null);
+    } finally {
+      delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

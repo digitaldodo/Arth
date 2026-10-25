@@ -255,6 +255,23 @@ export function QuickAddModal({
             </div>
           </div>
 
+          {/* 2b. Transaction Name (Optional) */}
+          <div>
+            <label htmlFor="transaction-name-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+              Transaction Name <span className="text-[10px] text-[var(--text-muted)] font-normal">(optional)</span>
+            </label>
+            <input
+              id="transaction-name-input"
+              type="text"
+              maxLength={255}
+              placeholder="e.g. Lunch with friends, College bus fee"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isSubmitting}
+              className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-hidden"
+            />
+          </div>
+
           {/* 3. Transaction Date */}
           <div>
             <label htmlFor="date-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
@@ -406,7 +423,7 @@ export function QuickAddModal({
             </div>
           )}
 
-          {/* 7. Collapsed Notes / Description */}
+          {/* 7. Collapsed Private Notes */}
           <div>
             {!showNotes ? (
               <button
@@ -414,12 +431,12 @@ export function QuickAddModal({
                 onClick={() => setShowNotes(true)}
                 className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] underline decoration-dotted cursor-pointer"
               >
-                + Add description or private note
+                + Add private note
               </button>
             ) : (
               <div className="space-y-2 p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Details</span>
+                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Private Note</span>
                   <button
                     type="button"
                     onClick={() => setShowNotes(false)}
@@ -427,16 +444,6 @@ export function QuickAddModal({
                   >
                     Hide
                   </button>
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    maxLength={500}
-                    placeholder="Short description (e.g. Swiggy order)"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-md px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-hidden"
-                  />
                 </div>
                 <div>
                   <textarea

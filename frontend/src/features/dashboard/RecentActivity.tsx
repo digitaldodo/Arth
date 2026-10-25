@@ -44,16 +44,16 @@ export function RecentActivity({
                 <div className="min-w-0 space-y-0.5">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-[var(--text-primary)] truncate">
-                      {tx.category_name || 'Uncategorized'}
+                      {tx.description || tx.category_name || 'Uncategorized'}
                     </span>
                     <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0">
                       {formatDateHuman(tx.transaction_date)}
                     </span>
                   </div>
 
-                  {tx.description && (
+                  {tx.description && tx.category_name && (
                     <p className="text-[11px] text-[var(--text-secondary)] truncate">
-                      {tx.description}
+                      {tx.category_name}
                     </p>
                   )}
                 </div>

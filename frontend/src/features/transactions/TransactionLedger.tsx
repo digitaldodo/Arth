@@ -222,11 +222,11 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-[var(--text-primary)]">
-                      {txn.category_name || 'Uncategorized'}
+                      {txn.description || txn.category_name || 'Uncategorized'}
                     </span>
-                    {txn.description && (
+                    {txn.description && txn.category_name && (
                       <span className="text-xs text-[var(--text-secondary)] truncate max-w-[160px] md:max-w-xs">
-                        • {txn.description}
+                        • {txn.category_name}
                       </span>
                     )}
                   </div>
