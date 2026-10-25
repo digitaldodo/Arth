@@ -124,7 +124,12 @@ export function AuthForm({ initialError }: AuthFormProps) {
   const handleGoogleSubmit = () => {
     setErrorMessage(null);
     startGoogleTransition(async () => {
-      await signInWithGoogleAction();
+      const res = await signInWithGoogleAction();
+      if (res.error) {
+        setErrorMessage(res.error);
+      } else if (res.url) {
+        window.location.href = res.url;
+      }
     });
   };
 

@@ -1,30 +1,41 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getAppOrigin,
+  sanitizeRedirectPath,
+} from '@/lib/auth-config';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Handles the OAuth PKCE callback from Supabase Auth.
  * Exchanges the temporary authorization code for an authoritative session in HTTP-only cookies.
+ * Redirects the user to the intended destination without leaving authorization codes in the URL.
  */
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('next') ?? '/';
+  const next = requestUrl.searchParams.get('next');
   const errorParam = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
 
-  // Prevent open redirect vulnerabilities: next destination must be a local relative path
-  const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  const origin = getAppOrigin(request.headers);
+  const safeNext = sanitizeRedirectPath(next, '/');
 
+  // Handle OAuth provider error response (e.g. user cancelled or access denied)
   if (errorParam) {
-    const errorMsg = errorDescription || errorParam;
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
-    );
+    const redirectUrl = new URL('/login', origin);
+    redirectUrl.searchParams.set('error', errorParam);
+    if (errorDescription) {
+      redirectUrl.searchParams.set('error_description', errorDescription);
+    }
+    return NextResponse.redirect(redirectUrl);
   }
 
+  // Handle missing code
   if (!code) {
     return NextResponse.redirect(
-      new URL('/login?error=missing_authorization_code', requestUrl.origin)
+      new URL('/login?error=missing_authorization_code', origin)
     );
   }
 
@@ -33,16 +44,20 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
-      return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(error.message)}`, requestUrl.origin)
-      );
+      const redirectUrl = new URL('/login', origin);
+      redirectUrl.searchParams.set('error', 'auth_exchange_failed');
+      redirectUrl.searchParams.set('error_description', error.message);
+      return NextResponse.redirect(redirectUrl);
     }
 
-    return NextResponse.redirect(new URL(safeNext, requestUrl.origin));
+    // Successful exchange: session is saved in HTTP-only cookies.
+    // Redirect to safe internal destination without exposing authorization code.
+    return NextResponse.redirect(new URL(safeNext, origin));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'auth_exchange_failed';
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(message)}`, requestUrl.origin)
-    );
+    const redirectUrl = new URL('/login', origin);
+    redirectUrl.searchParams.set('error', 'auth_exchange_failed');
+    redirectUrl.searchParams.set('error_description', message);
+    return NextResponse.redirect(redirectUrl);
   }
 }

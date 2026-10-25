@@ -85,6 +85,7 @@ arth/
 │   ├── ARTH_BUILD_PLAN.md        # Phased implementation plan & progress log
 │   ├── ARTH_DESIGN_SYSTEM.md     # Ledger Minimal tokens and component rules
 │   ├── ARTH_UX_BLUEPRINT.md      # Navigation, IA, and progressive disclosure flows
+│   ├── GOOGLE_OAUTH_SETUP.md     # Google Cloud Console & Supabase Auth configuration
 │   └── design-concepts/          # Screen prototype & automated verification shots
 │
 ├── .env.example                  # Non-secret environment variable templates

@@ -309,6 +309,11 @@ Key architectural invariants:
   - During registration, username is captured, validated (3-30 chars, alphanumeric, hyphens, underscores), and passed via Supabase user metadata.
   - PostgreSQL trigger `fn_handle_new_user()` (Migration 0013) extracts and prioritizes `raw_user_meta_data->>'username'` as `display_name` in `public.profiles`.
 - **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`. Passwords are never stored in Arth application tables.
+- **OAuth Callback & Origin Resolution**:
+  - Centralized in `frontend/src/lib/auth-config.ts` (`getAppOrigin`, `getAuthCallbackUrl`, `sanitizeRedirectPath`).
+  - Production origin strictly resolves from `NEXT_PUBLIC_APP_URL` or proxy headers; never falls back to `localhost` in production.
+  - Callback handler at `/auth/callback` exchanges the PKCE authorization code server-side and redirects with HTTP 303 to clean the address bar.
+  - Complete dashboard and branding configuration documented in `docs/GOOGLE_OAUTH_SETUP.md`.
 - **Clients**:
   - `frontend/src/lib/supabase/server.ts`: Server-side client using `createServerClient` reading/writing cookies in Next.js Server Components, Server Actions, and Route Handlers.
   - Browser: Server Actions initiate OAuth redirects or handle email/password sign-in; browser JS never holds raw long-lived refresh tokens, service-role keys, or database master credentials.

@@ -1,8 +1,11 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import {
+  getAppOrigin,
+  getAuthCallbackUrl,
+} from '@/lib/auth-config';
 
 export interface AuthActionResult {
   success?: boolean;
@@ -10,16 +13,6 @@ export interface AuthActionResult {
   message?: string;
   redirectUrl?: string;
   needsConfirmation?: boolean;
-}
-
-/**
- * Resolves the server origin URL safely for OAuth and email callback redirects.
- */
-async function getOrigin(): Promise<string> {
-  const headersList = await headers();
-  const host = headersList.get('host') || 'localhost:3000';
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-  return `${protocol}://${host}`;
 }
 
 /**
@@ -135,7 +128,9 @@ export async function signUpWithEmailAction(
   }
 
   try {
-    const origin = await getOrigin();
+    const headersList = await headers();
+    const origin = getAppOrigin(headersList);
+    const callbackUrl = getAuthCallbackUrl(origin);
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.signUp({
@@ -146,7 +141,7 @@ export async function signUpWithEmailAction(
           username,
           full_name: username,
         },
-        emailRedirectTo: `${origin}/auth/callback?next=/`,
+        emailRedirectTo: `${callbackUrl}?next=/`,
       },
     });
 
@@ -196,11 +191,13 @@ export async function requestPasswordResetAction(
   }
 
   try {
-    const origin = await getOrigin();
+    const headersList = await headers();
+    const origin = getAppOrigin(headersList);
+    const callbackUrl = getAuthCallbackUrl(origin);
     const supabase = await createClient();
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin}/auth/callback?next=/auth/update-password`,
+      redirectTo: `${callbackUrl}?next=/auth/update-password`,
     });
 
     if (error) {
@@ -282,32 +279,37 @@ export async function updatePasswordAction(
 
 /**
  * 5. Google OAuth Initiation Action
+ * Uses server-side createClient to establish PKCE code verifier and returns
+ * the authoritative redirect URL to the caller.
  */
-export async function signInWithGoogleAction(): Promise<void> {
-  let redirectUrl: string | undefined;
-
+export async function signInWithGoogleAction(): Promise<{
+  url?: string;
+  error?: string;
+}> {
   try {
-    const origin = await getOrigin();
+    const headersList = await headers();
+    const origin = getAppOrigin(headersList);
+    const callbackUrl = getAuthCallbackUrl(origin);
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${origin}/auth/callback?next=/`,
+        redirectTo: `${callbackUrl}?next=/`,
       },
     });
 
     if (error) {
-      redirectUrl = `/login?error=${encodeURIComponent(error.message)}`;
-    } else if (data.url) {
-      redirectUrl = data.url;
+      return { error: error.message };
     }
+
+    if (data.url) {
+      return { url: data.url };
+    }
+
+    return { error: 'Unable to initiate Google sign-in. Please try again.' };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'OAuth error';
-    redirectUrl = `/login?error=${encodeURIComponent(message)}`;
-  }
-
-  if (redirectUrl) {
-    redirect(redirectUrl);
+    return { error: message };
   }
 }

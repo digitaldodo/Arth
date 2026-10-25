@@ -342,6 +342,29 @@
 - [x] Zero plaintext password storage; HTTP-only, secure, `SameSite=Lax` cookies via `@supabase/ssr`
 - [x] 100% of workspace quality gates pass (155 tests, clean lint, clean typecheck, clean build)
 
+### 01-Q · Google OAuth Redirect Hardening & Branding Setup ✅
+
+> Focus: Diagnose and fix OAuth callback redirect issues, enforce production canonical origins, build fallback resilience on root/login pages, and document Google Auth Platform branding and Supabase allowlist settings.
+
+| Task | Details | Status |
+|---|---|---|
+| Origin & Callback Resolver | `frontend/src/lib/auth-config.ts` implementing `getAppOrigin`, `getAuthCallbackUrl`, `sanitizeRedirectPath`, and `formatAuthError`; strictly prevents `localhost` fallbacks in production | Complete ✅ |
+| Explicit Callback Route | `frontend/src/app/auth/callback/route.ts` exchanging PKCE code, setting cookies, sanitizing redirect target, and returning HTTP 303 to clean address bar | Complete ✅ |
+| Stray Code Interception | Updated `frontend/src/app/page.tsx` and `frontend/src/app/login/page.tsx` to automatically detect stray `?code=` query parameters and forward them to `/auth/callback` | Complete ✅ |
+| Local Supabase Config | Updated `supabase/config.toml` additional redirect URLs to include local and production callback allowlists | Complete ✅ |
+| Google & Supabase Guide | Authored `docs/GOOGLE_OAUTH_SETUP.md` with step-by-step instructions for Google Cloud Console (Branding, App Logo, Authorized Domains) and Supabase Dashboard (Site URL, Redirect URLs) | Complete ✅ |
+| Automated Test Suites | Added 12 automated unit/integration tests in `frontend/tests/auth-callback.test.ts` verifying origin resolution, callback error handling, and open-redirect sanitization | Complete ✅ |
+
+**Acceptance criteria**:
+- [x] Google sign-in sends explicit callback URL to `/auth/callback` using current origin or production canonical domain
+- [x] Callback exchanges authorization code server-side and sets HTTP-only cookies via `@supabase/ssr`
+- [x] Successful sign-in redirects to internal destination and cleans code from address bar
+- [x] Missing or failed authorization codes redirect to `/login` with actionable error guidance
+- [x] Open-redirect attacks blocked by `sanitizeRedirectPath()`
+- [x] In production (`NODE_ENV === 'production'`), origin resolution never returns `localhost`
+- [x] Google Auth Platform branding and Supabase URL Configuration documented in `docs/GOOGLE_OAUTH_SETUP.md`
+- [x] 100% of workspace quality gates pass (167 tests, clean lint, clean typecheck, clean build)
+
 ---
 
 ## Phase 02 — Sheets Sync & Export

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 import { AuthForm } from './AuthForm';
 
 export const dynamic = 'force-dynamic';
@@ -9,9 +10,22 @@ export const dynamic = 'force-dynamic';
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    error_description?: string;
+    code?: string;
+    next?: string;
+  }>;
 }) {
-  const { error } = await searchParams;
+  const params = await searchParams;
+
+  // If authorization code landed on login page, forward immediately to callback handler
+  if (params.code) {
+    const nextPath = sanitizeRedirectPath(params.next, '/');
+    redirect(
+      `/auth/callback?code=${encodeURIComponent(params.code)}&next=${encodeURIComponent(nextPath)}`
+    );
+  }
 
   // If user is already authenticated with active session, redirect to home
   try {
@@ -26,6 +40,10 @@ export default async function LoginPage({
   } catch {
     // Continue rendering login form if auth check fails or no session
   }
+
+  const resolvedError = params.error
+    ? formatAuthError(params.error, params.error_description)
+    : undefined;
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
@@ -173,7 +191,7 @@ export default async function LoginPage({
               </div>
 
               {/* Interactive Auth Form */}
-              <AuthForm initialError={error} />
+              <AuthForm initialError={resolvedError} />
             </div>
           </div>
         </div>
