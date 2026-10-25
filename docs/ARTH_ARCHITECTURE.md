@@ -514,21 +514,61 @@ db.version(1).stores({
 
 ### 7.1 Data export (Phase 02)
 
-- `ImportExport` module exposes:
-  - **CSV export**: all transactions with human-readable columns
-  - **JSON export**: full structured export including categories
-  - Triggered from Settings page; generated server-side as a streaming download
+- **CSV Export**:
+  - Implemented in `frontend/src/lib/export/csv-export.ts`
+  - Strict RFC 4180 escaping for commas, quotes (`""`), and newlines.
+  - **Formula Injection Protection (CWE-1236)**: Values beginning with `=`, `+`, `-`, or `@` are automatically escaped with a leading single quote (`'`), ensuring spreadsheet software does not execute dangerous external commands or macros.
+  - Exact integer paise converted to two-decimal INR currency format.
+  - Client-side streaming download triggered from More & Settings.
+- **JSON Export**:
+  - Implemented in `frontend/src/lib/export/json-export.ts`
+  - Versioned JSON document structure (`version: 1`) containing full user metadata, active/archived category taxonomy, and complete transaction history.
+  - Preserves raw `amount_paise` BIGINT integers, timestamps, and soft-delete statuses for lossless disaster recovery.
+- **Ledger Statement PDF Export**:
+  - Implemented in `frontend/src/features/transactions/ledger-pdf-exporter.ts`
+  - High-precision client-side PDF document generation formatted for A4 printing in monochrome branding.
+  - Deterministic inclusive date ranges in Asia/Kolkata (presets and custom calendar bounds).
+  - Category and transaction type filters (All, Income Only, Expense Only) with repeated table headers across pages.
 
-### 7.2 Database backup
+### 7.2 Google Sheets Asynchronous Mirroring (Phase 02)
+
+- **Architecture**:
+  - PostgreSQL remains the single authoritative source of truth.
+  - Google Sheets serves as an external, human-readable read-only mirror.
+  - Mutations generate atomic events in `public.outbox_events` via database trigger `trg_transactions_outbox`.
+- **Per-User Pairing**:
+  - Paired via `public.user_sheet_connections` (Migration 0017).
+  - Users supply their personal Google Spreadsheet URL/ID and share Editor access with `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
+  - Headers initialized automatically on connection:
+    `Transaction ID | Date | Name / Description | Category | Type | Amount (INR) | Payment Method | Necessity | Notes | Status | Created At | Updated At`
+- **Outbox Worker & Concurrency Control**:
+  - Server worker daemon (`frontend/src/lib/server/sheets-worker.ts`) claims pending events using PostgreSQL `FOR UPDATE SKIP LOCKED` via RPC `fn_claim_outbox_events`.
+  - Atomically locks batches with lease tokens (`locked_at`, `claim_id`) preventing duplicate execution across concurrent serverless invocations.
+  - Stale in-flight claims (>300 seconds) are automatically reclaimed if a worker terminates mid-flight.
+  - Failed writes retry with exponential backoff up to 5 attempts before marking as `failed`.
+- **Idempotency & Reconciliation**:
+  - Google Sheet rows are matched by UUID in Column A.
+  - Created transactions append or update existing matching rows.
+  - Edited transactions update columns in place.
+  - Soft-deleted transactions update the Status column to `DELETED`.
+  - Restored transactions update Status back to `ACTIVE`.
+  - Weekly full reconciliation (`/api/sync/reconcile`) validates every database transaction against the sheet, correcting drift.
+- **Schedulers & Security**:
+  - Triggered every 5 minutes by Vercel Cron at `/api/sync/sheets`.
+  - Authenticated via `Authorization: Bearer <CRON_SECRET>`.
+  - Manual sync available on-demand in Settings via `/api/backend/sheets/sync`.
+  - Google Service Account RSA keys signed natively using Node.js `crypto` (`RS256` per RFC 7523) without heavy third-party packages.
+
+### 7.3 Database backup
 
 - Supabase automatic daily backups (built-in, free tier: 7 days; Pro: 30 days)
-- Supplementary: weekly pg_dump via Vercel Cron → encrypted storage in Supabase Storage bucket `backups/`
 - Google Sheets acts as a human-readable secondary copy
+- Point-in-time recovery on Supabase Pro plan
 
-### 7.3 Recovery
+### 7.4 Recovery
 
 - Restore from Supabase backup dashboard (point-in-time on Pro)
-- Or restore from JSON export via `ImportExport` module
+- Restore from versioned JSON export via `ImportExport` module
 
 ---
 

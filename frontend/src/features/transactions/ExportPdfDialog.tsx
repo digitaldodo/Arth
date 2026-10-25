@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { CategoryDTO, TransactionType, TransactionDTO } from '@arth/contracts';
-import { formatPaiseToINR, formatDateHuman } from '@/lib/format';
+import { formatPaiseToINR } from '@/lib/format';
 import {
   type DateRangePreset,
   computePresetDateRange,
@@ -67,7 +67,8 @@ export function ExportPdfDialog({
 
   // Reset initial category/type when dialog opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const timer = setTimeout(() => {
       setSelectedType(initialType);
       setSelectedCategory(initialCategoryId);
       setPreset('this_month');
@@ -75,21 +76,29 @@ export function ExportPdfDialog({
       setCustomStartDate(defaultRange.startDate);
       setCustomEndDate(defaultRange.endDate);
       setExportError(null);
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [isOpen, initialType, initialCategoryId]);
 
   // Fetch summary preview whenever effective filters change
   useEffect(() => {
     if (!isOpen) return;
     if (!isRangeValid) {
-      setPreviewTransactions([]);
-      setIsLoadingPreview(false);
-      return;
+      const timer = setTimeout(() => {
+        setPreviewTransactions([]);
+        setIsLoadingPreview(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
-    setIsLoadingPreview(true);
-    setPreviewError(null);
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setIsLoadingPreview(true);
+        setPreviewError(null);
+      }
+    }, 0);
 
     fetchAllMatchingTransactions(
       selectedType,
@@ -111,6 +120,7 @@ export function ExportPdfDialog({
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [isOpen, selectedType, selectedCategory, effectiveRange, isRangeValid]);
 
@@ -261,9 +271,6 @@ export function ExportPdfDialog({
               <label className="text-xs font-semibold text-[var(--text-secondary)]">
                 Date Range Preset
               </label>
-              <span className="text-[11px] font-mono text-[var(--text-muted)]">
-                Asia/Kolkata (IST)
-              </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-medium">

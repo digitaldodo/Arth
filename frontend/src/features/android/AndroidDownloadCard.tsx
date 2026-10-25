@@ -18,14 +18,18 @@ export const AndroidDownloadCard: React.FC = () => {
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const ua = navigator.userAgent || '';
-    if (/android/i.test(ua)) {
-      setPlatform('android');
-    } else if (/iphone|ipad|ipod/i.test(ua)) {
-      setPlatform('ios');
-    } else {
-      setPlatform('desktop');
-    }
+    const timer = setTimeout(() => {
+      const ua = navigator.userAgent || '';
+      if (/android/i.test(ua)) {
+        setPlatform('android');
+      } else if (/iphone|ipad|ipod/i.test(ua)) {
+        setPlatform('ios');
+      } else {
+        setPlatform('desktop');
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const handleDownloadClick = () => {

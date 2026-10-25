@@ -69,33 +69,37 @@ export function QuickAddModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (editingTransaction) {
-      setType(editingTransaction.type);
-      setAmount(editingTransaction.amount_decimal);
-      setCategoryId(editingTransaction.category_id);
-      setTransactionDate(editingTransaction.transaction_date);
-      setPaymentMethod(editingTransaction.payment_method);
-      setNecessity(editingTransaction.necessity || 'essential');
-      setDescription(editingTransaction.description || '');
-      setNotes(editingTransaction.notes || '');
-      setShowNotes(Boolean(editingTransaction.notes));
-      setErrorMessage(null);
-    } else {
-      setTxnId(uuidv7());
-      setType('expense');
-      setAmount('');
-      setCategoryId('');
-      setTransactionDate(getTodayIST());
-      setNecessity('essential');
-      setDescription('');
-      setNotes('');
-      setShowNotes(false);
-      setErrorMessage(null);
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('arth_last_payment_method');
-        if (saved === 'online' || saved === 'cash') setPaymentMethod(saved);
+    const timer = setTimeout(() => {
+      if (editingTransaction) {
+        setType(editingTransaction.type);
+        setAmount(editingTransaction.amount_decimal);
+        setCategoryId(editingTransaction.category_id);
+        setTransactionDate(editingTransaction.transaction_date);
+        setPaymentMethod(editingTransaction.payment_method);
+        setNecessity(editingTransaction.necessity || 'essential');
+        setDescription(editingTransaction.description || '');
+        setNotes(editingTransaction.notes || '');
+        setShowNotes(Boolean(editingTransaction.notes));
+        setErrorMessage(null);
+      } else {
+        setTxnId(uuidv7());
+        setType('expense');
+        setAmount('');
+        setCategoryId('');
+        setTransactionDate(getTodayIST());
+        setNecessity('essential');
+        setDescription('');
+        setNotes('');
+        setShowNotes(false);
+        setErrorMessage(null);
+        if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem('arth_last_payment_method');
+          if (saved === 'online' || saved === 'cash') setPaymentMethod(saved);
+        }
       }
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [isOpen, editingTransaction]);
 
   // Load categories asynchronously when transaction type changes
@@ -103,7 +107,9 @@ export function QuickAddModal({
     if (!isOpen) return;
 
     let isMounted = true;
-    setCategoriesLoading(true);
+    const timer = setTimeout(() => {
+      if (isMounted) setCategoriesLoading(true);
+    }, 0);
 
     fetchCategories({ type })
       .then((res) => {
@@ -135,6 +141,7 @@ export function QuickAddModal({
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [isOpen, type, categoryVersion, editingTransaction]);
 

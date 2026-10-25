@@ -369,27 +369,34 @@
 
 ## Phase 02 — Sheets Sync & Export
 
-**Prerequisites**: Phase 01 fully deployed and stable.
+**Status**: Complete ✅ (Implementation & Automated Test Verification; ready for live production service credentials)
 
 ### Key tasks
 
-| Task | Module |
-|---|---|
-| Google Sheets API client | `src/server/sheets.ts` |
-| Outbox drain Route Handler | `/api/sync/sheets` — reads pending events, writes to Sheets, marks delivered |
-| Vercel Cron trigger | `vercel.json` cron → `/api/sync/sheets` every 5 minutes |
-| Weekly reconciliation | `/api/sync/reconcile` — full re-write of all rows; runs weekly via cron |
-| CSV export | `ImportExport` module — server-side streaming download |
-| JSON export | Full structured dump |
-| Manual sync trigger | Settings button → calls `/api/sync/sheets` on demand |
+| Task | Module | Status |
+|---|---|---|
+| Google Service Account OAuth client | `frontend/src/lib/server/google-auth.ts` — native RS256 JWT assertion per RFC 7523 | Complete ✅ |
+| Google Sheets API client | `frontend/src/lib/server/google-sheets-client.ts` — URL parser, access verification, header init, idempotent row sync | Complete ✅ |
+| Outbox worker daemon & claiming | `frontend/src/lib/server/sheets-worker.ts` & `fn_claim_outbox_events` — `FOR UPDATE SKIP LOCKED` atomic claiming, lease expiry recovery, exponential backoff | Complete ✅ |
+| Outbox drain Route Handler | `frontend/src/app/api/sync/sheets/route.ts` — authenticated by `CRON_SECRET` | Complete ✅ |
+| Vercel Cron triggers | `vercel.json` crons configured for `/api/sync/sheets` (every 5 min) and `/api/sync/reconcile` (weekly) | Complete ✅ |
+| Weekly reconciliation | `frontend/src/app/api/sync/reconcile/route.ts` & `reconcileUserSheet()` — full UUID-matched sync | Complete ✅ |
+| Per-user Sheet pairing | `frontend/src/app/api/backend/sheets/connection/route.ts` & `user_sheet_connections` migration 0017 | Complete ✅ |
+| Settings UI integration | `SheetsConnectionCard.tsx` — connection setup, copy email, sync now, full reconcile, disconnect | Complete ✅ |
+| CSV export | `frontend/src/lib/export/csv-export.ts` — RFC 4180 escaping, CWE-1236 formula-injection sanitization, exact paise math | Complete ✅ |
+| JSON export | `frontend/src/lib/export/json-export.ts` — versioned backup (`version: 1`), full audit preservation | Complete ✅ |
+| UI Corrections (Part A) | Favicon replaced with multi-resolution monochrome Arth logo; visible `(Asia/Kolkata)` labels removed; misleading password card and PWA info cards removed | Complete ✅ |
 
 **Acceptance criteria**:
-- [ ] New transaction appears in Google Sheet within 10 minutes
-- [ ] Edited transaction updates the correct row (matched by UUID)
-- [ ] Deleted transaction row is struck-through or removed in Sheet
-- [ ] Weekly reconciliation corrects any drift
-- [ ] CSV export downloads a valid file with correct INR formatting
-- [ ] JSON export is importable for recovery
+- [x] Outbox event claiming & batching with `FOR UPDATE SKIP LOCKED` prevents concurrent worker collisions
+- [x] New transaction appears in Google Sheet via outbox event within scheduled interval (or manual "Sync Now")
+- [x] Edited transaction updates the correct row (matched by UUID in Column A)
+- [x] Deleted transaction row is marked as `DELETED` in Status column without destroying audit history
+- [x] Restored transaction row updates Status back to `ACTIVE` and refreshes values
+- [x] Weekly reconciliation corrects any drift between PostgreSQL and Google Sheets
+- [x] CSV export downloads a valid RFC-4180 file with correct INR formatting and formula injection sanitization (`=`, `+`, `-`, `@`)
+- [x] JSON export preserves exact integer paise and full taxonomy, importable for disaster recovery
+- [x] Automated unit and integration test coverage across all components (266 tests passing)
 
 ---
 

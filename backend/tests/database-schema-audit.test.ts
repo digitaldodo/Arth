@@ -26,7 +26,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0013_auth_username_support.sql',
       '0014_username_authentication_and_lookup.sql',
       '0015_category_reorder_hardening.sql',
-      '0016_account_deletion_support.sql'
+      '0016_account_deletion_support.sql',
+      '0017_google_sheets_sync.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -196,5 +197,15 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('DELETE FROM public.profiles'), 'Must purge profile seventh');
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_delete_own_account() FROM anon'), 'Must revoke from anon');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_delete_own_account() TO authenticated'), 'Must grant execute to authenticated');
+  });
+
+  test('0017_google_sheets_sync.sql defines user_sheet_connections and atomic fn_claim_outbox_events', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0017_google_sheets_sync.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.user_sheet_connections'), 'Must create user_sheet_connections table');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Must enable RLS on user_sheet_connections');
+    assert.ok(sql.includes('auth.uid() = user_id'), 'Must isolate sheet connections to auth.uid()');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_claim_outbox_events'), 'Must define fn_claim_outbox_events');
+    assert.ok(sql.includes('FOR UPDATE SKIP LOCKED'), 'Must use SKIP LOCKED for concurrent-safe outbox claiming');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_claim_outbox_events(INT, TEXT, INT) TO service_role'), 'Must grant claiming to service_role');
   });
 });

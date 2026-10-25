@@ -1,6 +1,6 @@
 # Arth (अर्थ) — Modular Monorepo Architecture
 
-Arth is a fast, online personal finance tracker engineered for manual transaction capture, authoritative PostgreSQL persistence with exact integer-paise calculations, baseline PWA installability, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**). Asynchronous dual-write synchronization to Google Sheets and offline-first capabilities are planned for subsequent phases.
+Arth is a fast, online personal finance tracker engineered for manual transaction capture, authoritative PostgreSQL persistence with exact integer-paise calculations, baseline PWA installability, Google Sheets asynchronous dual-write synchronization, CSV/JSON/PDF exports, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**).
 
 The repository is structured as a **modular monorepo** with strict physical boundaries between frontend presentation, backend business logic, shared contracts, and database migrations.
 
@@ -14,7 +14,8 @@ The repository is structured as a **modular monorepo** with strict physical boun
 - **Amounts in Integer Paise**: Financial values are stored as integers representing paise (1 INR = 100 paise) as `BIGINT` in PostgreSQL to prevent floating-point rounding errors.
 - **Deterministic Timezones**: Stored as UTC `TIMESTAMPTZ` in Supabase; formatted in `Asia/Kolkata` (IST) for user interfaces.
 - **Ledger Minimal Design System**: High-contrast, typography-driven financial clarity featuring warm archival paper in light mode (`#FBFBF9`) and restrained obsidian in dark mode (`#0C0A09`).
-- **Outbox Pattern**: Transaction mutations write to an authoritative PostgreSQL `outbox_events` table for planned asynchronous background synchronization.
+- **Outbox Pattern & Google Sheets Sync**: Transaction mutations write to an authoritative PostgreSQL `outbox_events` table, drained asynchronously by a background worker daemon into personal user Google Sheets with `FOR UPDATE SKIP LOCKED` lease-locking and weekly reconciliation.
+- **Lossless Data Export**: Complete transaction and taxonomy backups in CSV (RFC-4180 with formula-injection protection) and JSON (`version: 1`), plus branded A4 PDF ledger statements.
 - **Two-Layer Security**: Backend API authentication/authorization + PostgreSQL Row Level Security (RLS) enforcement.
 
 ---

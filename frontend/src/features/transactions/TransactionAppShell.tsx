@@ -9,10 +9,10 @@ import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { AndroidDownloadCard } from '@/features/android/AndroidDownloadCard';
+import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
+import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
-import { SetPasswordForm } from '@/features/profile/SetPasswordForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
@@ -234,7 +234,9 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
                 <AndroidDownloadCard />
 
-                <InstallPromptCard />
+                <SheetsConnectionCard />
+
+                {user && <DataExportCard user={user} />}
 
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl divide-y divide-[var(--border-hairline)] overflow-hidden">
                   <button
@@ -294,16 +296,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                       />
                     </div>
 
-                    {/* Account Security: Set / Update Password */}
-                    <div className="pt-2 border-t border-[var(--border-hairline)]">
-                      <SetPasswordForm
-                        userEmail={user.email}
-                        providers={user.providers}
-                      />
-                    </div>
-
                     <div className="text-[10px] text-[var(--text-muted)] font-mono pt-1">
-                      Timezone: Asia/Kolkata (IST) • Currency: INR (₹) • System: Ledger Minimal
+                      Currency: INR (₹) • System: Ledger Minimal
                     </div>
                   </div>
                 </div>

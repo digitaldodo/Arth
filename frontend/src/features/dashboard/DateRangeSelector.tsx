@@ -96,9 +96,6 @@ export function DateRangeSelector({
           <span>
             {formatDateHuman(startDate)} – {formatDateHuman(endDate)}
           </span>
-          <span className="text-[10px] text-[var(--text-muted)] opacity-75">
-            (Asia/Kolkata)
-          </span>
         </div>
       </div>
 
