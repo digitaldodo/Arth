@@ -19,30 +19,30 @@ export default async function UpdatePasswordPage() {
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
       {/* Top Header Bar */}
-      <header className="w-full max-w-xl mx-auto px-4 py-6 flex items-center justify-between">
+      <header className="w-full max-w-[420px] mx-auto px-4 py-5 flex items-center justify-between">
         <Link
           href="/"
           className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1.5 font-medium"
         >
-          <span aria-hidden="true">&larr;</span> Back to Foundation
+          <span aria-hidden="true">&larr;</span> Back
         </Link>
         <ThemeToggle />
       </header>
 
       {/* Main Form Container */}
-      <main className="w-full max-w-xl mx-auto px-4 py-8 my-auto">
-        <div className="p-6 sm:p-8 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs space-y-6">
+      <main className="w-full max-w-[420px] mx-auto px-4 my-auto py-6">
+        <div className="p-6 sm:p-7 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs space-y-5">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1.5">
               <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
                 Arth
               </span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-                Recovery
+              <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
+                Ledger
               </span>
             </div>
-            <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
-              Update Your Password
+            <h1 className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+              Update password
             </h1>
             <p className="text-[12px] text-[var(--text-secondary)]">
               {user
@@ -82,8 +82,8 @@ export default async function UpdatePasswordPage() {
       </main>
 
       {/* Footer Notes */}
-      <footer className="w-full max-w-xl mx-auto px-4 py-6 text-center text-[12px] text-[var(--text-muted)]">
-        Arth Financial Platform &middot; Security Recovery
+      <footer className="w-full max-w-[420px] mx-auto px-4 py-5 text-center text-[11px] font-mono text-[var(--text-muted)]">
+        Arth &middot; Ledger Minimal
       </footer>
     </div>
   );

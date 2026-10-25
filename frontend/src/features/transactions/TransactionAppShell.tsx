@@ -282,69 +282,71 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
       {/* Mobile Fixed Bottom Navigation with Central Quick Add (+) */}
       {/* 5 destinations: Home | Ledger | Add (+) | People | More */}
-      <nav aria-label="Mobile Navigation" className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-3 py-1.5 flex items-center justify-around">
-        {/* 1. Home */}
-        <button
-          onClick={() => setActiveView('home')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
-            activeView === 'home'
-              ? 'text-[var(--text-primary)] font-bold'
-              : 'text-[var(--text-muted)]'
-          }`}
-        >
-          <span className="text-base leading-none">🏠</span>
-          <span className="truncate">Home</span>
-        </button>
+      {user && (
+        <nav aria-label="Mobile Navigation" className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-3 py-1.5 flex items-center justify-around">
+          {/* 1. Home */}
+          <button
+            onClick={() => setActiveView('home')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+              activeView === 'home'
+                ? 'text-[var(--text-primary)] font-bold'
+                : 'text-[var(--text-muted)]'
+            }`}
+          >
+            <span className="text-base leading-none">🏠</span>
+            <span className="truncate">Home</span>
+          </button>
 
-        {/* 2. Ledger */}
-        <button
-          onClick={() => setActiveView('ledger')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
-            activeView === 'ledger'
-              ? 'text-[var(--text-primary)] font-bold'
-              : 'text-[var(--text-muted)]'
-          }`}
-        >
-          <span className="text-base leading-none">📊</span>
-          <span className="truncate">Ledger</span>
-        </button>
+          {/* 2. Ledger */}
+          <button
+            onClick={() => setActiveView('ledger')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+              activeView === 'ledger'
+                ? 'text-[var(--text-primary)] font-bold'
+                : 'text-[var(--text-muted)]'
+            }`}
+          >
+            <span className="text-base leading-none">📊</span>
+            <span className="truncate">Ledger</span>
+          </button>
 
-        {/* 3. Central Floating Quick Add Action (+) */}
-        <button
-          type="button"
-          onClick={() => setIsQuickAddOpen(true)}
-          aria-label="Add transaction"
-          className="flex items-center justify-center w-11 h-11 -mt-4 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-lg hover:scale-105 active:scale-95 transition-transform"
-        >
-          <span className="text-2xl font-light leading-none">+</span>
-        </button>
+          {/* 3. Central Floating Quick Add Action (+) */}
+          <button
+            type="button"
+            onClick={() => setIsQuickAddOpen(true)}
+            aria-label="Add transaction"
+            className="flex items-center justify-center w-11 h-11 -mt-4 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-lg hover:scale-105 active:scale-95 transition-transform"
+          >
+            <span className="text-2xl font-light leading-none">+</span>
+          </button>
 
-        {/* 4. People */}
-        <button
-          onClick={() => setActiveView('people')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
-            activeView === 'people'
-              ? 'text-[var(--text-primary)] font-bold'
-              : 'text-[var(--text-muted)]'
-          }`}
-        >
-          <span className="text-base leading-none">👥</span>
-          <span className="truncate">People</span>
-        </button>
+          {/* 4. People */}
+          <button
+            onClick={() => setActiveView('people')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+              activeView === 'people'
+                ? 'text-[var(--text-primary)] font-bold'
+                : 'text-[var(--text-muted)]'
+            }`}
+          >
+            <span className="text-base leading-none">👥</span>
+            <span className="truncate">People</span>
+          </button>
 
-        {/* 5. More */}
-        <button
-          onClick={() => setActiveView('more')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
-            activeView === 'more' || activeView === 'categories'
-              ? 'text-[var(--text-primary)] font-bold'
-              : 'text-[var(--text-muted)]'
-          }`}
-        >
-          <span className="text-base leading-none">☰</span>
-          <span className="truncate">More</span>
-        </button>
-      </nav>
+          {/* 5. More */}
+          <button
+            onClick={() => setActiveView('more')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+              activeView === 'more' || activeView === 'categories'
+                ? 'text-[var(--text-primary)] font-bold'
+                : 'text-[var(--text-muted)]'
+            }`}
+          >
+            <span className="text-base leading-none">☰</span>
+            <span className="truncate">More</span>
+          </button>
+        </nav>
+      )}
 
       {/* Quick Add Modal / Sheet */}
       {isQuickAddOpen && (

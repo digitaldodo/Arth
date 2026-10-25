@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
+import { UnauthenticatedHome } from '@/app/UnauthenticatedHome';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +71,10 @@ export default async function HomePage({
     }
   } catch {
     authenticatedUser = null;
+  }
+
+  if (!authenticatedUser) {
+    return <UnauthenticatedHome />;
   }
 
   return <TransactionAppShell user={authenticatedUser} />;
