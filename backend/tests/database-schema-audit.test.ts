@@ -22,7 +22,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0009_people_tracker.sql',
       '0010_database_hardening.sql',
       '0011_history_protection_and_settlement_hardening.sql',
-      '0012_dashboard_summary.sql'
+      '0012_dashboard_summary.sql',
+      '0013_auth_username_support.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -144,5 +145,12 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM PUBLIC;'), 'Revoke from PUBLIC');
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM anon;'), 'Revoke from anon');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_dashboard_summary(DATE, DATE) TO authenticated;'), 'Grant to authenticated');
+  });
+
+  test('0013_auth_username_support.sql prioritizes username from raw_user_meta_data', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0013_auth_username_support.sql'), 'utf-8');
+    assert.ok(sql.includes('fn_handle_new_user'), 'Auth trigger function must be updated');
+    assert.ok(sql.includes("NEW.raw_user_meta_data->>'username'"), 'Username must be extracted from metadata');
+    assert.ok(sql.includes('ON CONFLICT (id) DO UPDATE'), 'Must handle conflict and update display name');
   });
 });

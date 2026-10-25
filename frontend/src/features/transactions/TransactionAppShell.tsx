@@ -15,6 +15,7 @@ interface TransactionAppShellProps {
   user: {
     id: string;
     email?: string;
+    displayName?: string;
   } | null;
 }
 
@@ -114,7 +115,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:inline-block text-xs font-mono text-[var(--text-secondary)] truncate max-w-[150px]">
-                  {user.email}
+                  {user.displayName || user.email}
                 </span>
                 <form action="/auth/logout" method="POST">
                   <button
@@ -236,7 +237,9 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                           Account Profile
                         </h3>
                         <p className="text-[11px] text-[var(--text-muted)] font-mono">
-                          {user.email}
+                          {user.displayName
+                            ? `${user.displayName} (${user.email})`
+                            : user.email}
                         </p>
                       </div>
                     </div>
@@ -263,7 +266,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               Welcome to Arth Personal Finance
             </h2>
             <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
-              Please sign in with your Google account to access your personal ledger, record income and expenses, and track people obligations.
+              Please sign in to access your personal ledger, record income and expenses, and track people obligations.
             </p>
             <div>
               <Link

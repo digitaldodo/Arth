@@ -317,6 +317,31 @@
 - [x] 100% of workspace quality gates pass (144 tests, clean lint, clean typecheck, clean production builds)
 - [x] Operational runbook and remaining owner deployment steps fully documented in `docs/DATABASE_OPERATIONS.md` and release reports
 
+### 01-P · Authentication UI Redesign & Email/Password Authentication ✅
+
+> Focus: Complete redesign of authentication experience, dual sign-in methods (Email/Password + Google OAuth), account registration with username persistence, password recovery flow, and dedicated reset screen.
+
+| Task | Details | Status |
+|---|---|---|
+| Migration 0013: Username Support | `supabase/migrations/0013_auth_username_support.sql` updating `fn_handle_new_user()` to extract `raw_user_meta_data->>'username'` as `display_name` in `public.profiles` | Complete ✅ |
+| Server Actions Module | `frontend/src/app/login/actions.ts` implementing `signInWithEmailAction`, `signUpWithEmailAction`, `requestPasswordResetAction`, `updatePasswordAction`, and `signInWithGoogleAction` with input validation, rate-limiting handlers, and uniform anti-enumeration responses | Complete ✅ |
+| Authentication Form Component | `frontend/src/app/login/AuthForm.tsx` supporting seamless Sign In, Create Account, and Forgot Password modes, show/hide password toggles, live strength & match indicators, loading spinners, and accessible error banners | Complete ✅ |
+| Redesigned Login Page | `frontend/src/app/login/page.tsx` with desktop two-column layout featuring Ledger Minimal branding, CSS ledger snapshot, protocol badges, and theme toggle; responsive single-column layout on mobile down to 320px | Complete ✅ |
+| Dedicated Password Reset Screen | `frontend/src/app/auth/update-password/page.tsx` and `UpdatePasswordForm.tsx` handling recovery session verification and secure password update via Supabase Auth | Complete ✅ |
+| Shell & Navigation Integration | Updated `frontend/src/app/page.tsx` and `frontend/src/features/transactions/TransactionAppShell.tsx` to display user display name, profile details, and updated welcome copy | Complete ✅ |
+| Automated Test Suites | Added 10 test cases in `frontend/tests/auth-actions.test.ts` and updated database schema audit tests in `backend/tests/database-schema-audit.test.ts` (155/155 tests passing across 17 test suites) | Complete ✅ |
+
+**Acceptance criteria**:
+- [x] Balanced two-column desktop layout with branding, CSS ledger mockup, and compact authentication surface
+- [x] Responsive single-column mobile layout down to 320px without horizontal overflow
+- [x] Email/password sign-in and account registration with validation and live password strength checks
+- [x] Google OAuth PKCE flow preserved with clear "OR" divider
+- [x] Username captured on registration and persisted as `display_name` in `public.profiles` via Migration 0013
+- [x] Password recovery request with uniform responses to prevent account enumeration
+- [x] Dedicated password update screen (`/auth/update-password`) handling active recovery sessions gracefully
+- [x] Zero plaintext password storage; HTTP-only, secure, `SameSite=Lax` cookies via `@supabase/ssr`
+- [x] 100% of workspace quality gates pass (155 tests, clean lint, clean typecheck, clean build)
+
 ---
 
 ## Phase 02 — Sheets Sync & Export

@@ -301,11 +301,17 @@ Key architectural invariants:
 
 ### 3.1 Overview
 - **Provider**: Supabase Auth
-- **Authentication Method**: Google OAuth with PKCE flow (primary); Magic Link email (fallback)
-- **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`
+- **Authentication Methods**:
+  - Email & Password sign-in and account registration with client/server validation and live strength indicators.
+  - Google OAuth with PKCE flow (one-click federated sign-in).
+  - Password recovery request flow and dedicated reset session screen (`/auth/update-password`).
+- **Username & Display Name**:
+  - During registration, username is captured, validated (3-30 chars, alphanumeric, hyphens, underscores), and passed via Supabase user metadata.
+  - PostgreSQL trigger `fn_handle_new_user()` (Migration 0013) extracts and prioritizes `raw_user_meta_data->>'username'` as `display_name` in `public.profiles`.
+- **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`. Passwords are never stored in Arth application tables.
 - **Clients**:
   - `frontend/src/lib/supabase/server.ts`: Server-side client using `createServerClient` reading/writing cookies in Next.js Server Components, Server Actions, and Route Handlers.
-  - Browser: Server Action initiates OAuth redirect to Supabase provider; browser JS never holds raw long-lived refresh tokens or database master credentials.
+  - Browser: Server Actions initiate OAuth redirects or handle email/password sign-in; browser JS never holds raw long-lived refresh tokens, service-role keys, or database master credentials.
 - **Profile Creation**: PostgreSQL trigger `fn_handle_new_user()` on `auth.users` automatically provisions `public.profiles` and seeds initial default categories.
 
 ### 3.2 BFF Thin Proxy Pattern

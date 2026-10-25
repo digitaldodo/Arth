@@ -1,8 +1,8 @@
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { AuthForm } from './AuthForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,133 +13,176 @@ export default async function LoginPage({
 }) {
   const { error } = await searchParams;
 
-  async function handleGoogleSignIn() {
-    'use server';
+  // If user is already authenticated with active session, redirect to home
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    let redirectUrl: string | undefined;
-
-    try {
-      const supabase = await createClient();
-      const headersList = await headers();
-      const host = headersList.get('host') || 'localhost:3000';
-      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const origin = `${protocol}://${host}`;
-
-      const { data, error: authError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${origin}/auth/callback?next=/`,
-        },
-      });
-
-      if (authError) {
-        redirectUrl = `/login?error=${encodeURIComponent(authError.message)}`;
-      } else if (data.url) {
-        redirectUrl = data.url;
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown OAuth error';
-      redirectUrl = `/login?error=${encodeURIComponent(message)}`;
+    if (user) {
+      redirect('/');
     }
-
-    if (redirectUrl) {
-      redirect(redirectUrl);
-    }
+  } catch {
+    // Continue rendering login form if auth check fails or no session
   }
 
   return (
-    <main className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] px-4 py-12 flex flex-col justify-between transition-colors">
-      {/* Header bar */}
-      <div className="max-w-[420px] w-full mx-auto flex items-center justify-between pb-6">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
+      {/* Top Header Bar */}
+      <header className="w-full max-w-5xl mx-auto px-4 py-6 flex items-center justify-between">
         <Link
           href="/"
-          className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1.5"
+          className="text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1.5 font-medium"
         >
           <span aria-hidden="true">&larr;</span> Back to Foundation
         </Link>
         <ThemeToggle />
-      </div>
+      </header>
 
-      {/* Main card */}
-      <div className="max-w-[420px] w-full mx-auto p-6 md:p-8 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-6">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-              Arth
-            </h1>
-            <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
-              Ledger Minimal
-            </span>
+      {/* Main Centered Content Grid */}
+      <main className="w-full max-w-5xl mx-auto px-4 py-4 md:py-8 my-auto">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 items-center">
+          {/* Left Panel: Branding & Restrained CSS Ledger Mockup (hidden on small mobile) */}
+          <div className="hidden md:flex md:col-span-6 lg:col-span-7 flex-col justify-between space-y-8 pr-0 lg:pr-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                  Arth
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                  Ledger Minimal
+                </span>
+              </div>
+              <h1 className="text-xl lg:text-2xl font-semibold tracking-tight text-[var(--text-primary)] leading-snug">
+                Disciplined personal finance engineered with mathematical rigor.
+              </h1>
+              <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed max-w-lg">
+                Built on exact integer-paise calculations, PostgreSQL authoritative storage,
+                and Swiss ledger clarity. Track cash flow, debts, and obligations without
+                algorithmic clutter.
+              </p>
+            </div>
+
+            {/* CSS Financial Ledger Illustration */}
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--border-hairline)]">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-secondary)] font-semibold">
+                    Live Ledger Snapshot
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                  IST (Asia/Kolkata)
+                </span>
+              </div>
+
+              {/* Sample Ledger Rows */}
+              <div className="space-y-2.5 font-mono text-[12px]">
+                <div className="flex items-center justify-between p-2 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-xs bg-[var(--income-bg)] text-[var(--income-fg)] border border-[var(--income-border)] uppercase tracking-wider font-sans font-semibold">
+                      Income
+                    </span>
+                    <span className="truncate text-[var(--text-primary)]">
+                      Client Retainer
+                    </span>
+                  </div>
+                  <span className="font-semibold text-[var(--income-fg)] ml-2 shrink-0">
+                    +₹85,000.00
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-xs bg-[var(--expense-bg)] text-[var(--expense-fg)] border border-[var(--expense-border)] uppercase tracking-wider font-sans font-semibold">
+                      Expense
+                    </span>
+                    <span className="truncate text-[var(--text-primary)]">
+                      Cloud Infrastructure
+                    </span>
+                  </div>
+                  <span className="font-semibold text-[var(--expense-fg)] ml-2 shrink-0">
+                    -₹1,450.00
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-xs bg-[var(--expense-bg)] text-[var(--expense-fg)] border border-[var(--expense-border)] uppercase tracking-wider font-sans font-semibold">
+                      Expense
+                    </span>
+                    <span className="truncate text-[var(--text-primary)]">
+                      Studio Rent
+                    </span>
+                  </div>
+                  <span className="font-semibold text-[var(--expense-fg)] ml-2 shrink-0">
+                    -₹24,000.00
+                  </span>
+                </div>
+              </div>
+
+              {/* Double-ruled Summary Row */}
+              <div className="pt-2 border-t-2 border-double border-[var(--border-subtle)] flex items-center justify-between text-[12px] font-mono">
+                <span className="text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[11px] font-sans">
+                  Net Cash Flow
+                </span>
+                <span className="font-bold text-[var(--income-fg)]">
+                  +₹59,550.00
+                </span>
+              </div>
+            </div>
+
+            {/* Architecture Protocol Badges */}
+            <div className="pt-2 flex flex-wrap items-center gap-4 text-[11px] font-mono text-[var(--text-muted)]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--border-strong)]" />
+                <span>OAuth 2.0 PKCE</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--border-strong)]" />
+                <span>HTTP-Only Cookies</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--border-strong)]" />
+                <span>PostgreSQL RLS</span>
+              </div>
+            </div>
           </div>
-          <p className="text-[13px] text-[var(--text-secondary)]">
-            Sign in to access your ledger and synchronized financial records.
-          </p>
+
+          {/* Right Panel: Compact Form Card */}
+          <div className="w-full md:col-span-6 lg:col-span-5">
+            <div className="p-6 sm:p-8 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs">
+              <div className="mb-6 space-y-1">
+                {/* Mobile-only branding display */}
+                <div className="flex md:hidden items-center gap-2 mb-3">
+                  <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+                    Arth
+                  </span>
+                  <span className="px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                    Ledger Minimal
+                  </span>
+                </div>
+                <h2 className="text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">
+                  Authentication
+                </h2>
+                <p className="text-[12px] text-[var(--text-secondary)]">
+                  Sign in or create an account to access your personal ledger.
+                </p>
+              </div>
+
+              {/* Interactive Auth Form */}
+              <AuthForm initialError={error} />
+            </div>
+          </div>
         </div>
+      </main>
 
-        {/* Error notification banner */}
-        {error && (
-          <div
-            role="alert"
-            className="p-3 rounded-[3px] bg-[var(--status-error-bg)] border border-[var(--expense-border)] text-[var(--status-error-fg)] text-[12px] space-y-1"
-          >
-            <div className="font-medium">Authentication Notice</div>
-            <p className="opacity-90">{decodeURIComponent(error)}</p>
-          </div>
-        )}
-
-        {/* OAuth Action */}
-        <form action={handleGoogleSignIn} className="space-y-3">
-          <button
-            type="submit"
-            className="w-full py-2.5 px-4 rounded-[3px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[13px] font-medium hover:bg-[var(--action-primary-hover)] transition-colors flex items-center justify-center gap-2.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2"
-          >
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                fill="#EA4335"
-              />
-            </svg>
-            <span>Continue with Google</span>
-          </button>
-        </form>
-
-        <div className="pt-2 border-t border-[var(--border-hairline)] space-y-2 text-[11px] text-[var(--text-muted)]">
-          <div className="flex items-center justify-between">
-            <span>Protocol</span>
-            <span className="font-mono">OAuth 2.0 PKCE</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Session Storage</span>
-            <span className="font-mono">HTTP-only Secure Cookies</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Identity Provider</span>
-            <span className="font-mono">Supabase Auth</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer notes */}
-      <footer className="max-w-[420px] w-full mx-auto pt-6 text-center text-[12px] text-[var(--text-muted)]">
-        Arth Financial Platform &middot; Phase 01H
+      {/* Footer Notes */}
+      <footer className="w-full max-w-5xl mx-auto px-4 py-6 text-center text-[12px] text-[var(--text-muted)]">
+        Arth Financial Platform &middot; Phase 01O Production &middot; Swiss Ledger Minimal
       </footer>
-    </main>
+    </div>
   );
 }

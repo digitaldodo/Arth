@@ -29,7 +29,8 @@ arth/
 │   │   │   ├── api/backend/auth/ # BFF thin proxy forwarding Bearer JWTs to Fastify
 │   │   │   ├── auth/callback/    # Supabase PKCE OAuth callback handler
 │   │   │   ├── auth/logout/      # Session invalidation & cookie clearance
-│   │   │   ├── login/            # Ledger Minimal sign-in UI
+│   │   │   ├── auth/update-password/ # Dedicated password update & recovery screen
+│   │   │   ├── login/            # Redesigned dual-auth (Email/Password + Google OAuth)
 │   │   │   ├── manifest.ts       # W3C Web App Manifest (standalone, theme colors)
 │   │   │   └── page.tsx          # Authenticated session display & foundation
 │   │   ├── components/
