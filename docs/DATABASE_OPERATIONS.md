@@ -224,6 +224,9 @@ All database modifications follow a strict append-only Flyway/Supabase numbering
 | `0010` | `database_hardening` | `ON DELETE RESTRICT` cascade prevention, row locking, covering indexes |
 | `0011` | `history_protection_and_settlement_hardening` | Revoke hard `DELETE` from authenticated on people and records; drop delete RLS policies; harden settlement idempotency (notes comparison and post-lock retry re-check) |
 | `0012` | `dashboard_summary` | Single-query atomic summary function `fn_dashboard_summary` with `SECURITY INVOKER` calculating income, expenses, net cash flow, spending composition, and bounded recent activity |
+| `0013` | `auth_username_support` | Auto-provision user display name and profile username from `raw_user_meta_data` on sign-up |
+| `0014` | `username_authentication_and_lookup` | Case-insensitive username uniqueness constraint, format check, RPC email lookup for `service_role`, and username assignment |
+| `0015` | `category_reorder_hardening` | Fully qualify column references in `fn_reorder_categories` with table alias `c.` and `#variable_conflict use_column` to prevent PostgreSQL error 42702 |
 
 ---
 

@@ -309,10 +309,17 @@ export class SupabaseCategoryService implements ICategoryService {
     });
 
     if (error) {
-      if (error.code === '22023') {
+      if (
+        error.code === '22023' ||
+        error.code === '22000' ||
+        error.code === 'P0001' ||
+        error.message?.includes('Category IDs') ||
+        error.message?.includes('category IDs') ||
+        error.message?.includes('invalid, archived, or belong')
+      ) {
         throw new ValidationError(error.message);
       }
-      throw new Error(`Failed to reorder categories: ${error.message}`);
+      throw new Error(`Failed to reorder categories: [${error.code || 'UNKNOWN'}] ${error.message}`);
     }
 
     const categories = (data || []).map((c: StoredCategoryRecord) =>

@@ -24,7 +24,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0011_history_protection_and_settlement_hardening.sql',
       '0012_dashboard_summary.sql',
       '0013_auth_username_support.sql',
-      '0014_username_authentication_and_lookup.sql'
+      '0014_username_authentication_and_lookup.sql',
+      '0015_category_reorder_hardening.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -166,5 +167,17 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_get_email_by_username(TEXT) TO service_role;'), 'Lookup must only be granted to service_role');
     assert.ok(sql.includes('fn_check_username_available'), 'Public availability check function must exist');
     assert.ok(sql.includes('fn_set_own_username'), 'Self-service username assignment function must exist');
+  });
+
+  test('0015_category_reorder_hardening.sql resolves ambiguous column references and enforces SECURITY INVOKER with row locking', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0015_category_reorder_hardening.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_reorder_categories'), 'Must define fn_reorder_categories');
+    assert.ok(sql.includes('#variable_conflict use_column'), 'Must set variable_conflict to use_column');
+    assert.ok(sql.includes('FROM public.categories c'), 'Must qualify categories table alias');
+    assert.ok(sql.includes('c.type = p_type'), 'Must qualify type column to prevent 42702 ambiguity');
+    assert.ok(sql.includes('c.user_id = v_user_id'), 'Must qualify user_id column');
+    assert.ok(sql.includes('FOR UPDATE'), 'Must maintain FOR UPDATE row lock');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Must remain SECURITY INVOKER');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_reorder_categories'), 'Must grant execute to authenticated');
   });
 });
