@@ -7,6 +7,15 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+function parseIncomingCookies(request: Request): { name: string; value: string }[] {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return [];
+  return cookieHeader.split(';').map((pair) => {
+    const [name, ...rest] = pair.trim().split('=');
+    return { name, value: rest.join('=') };
+  });
+}
+
 /**
  * Handles the OAuth PKCE callback from Supabase Auth.
  * Exchanges the temporary authorization code for an authoritative session in HTTP-only cookies.
@@ -40,7 +49,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const supabase = await createClient();
+    const redirectTarget = new URL(safeNext, origin);
+    const response = NextResponse.redirect(redirectTarget);
+    const incomingCookies = parseIncomingCookies(request);
+    const supabase = await createClient(response, incomingCookies);
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
@@ -50,9 +62,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(redirectUrl);
     }
 
-    // Successful exchange: session is saved in HTTP-only cookies.
+    // Successful exchange: session is saved in HTTP-only cookies directly on response.
     // Redirect to safe internal destination without exposing authorization code.
-    return NextResponse.redirect(new URL(safeNext, origin));
+    return response;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'auth_exchange_failed';
     const redirectUrl = new URL('/login', origin);

@@ -23,6 +23,7 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000/auth/callback",
+  "http://localhost:3000/**",
   "https://arth-9h3f.vercel.app/auth/callback",
   "https://arth-9h3f.vercel.app/**"
 ]

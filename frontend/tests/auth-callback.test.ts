@@ -154,25 +154,181 @@ describe('OAuth Callback & Environment URL Resolution', () => {
       assert.ok(location.startsWith('http://localhost:3000/login'));
       assert.ok(!location.includes('attacker.com'));
     });
+
+    test('exchanges valid authorization code and sets session cookies on redirect', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'mock-access-token-12345',
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: 'mock-refresh-token-12345',
+                user: {
+                  id: '00000000-0000-7000-8000-000000000001',
+                  email: 'test@example.com',
+                },
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const mockVerifierCookies =
+          'sb-127-auth-token-code-verifier=base64-InZlcmlmaWVyIg==; ' +
+          'sb-127-auth-token-flows-code-verifier=WyJmbG93MSJd; ' +
+          'sb-127-auth-token-flow-flow1-code-verifier=base64-InZlcmlmaWVyIg==';
+
+        const req = new Request('http://localhost:3000/auth/callback?code=valid-test-code', {
+          headers: {
+            cookie: mockVerifierCookies,
+          },
+        });
+        const res = await handleCallback(req);
+
+        assert.equal(res.status, 307);
+        const location = res.headers.get('location') || res.headers.get('Location');
+        assert.equal(location, 'http://localhost:3000/');
+
+        // Assert session cookies are set on the redirect response
+        const setCookieHeader = res.headers.get('set-cookie');
+        assert.ok(setCookieHeader, 'set-cookie header should be populated on redirect');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('invalid authorization code produces a recoverable error redirect without token leakage', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        const sensitiveCode = 'secret-invalid-auth-code-999';
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                error: 'invalid_grant',
+                error_description: 'Invalid authorization code or PKCE code verifier',
+              }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const req = new Request(`http://localhost:3000/auth/callback?code=${sensitiveCode}`);
+        const res = await handleCallback(req);
+
+        assert.equal(res.status, 307);
+        const location = res.headers.get('location') || res.headers.get('Location');
+        assert.ok(location);
+        assert.ok(location.startsWith('http://localhost:3000/login?error=auth_exchange_failed'));
+        // Verify sensitive authorization code is never leaked in the redirect URL
+        assert.ok(!location.includes(sensitiveCode), 'Sensitive auth code must not be in redirect URL');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('rejects unsafe external redirect destination on successful code exchange', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'mock-token',
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: 'mock-refresh',
+                user: { id: '00000000-0000-7000-8000-000000000001', email: 'test@example.com' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const mockVerifierCookies =
+          'sb-127-auth-token-code-verifier=base64-InZlcmlmaWVyIg==; ' +
+          'sb-127-auth-token-flows-code-verifier=WyJmbG93MSJd; ' +
+          'sb-127-auth-token-flow-flow1-code-verifier=base64-InZlcmlmaWVyIg==';
+
+        const req = new Request(
+          'http://localhost:3000/auth/callback?code=valid-code&next=//malicious.com/phish',
+          {
+            headers: {
+              cookie: mockVerifierCookies,
+            },
+          }
+        );
+        const res = await handleCallback(req);
+
+        assert.equal(res.status, 307);
+        const location = res.headers.get('location') || res.headers.get('Location');
+        assert.equal(location, 'http://localhost:3000/');
+        assert.ok(!location.includes('malicious.com'));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   // 5. Google OAuth Server Action
   describe('Google OAuth Server Action', () => {
-    test('initiates OAuth with correct explicit callback URL', async () => {
-      process.env.NEXT_PUBLIC_APP_URL = 'https://arth-9h3f.vercel.app';
+    test('local OAuth targets /auth/callback, never / and no next=/ query param', async () => {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'development';
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      delete process.env.APP_URL;
+
       const result = await signInWithGoogleAction();
 
-      // Either returns authorization url or graceful error in test environment without live Supabase
-      if (result.url) {
-        assert.ok(result.url.includes('provider=google'));
-        assert.ok(
-          result.url.includes(
-            encodeURIComponent('https://arth-9h3f.vercel.app/auth/callback?next=/')
-          )
-        );
-      } else {
-        assert.ok(typeof result.error === 'string');
-      }
+      assert.ok(result.url, 'Expected OAuth URL to be generated');
+      assert.ok(result.url.includes('provider=google'));
+      // Must target explicit /auth/callback
+      assert.ok(
+        result.url.includes(
+          encodeURIComponent('http://localhost:3000/auth/callback')
+        ),
+        'Must target exact http://localhost:3000/auth/callback'
+      );
+      // Must not target root /
+      assert.ok(
+        !result.url.includes(encodeURIComponent('http://localhost:3000/&')) &&
+        !result.url.includes(encodeURIComponent('http://localhost:3000/?'))
+      );
+      // Must not have trailing query param next=/
+      assert.ok(!result.url.includes('next='), 'Must not contain trailing next= query param');
+    });
+
+    test('production OAuth targets deployed domain and never localhost', async () => {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      process.env.NEXT_PUBLIC_APP_URL = 'https://arth-9h3f.vercel.app';
+
+      // Even if clientOrigin or a misconfigured setting attempts localhost:
+      const result = await signInWithGoogleAction('http://localhost:3000');
+
+      assert.ok(result.url, 'Expected OAuth URL to be generated');
+      assert.ok(result.url.includes('provider=google'));
+      assert.ok(
+        result.url.includes(
+          encodeURIComponent('https://arth-9h3f.vercel.app/auth/callback')
+        ),
+        'Must target deployed production domain callback'
+      );
+      assert.ok(
+        !result.url.includes('localhost'),
+        'Production OAuth must never reference localhost'
+      );
+      assert.ok(!result.url.includes('next='), 'Must not contain trailing next= query param');
     });
   });
 });

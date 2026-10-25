@@ -11,31 +11,75 @@ interface MinimalHeaders {
 }
 
 /**
+ * Checks whether an origin or URL string points to a local machine address.
+ */
+function isLocalhost(val: string): boolean {
+  return (
+    val.includes('localhost') ||
+    val.includes('127.0.0.1') ||
+    val.includes('[::1]')
+  );
+}
+
+/**
  * Derives the canonical application origin.
  *
  * Priority order:
- * 1. NEXT_PUBLIC_APP_URL or APP_URL environment variable (sanitized).
- * 2. Incoming request headers (x-forwarded-host / host, x-forwarded-proto).
- * 3. Vercel deployment variables (VERCEL_PROJECT_PRODUCTION_URL, VERCEL_URL).
- * 4. In production: falls back strictly to PRODUCTION_DEFAULT_ORIGIN (never localhost).
- * 5. In development/test: falls back to LOCAL_DEFAULT_ORIGIN.
+ * 1. Client-supplied origin (from browser window.location.origin, validated).
+ * 2. NEXT_PUBLIC_APP_URL or APP_URL environment variable (sanitized).
+ * 3. Incoming request headers (x-forwarded-host / host, x-forwarded-proto).
+ * 4. Vercel deployment variables (VERCEL_PROJECT_PRODUCTION_URL, VERCEL_URL).
+ * 5. In production: falls back strictly to PRODUCTION_DEFAULT_ORIGIN (never localhost).
+ * 6. In development/test: falls back to LOCAL_DEFAULT_ORIGIN.
  */
-export function getAppOrigin(headersList?: MinimalHeaders): string {
-  const isProd = process.env.NODE_ENV === 'production';
+export function getAppOrigin(
+  headersList?: MinimalHeaders,
+  clientOrigin?: string
+): string {
+  const isProd =
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL_ENV === 'production' ||
+    process.env.VERCEL_ENV === 'preview';
 
-  // 1. Explicit configured environment variable
+  // 1. Client-supplied origin (e.g. from window.location.origin during browser actions)
+  if (
+    clientOrigin &&
+    typeof clientOrigin === 'string' &&
+    clientOrigin.trim().length > 0
+  ) {
+    const trimmed = clientOrigin.trim().replace(/\/+$/, '');
+    if (isProd) {
+      // In production, strictly reject any localhost client origin
+      if (!isLocalhost(trimmed) && trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+    } else {
+      if (
+        isLocalhost(trimmed) ||
+        trimmed.startsWith('http://localhost') ||
+        trimmed.startsWith('http://127.0.0.1')
+      ) {
+        return trimmed;
+      }
+    }
+  }
+
+  // 2. Explicit configured environment variable
   const configuredUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
   if (configuredUrl && configuredUrl.trim().length > 0) {
     const trimmed = configuredUrl.trim().replace(/\/+$/, '');
     // In production, ensure we never accidentally redirect to localhost
-    if (isProd && (trimmed.includes('localhost') || trimmed.includes('127.0.0.1'))) {
-      // Ignore misconfigured localhost in production and proceed to headers/canonical
+    if (isProd) {
+      if (!isLocalhost(trimmed) && trimmed.startsWith('https://')) {
+        return trimmed;
+      }
     } else {
       return trimmed;
     }
   }
 
-  // 2. Derive from incoming request headers if available
+  // 3. Derive from incoming request headers if available
   if (headersList) {
     const forwardedHost = headersList.get('x-forwarded-host');
     const host = forwardedHost || headersList.get('host');
@@ -48,15 +92,17 @@ export function getAppOrigin(headersList?: MinimalHeaders): string {
         : forwardedProto || (cleanHost.includes('localhost') ? 'http' : 'https');
 
       const derived = `${proto}://${cleanHost}`.replace(/\/+$/, '');
-      if (isProd && (derived.includes('localhost') || derived.includes('127.0.0.1'))) {
-        // Guard against internal proxy forwarding localhost in production
+      if (isProd) {
+        if (!isLocalhost(derived)) {
+          return derived;
+        }
       } else {
         return derived;
       }
     }
   }
 
-  // 3. Vercel system environment variables
+  // 4. Vercel system environment variables
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim().replace(/\/+$/, '')}`;
   }
@@ -64,12 +110,12 @@ export function getAppOrigin(headersList?: MinimalHeaders): string {
     return `https://${process.env.VERCEL_URL.trim().replace(/\/+$/, '')}`;
   }
 
-  // 4. Production fallback: canonical production domain (never localhost)
+  // 5. Production fallback: canonical production domain (never localhost)
   if (isProd) {
     return PRODUCTION_DEFAULT_ORIGIN;
   }
 
-  // 5. Local development fallback
+  // 6. Local development fallback
   return LOCAL_DEFAULT_ORIGIN;
 }
 

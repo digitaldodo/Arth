@@ -120,7 +120,11 @@ export function AuthForm({ initialError }: AuthFormProps) {
   const handleGoogleSubmit = () => {
     setErrorMessage(null);
     startGoogleTransition(async () => {
-      const res = await signInWithGoogleAction();
+      const clientOrigin =
+        typeof window !== 'undefined' && window.location.origin
+          ? window.location.origin
+          : undefined;
+      const res = await signInWithGoogleAction(clientOrigin);
       if (res.error) {
         setErrorMessage(res.error);
       } else if (res.url) {

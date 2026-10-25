@@ -7,14 +7,22 @@ This document specifies the exact configuration required in the **Google Cloud C
 ## 1. Architectural Diagnosis
 
 ### Why did the browser redirect to `http://localhost:3000/?code=...` with `ERR_CONNECTION_REFUSED`?
-1. **Supabase Fallback to Site URL**:
+1. **Allowlist Exact-Matching & Query String Rejection**:
    When `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: '...' } })` initiates an OAuth flow, Supabase validates the supplied `redirectTo` against its allowlist (**Authentication → URL Configuration → Redirect URLs**).
-   If the supplied production callback (`https://arth-9h3f.vercel.app/auth/callback`) is not explicitly listed in the allowlist, Supabase rejects it and silently falls back to the configured **Site URL**.
-   When newly provisioned, the default Site URL in Supabase is `http://localhost:3000` (or `http://localhost:3000/`).
-2. **Missing Localhost Service**:
-   Because the redirect sent the user to `http://localhost:3000/?code=...` while the user was interacting with the production deployment on Vercel (where no local server was listening on port 3000 of their device), the browser aborted with `ERR_CONNECTION_REFUSED`.
-3. **Uncaptured Authorization Code on Root**:
-   Previously, if an authorization code landed on `/` instead of `/auth/callback`, the homepage did not exchange it for a session, leaving the unexchanged `?code=` query parameter visible in the address bar.
+   If `redirectTo` contains a query parameter like `https://arth-9h3f.vercel.app/auth/callback?next=/`, Supabase compares the entire URI against the allowlist entries. If the allowlist contains only `https://arth-9h3f.vercel.app/auth/callback` without wildcards, the exact string match fails.
+2. **Supabase Silent Fallback to Site URL**:
+   When Supabase rejects a requested `redirectTo`, it does not throw an error; instead, it silently falls back to the configured **Site URL** in the Supabase Dashboard.
+   If the default Site URL in Supabase is still `http://localhost:3000` (or `http://localhost:3000/`), Supabase sends the browser redirect upon completion of Google OAuth directly to:
+   `http://localhost:3000/?code=...` (landing on the root path `/` of localhost:3000, NOT `/auth/callback`).
+3. **Missing Localhost Service**:
+   Because the redirect sent the user to `http://localhost:3000/?code=...` while the user was interacting with the production deployment on Vercel (where no local server was listening on port 3000 of their device), Chrome immediately aborted with `ERR_CONNECTION_REFUSED`.
+4. **Resolution**:
+   - The application now explicitly requests the exact, clean callback URL without trailing query parameters:
+     - Local development: `http://localhost:3000/auth/callback`
+     - Production: `https://arth-9h3f.vercel.app/auth/callback`
+   - In production, origin derivation strictly prevents localhost fallbacks under all circumstances.
+   - The Supabase Dashboard **Site URL** must be updated to `https://arth-9h3f.vercel.app`.
+   - The Supabase Dashboard **Redirect URLs** must contain `http://localhost:3000/auth/callback` and `https://arth-9h3f.vercel.app/auth/callback`.
 
 ### Why did the Google Consent Screen display `fbmmkqdwkayrrsodueqd.supabase.co`?
 1. **OAuth Redirect Origin**:

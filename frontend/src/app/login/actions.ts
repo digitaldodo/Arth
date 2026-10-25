@@ -281,21 +281,30 @@ export async function updatePasswordAction(
  * 5. Google OAuth Initiation Action
  * Uses server-side createClient to establish PKCE code verifier and returns
  * the authoritative redirect URL to the caller.
+ * Targets the exact /auth/callback URL without trailing query strings to ensure
+ * strict compatibility with Supabase Authentication URL Configuration allowlists.
  */
-export async function signInWithGoogleAction(): Promise<{
+export async function signInWithGoogleAction(clientOrigin?: string): Promise<{
   url?: string;
   error?: string;
 }> {
   try {
-    const headersList = await headers();
-    const origin = getAppOrigin(headersList);
+    let headersList;
+    try {
+      headersList = await headers();
+    } catch {
+      // Standalone test context or outside Next.js request scope
+      headersList = undefined;
+    }
+
+    const origin = getAppOrigin(headersList, clientOrigin);
     const callbackUrl = getAuthCallbackUrl(origin);
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${callbackUrl}?next=/`,
+        redirectTo: callbackUrl,
       },
     });
 
