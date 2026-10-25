@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   signInWithEmailAction,
   signUpWithEmailAction,
+  resendConfirmationEmailAction,
   requestPasswordResetAction,
   signInWithGoogleAction,
   type AuthActionResult,
 } from './actions';
 
-type AuthMode = 'signin' | 'signup' | 'forgot';
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'resend_confirm';
 
 interface AuthFormProps {
   initialError?: string;
@@ -27,6 +28,7 @@ export function AuthForm({ initialError }: AuthFormProps) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
 
   // Password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -55,6 +57,9 @@ export function AuthForm({ initialError }: AuthFormProps) {
       const res: AuthActionResult = await signInWithEmailAction(formData);
       if (res.error) {
         setErrorMessage(res.error);
+        if (res.error.includes('not been confirmed')) {
+          setUnconfirmedEmail(email);
+        }
       } else if (res.redirectUrl) {
         window.location.href = res.redirectUrl;
       } else {
@@ -79,20 +84,58 @@ export function AuthForm({ initialError }: AuthFormProps) {
     }
 
     const formData = new FormData(e.currentTarget);
+    const submittedEmail = (formData.get('email') as string)?.trim().toLowerCase();
 
     startTransition(async () => {
-      const res: AuthActionResult = await signUpWithEmailAction(formData);
+      const clientOrigin =
+        typeof window !== 'undefined' && window.location.origin
+          ? window.location.origin
+          : undefined;
+      const res: AuthActionResult = await signUpWithEmailAction(formData, clientOrigin);
       if (res.error) {
         setErrorMessage(res.error);
       } else if (res.needsConfirmation) {
+        setUnconfirmedEmail(submittedEmail);
+        setMode('resend_confirm');
         setSuccessMessage(
           res.message ||
-            'Registration successful! Please check your email to confirm your account.'
+            'Account created! A confirmation link has been sent to your email address. Please check your email to confirm your account.'
         );
       } else if (res.redirectUrl) {
         window.location.href = res.redirectUrl;
       } else {
         router.refresh();
+      }
+    });
+  };
+
+  const handleResendConfirmation = (e?: React.FormEvent<HTMLFormElement>) => {
+    if (e) e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const targetEmail = unconfirmedEmail || email;
+    if (!targetEmail) {
+      setErrorMessage('Please enter your email address to receive a confirmation link.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set('email', targetEmail);
+
+    startTransition(async () => {
+      const clientOrigin =
+        typeof window !== 'undefined' && window.location.origin
+          ? window.location.origin
+          : undefined;
+      const res: AuthActionResult = await resendConfirmationEmailAction(formData, clientOrigin);
+      if (res.error) {
+        setErrorMessage(res.error);
+      } else {
+        setSuccessMessage(
+          res.message ||
+            'If an unconfirmed account exists with this email address, a new confirmation link has been sent to your inbox.'
+        );
       }
     });
   };
@@ -156,6 +199,7 @@ export function AuthForm({ initialError }: AuthFormProps) {
           {mode === 'signin' && 'Sign in to Arth'}
           {mode === 'signup' && 'Create an account'}
           {mode === 'forgot' && 'Reset password'}
+          {mode === 'resend_confirm' && 'Confirm your account'}
         </h1>
 
         {/* 3. Small, Muted Description */}
@@ -166,11 +210,13 @@ export function AuthForm({ initialError }: AuthFormProps) {
             'Enter your details to create your personal ledger.'}
           {mode === 'forgot' &&
             'Enter your email address to receive a secure recovery link.'}
+          {mode === 'resend_confirm' &&
+            'Check your email inbox to confirm and activate your account.'}
         </p>
       </div>
 
       {/* 4. Sign In / Create Account Switch */}
-      {mode !== 'forgot' && (
+      {mode !== 'forgot' && mode !== 'resend_confirm' && (
         <div
           role="tablist"
           aria-label="Authentication Options"
@@ -211,7 +257,21 @@ export function AuthForm({ initialError }: AuthFormProps) {
           role="alert"
           className="p-3 rounded-[3px] bg-[var(--status-error-bg)] border border-[var(--expense-border)] text-[var(--status-error-fg)] text-[12px] flex items-start justify-between gap-2"
         >
-          <p className="leading-snug">{errorMessage}</p>
+          <div className="space-y-1.5 leading-snug">
+            <p>{errorMessage}</p>
+            {mode === 'signin' && errorMessage.includes('not been confirmed') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUnconfirmedEmail(email);
+                  switchMode('resend_confirm');
+                }}
+                className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity block cursor-pointer pt-0.5 text-left"
+              >
+                Resend confirmation link &rarr;
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
@@ -862,6 +922,100 @@ export function AuthForm({ initialError }: AuthFormProps) {
               className="text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1 cursor-pointer"
             >
               <span>&larr;</span> Back to Sign In
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* MODE 4: RESEND CONFIRMATION */}
+      {mode === 'resend_confirm' && (
+        <form onSubmit={handleResendConfirmation} className="space-y-4">
+          <div className="p-3.5 rounded-[3px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[12px] space-y-2">
+            <div className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+              <span>✉️</span> Check your email
+            </div>
+            <p className="text-[var(--text-secondary)] leading-relaxed">
+              We sent a confirmation link to{' '}
+              <strong className="text-[var(--text-primary)] font-medium">
+                {unconfirmedEmail || email || 'your email address'}
+              </strong>
+              . Click the link in the email to activate your account.
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Didn&apos;t receive it? Check your spam folder or request a new confirmation email below.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label
+              htmlFor="confirm-email"
+              className="block text-[12px] font-medium text-[var(--text-primary)]"
+            >
+              Email address
+            </label>
+            <input
+              id="confirm-email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@domain.com"
+              value={unconfirmedEmail || email}
+              onChange={(e) => {
+                setUnconfirmedEmail(e.target.value);
+                setEmail(e.target.value);
+              }}
+              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isPending}
+            className="w-full h-10 px-4 rounded-[3px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[13px] font-medium hover:bg-[var(--action-primary-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPending ? (
+              <span className="flex items-center gap-2">
+                <svg
+                  className="animate-spin h-3.5 w-3.5 text-current"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Resending confirmation...
+              </span>
+            ) : (
+              'Resend Confirmation Email'
+            )}
+          </button>
+
+          <div className="pt-2 flex items-center justify-between text-[12px]">
+            <button
+              type="button"
+              onClick={() => switchMode('signin')}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>&larr;</span> Back to Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('signup')}
+              className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+            >
+              Create different account
             </button>
           </div>
         </form>

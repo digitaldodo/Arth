@@ -128,6 +128,14 @@ export function getAuthCallbackUrl(origin?: string): string {
 }
 
 /**
+ * Returns the explicit email confirmation verification URL.
+ */
+export function getAuthConfirmUrl(origin?: string): string {
+  const base = origin ? origin.replace(/\/+$/, '') : getAppOrigin();
+  return `${base}/auth/confirm`;
+}
+
+/**
  * Validates and sanitizes a post-authentication redirect destination.
  * Strictly prevents open-redirect vulnerabilities.
  */
@@ -172,6 +180,12 @@ export function formatAuthError(
     if (desc.includes('Invalid login credentials')) {
       return 'Invalid email address or password. Please verify your credentials and try again.';
     }
+    if (desc.includes('Email not confirmed')) {
+      return 'Your email address has not been confirmed yet. Please check your inbox for the confirmation link.';
+    }
+    if (desc.includes('Token has expired') || desc.includes('otp_expired')) {
+      return 'The confirmation link has expired. Please request a new confirmation email.';
+    }
     return desc;
   }
 
@@ -184,6 +198,10 @@ export function formatAuthError(
       return 'No authorization code was returned by the identity provider. Please try signing in again.';
     case 'auth_exchange_failed':
       return 'The authorization code exchange failed or the session expired. Please try signing in again.';
+    case 'confirmation_failed':
+      return 'The confirmation link is invalid or has expired. Please request a new confirmation link.';
+    case 'missing_confirmation_token':
+      return 'No confirmation token was found in the link. Please check your email or request a new confirmation link.';
     case 'access_denied':
       return 'Sign-in was cancelled or access was denied. Please try again.';
     case 'expired_session':

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import {
   getAppOrigin,
   getAuthCallbackUrl,
+  getAuthConfirmUrl,
 } from '@/lib/auth-config';
 
 export interface AuthActionResult {
@@ -99,7 +100,8 @@ export async function signInWithEmailAction(
  * 2. Account Registration Action (Sign Up)
  */
 export async function signUpWithEmailAction(
-  formData: FormData
+  formData: FormData,
+  clientOrigin?: string
 ): Promise<AuthActionResult> {
   const username = (formData.get('username') as string)?.trim();
   const email = (formData.get('email') as string)?.trim().toLowerCase();
@@ -128,9 +130,15 @@ export async function signUpWithEmailAction(
   }
 
   try {
-    const headersList = await headers();
-    const origin = getAppOrigin(headersList);
-    const callbackUrl = getAuthCallbackUrl(origin);
+    let headersList;
+    try {
+      headersList = await headers();
+    } catch {
+      headersList = undefined;
+    }
+
+    const origin = getAppOrigin(headersList, clientOrigin);
+    const confirmUrl = getAuthConfirmUrl(origin);
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.signUp({
@@ -141,7 +149,7 @@ export async function signUpWithEmailAction(
           username,
           full_name: username,
         },
-        emailRedirectTo: `${callbackUrl}?next=/`,
+        emailRedirectTo: confirmUrl,
       },
     });
 
@@ -165,15 +173,81 @@ export async function signUpWithEmailAction(
       return { success: true, redirectUrl: '/' };
     }
 
-    // If email confirmation is required
+    // If email confirmation is required (default and recommended)
     return {
       success: true,
       needsConfirmation: true,
       message:
-        'Account created! A confirmation link has been sent to your email address. Please confirm your email to complete registration.',
+        'Account created! A confirmation link has been sent to your email address. Please check your email to confirm your account.',
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Registration failed';
+    return { error: message };
+  }
+}
+
+/**
+ * 2b. Resend Confirmation Email Action
+ */
+export async function resendConfirmationEmailAction(
+  formData: FormData,
+  clientOrigin?: string
+): Promise<AuthActionResult> {
+  const email = (formData.get('email') as string)?.trim().toLowerCase();
+
+  if (!email || !isValidEmail(email)) {
+    return { error: 'Please enter a valid email address.' };
+  }
+
+  try {
+    let headersList;
+    try {
+      headersList = await headers();
+    } catch {
+      headersList = undefined;
+    }
+
+    const origin = getAppOrigin(headersList, clientOrigin);
+    const confirmUrl = getAuthConfirmUrl(origin);
+    const supabase = await createClient();
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: confirmUrl,
+      },
+    });
+
+    if (error) {
+      if (
+        error.status === 429 ||
+        error.message.includes('rate') ||
+        error.message.includes('security purposes')
+      ) {
+        return {
+          error:
+            'Too many confirmation requests. For security purposes, please wait a minute before requesting another confirmation email.',
+        };
+      }
+      if (error.message.includes('already confirmed')) {
+        return {
+          success: true,
+          message:
+            'This email address has already been confirmed. You can sign in immediately.',
+        };
+      }
+    }
+
+    // Uniform response to prevent account enumeration
+    return {
+      success: true,
+      message:
+        'If an unconfirmed account exists with this email address, a new confirmation link has been sent to your inbox.',
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Unable to resend confirmation email';
     return { error: message };
   }
 }
