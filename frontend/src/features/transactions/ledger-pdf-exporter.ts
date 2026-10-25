@@ -16,6 +16,7 @@ export interface ExportPdfOptions {
   endDate?: string;
   dateRangeLabel?: string;
   onProgress?: (status: string) => void;
+  prefetchedTransactions?: TransactionDTO[];
 }
 
 // In-memory cache for loaded font base64 strings so repeated exports are instantaneous
@@ -144,16 +145,24 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
     endDate,
     dateRangeLabel,
     onProgress,
+    prefetchedTransactions,
   } = options;
 
-  // 1. Fetch complete matching records across all pages
-  const transactions = await fetchAllMatchingTransactions(
-    selectedType,
-    selectedCategory,
-    startDate,
-    endDate,
-    onProgress
-  );
+  // 1. Fetch or use complete matching records across all pages
+  const transactions =
+    prefetchedTransactions !== undefined
+      ? prefetchedTransactions
+      : await fetchAllMatchingTransactions(
+          selectedType,
+          selectedCategory,
+          startDate,
+          endDate,
+          onProgress
+        );
+
+  if (transactions.length === 0) {
+    throw new Error('No transactions match the selected filter criteria. Export halted.');
+  }
 
   onProgress?.('Preparing document & typography…');
 

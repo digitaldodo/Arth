@@ -13,6 +13,11 @@ import {
   exportLedgerToPdf,
   fetchAllMatchingTransactions,
 } from './ledger-pdf-exporter';
+import {
+  computeCategoryCounts,
+  filterEligibleCategories,
+  resolveEligibleCategory,
+} from './export-category-filter';
 
 interface ExportPdfDialogProps {
   isOpen: boolean;
@@ -42,9 +47,9 @@ export function ExportPdfDialog({
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>(initialType);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategoryId);
 
-  // Summary preview state
-  const [previewTransactions, setPreviewTransactions] = useState<TransactionDTO[]>([]);
-  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(true);
+  // Complete matching transactions for active period & type (used to evaluate category eligibility)
+  const [scopeTransactions, setScopeTransactions] = useState<TransactionDTO[]>([]);
+  const [isLoadingScope, setIsLoadingScope] = useState<boolean>(true);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Export action state
@@ -81,13 +86,13 @@ export function ExportPdfDialog({
     return () => clearTimeout(timer);
   }, [isOpen, initialType, initialCategoryId]);
 
-  // Fetch summary preview whenever effective filters change
+  // Fetch complete matching transaction set across all pages for the current date range and type
   useEffect(() => {
     if (!isOpen) return;
     if (!isRangeValid) {
       const timer = setTimeout(() => {
-        setPreviewTransactions([]);
-        setIsLoadingPreview(false);
+        setScopeTransactions([]);
+        setIsLoadingScope(false);
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -95,34 +100,55 @@ export function ExportPdfDialog({
     let isMounted = true;
     const timer = setTimeout(() => {
       if (isMounted) {
-        setIsLoadingPreview(true);
+        setIsLoadingScope(true);
         setPreviewError(null);
       }
     }, 0);
 
+    // Fetch all matching transactions without category restriction to evaluate category eligibility
     fetchAllMatchingTransactions(
       selectedType,
-      selectedCategory,
+      'all',
       effectiveRange.startDate,
       effectiveRange.endDate
     )
       .then((records) => {
         if (!isMounted) return;
-        setPreviewTransactions(records);
-        setIsLoadingPreview(false);
+        setScopeTransactions(records);
+        setIsLoadingScope(false);
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : 'Failed to calculate export preview';
         setPreviewError(msg);
-        setIsLoadingPreview(false);
+        setIsLoadingScope(false);
       });
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isOpen, selectedType, selectedCategory, effectiveRange, isRangeValid]);
+  }, [isOpen, selectedType, effectiveRange.startDate, effectiveRange.endDate, isRangeValid]);
+
+  // Compute category transaction counts and eligible categories having at least one matching transaction
+  const categoryCounts = useMemo(() => {
+    return computeCategoryCounts(scopeTransactions);
+  }, [scopeTransactions]);
+
+  const eligibleCategories = useMemo(() => {
+    return filterEligibleCategories(categories, scopeTransactions);
+  }, [categories, scopeTransactions]);
+
+  // Preserve explicitly selected category only while it remains eligible; fallback to 'all'
+  const activeCategory = resolveEligibleCategory(selectedCategory, eligibleCategories);
+
+  // Filter preview transactions according to active category selection
+  const previewTransactions = useMemo(() => {
+    if (activeCategory === 'all') {
+      return scopeTransactions;
+    }
+    return scopeTransactions.filter((tx) => tx.category_id === activeCategory);
+  }, [scopeTransactions, activeCategory]);
 
   // Calculate summary metrics strictly from preview transactions
   const summaryMetrics = useMemo(() => {
@@ -175,7 +201,7 @@ export function ExportPdfDialog({
   };
 
   const handleDownload = async () => {
-    if (!isRangeValid || isExporting) return;
+    if (!isRangeValid || isExporting || previewTransactions.length === 0) return;
 
     setIsExporting(true);
     setExportProgress('Generating PDF…');
@@ -185,11 +211,12 @@ export function ExportPdfDialog({
       const dateRangeLabel = formatDateRangeLabel(effectiveRange.startDate, effectiveRange.endDate);
       await exportLedgerToPdf({
         selectedType,
-        selectedCategory,
+        selectedCategory: activeCategory,
         categories,
         startDate: effectiveRange.startDate,
         endDate: effectiveRange.endDate,
         dateRangeLabel,
+        prefetchedTransactions: previewTransactions,
         onProgress: (status) => setExportProgress(status),
       });
       onClose();
@@ -204,9 +231,9 @@ export function ExportPdfDialog({
 
   // Label for active category
   const activeCategoryLabel =
-    selectedCategory === 'all'
+    activeCategory === 'all'
       ? 'All Categories'
-      : categories.find((c) => c.id === selectedCategory)?.name || 'Filtered Category';
+      : categories.find((c) => c.id === activeCategory)?.name || 'Filtered Category';
 
   return (
     <div
@@ -380,25 +407,43 @@ export function ExportPdfDialog({
             </div>
           </div>
 
-          {/* 3. Category Filter */}
+          {/* 3. Category Filter (Filtered by Available Matching Transactions) */}
           <div>
-            <label htmlFor="export-category-select" className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
-              Category Scope
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="export-category-select" className="text-xs font-semibold text-[var(--text-secondary)]">
+                Category Scope
+              </label>
+              {isLoadingScope && (
+                <span className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 font-mono">
+                  <span className="inline-block w-2.5 h-2.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
+                  Filtering...
+                </span>
+              )}
+            </div>
             <select
               id="export-category-select"
-              value={selectedCategory}
+              value={activeCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              disabled={isExporting}
-              className="w-full text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-hidden cursor-pointer"
+              disabled={isExporting || isLoadingScope || eligibleCategories.length === 0}
+              className="w-full text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-hidden cursor-pointer disabled:opacity-50"
             >
-              <option value="all">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.type})
-                </option>
-              ))}
+              <option value="all">
+                All Categories {scopeTransactions.length > 0 ? `(${scopeTransactions.length})` : ''}
+              </option>
+              {eligibleCategories.map((c) => {
+                const count = categoryCounts.get(c.id) || 0;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.type}) — {count} {count === 1 ? 'txn' : 'txns'}
+                  </option>
+                );
+              })}
             </select>
+            {eligibleCategories.length === 0 && !isLoadingScope && isRangeValid && (
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                No categories contain transactions for the selected period and type.
+              </p>
+            )}
           </div>
 
           {/* 4. Export Configuration Summary */}
@@ -407,7 +452,7 @@ export function ExportPdfDialog({
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                 Statement Summary Preview
               </span>
-              {isLoadingPreview && (
+              {isLoadingScope && (
                 <span className="text-[11px] text-[var(--text-muted)] flex items-center gap-1">
                   <span className="inline-block w-2.5 h-2.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
                   Calculating...
@@ -415,56 +460,70 @@ export function ExportPdfDialog({
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-[var(--border-hairline)] text-xs">
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] block">Records</span>
-                <span className="font-mono font-semibold text-[var(--text-primary)] text-sm">
-                  {summaryMetrics.count}
-                </span>
+            {!isLoadingScope && isRangeValid && previewTransactions.length === 0 ? (
+              <div className="py-4 text-center space-y-1.5 border-t border-[var(--border-hairline)]">
+                <span className="text-2xl block" aria-hidden="true">📭</span>
+                <h4 className="text-xs font-semibold text-[var(--text-primary)]">
+                  No Matching Transactions
+                </h4>
+                <p className="text-[11px] text-[var(--text-muted)] max-w-sm mx-auto">
+                  No active {selectedType === 'all' ? '' : `${selectedType} `}transactions match the selected criteria. Adjust your date range or select a different transaction type.
+                </p>
               </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] block">Total Income</span>
-                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
-                  +₹{summaryMetrics.formattedIncome}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] block">Total Expenses</span>
-                <span className="font-mono font-semibold text-red-600 dark:text-red-400 text-sm">
-                  -₹{summaryMetrics.formattedExpense}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[var(--text-muted)] block">Net Cash Flow</span>
-                <span
-                  className={`font-mono font-semibold text-sm ${
-                    summaryMetrics.isNetPositive
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : summaryMetrics.isNetNegative
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-[var(--text-primary)]'
-                  }`}
-                >
-                  {summaryMetrics.isNetPositive ? '+' : ''}₹{summaryMetrics.formattedNet}
-                </span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-[var(--border-hairline)] text-xs">
+                  <div>
+                    <span className="text-[10px] text-[var(--text-muted)] block">Records</span>
+                    <span className="font-mono font-semibold text-[var(--text-primary)] text-sm">
+                      {summaryMetrics.count}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-muted)] block">Total Income</span>
+                    <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
+                      +₹{summaryMetrics.formattedIncome}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-muted)] block">Total Expenses</span>
+                    <span className="font-mono font-semibold text-red-600 dark:text-red-400 text-sm">
+                      -₹{summaryMetrics.formattedExpense}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-muted)] block">Net Cash Flow</span>
+                    <span
+                      className={`font-mono font-semibold text-sm ${
+                        summaryMetrics.isNetPositive
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : summaryMetrics.isNetNegative
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {summaryMetrics.isNetPositive ? '+' : ''}₹{summaryMetrics.formattedNet}
+                    </span>
+                  </div>
+                </div>
 
-            <div className="text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-hairline)] space-y-0.5">
-              <div>
-                <span className="font-medium text-[var(--text-secondary)]">Period:</span>{' '}
-                {isRangeValid ? formatDateRangeLabel(effectiveRange.startDate, effectiveRange.endDate) : 'Invalid Range'}
-              </div>
-              <div>
-                <span className="font-medium text-[var(--text-secondary)]">Scope:</span>{' '}
-                {selectedType === 'all'
-                  ? 'Both Income & Expense'
-                  : selectedType === 'expense'
-                  ? 'Expense Only'
-                  : 'Income Only'}{' '}
-                • {activeCategoryLabel}
-              </div>
-            </div>
+                <div className="text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-hairline)] space-y-0.5">
+                  <div>
+                    <span className="font-medium text-[var(--text-secondary)]">Period:</span>{' '}
+                    {isRangeValid ? formatDateRangeLabel(effectiveRange.startDate, effectiveRange.endDate) : 'Invalid Range'}
+                  </div>
+                  <div>
+                    <span className="font-medium text-[var(--text-secondary)]">Scope:</span>{' '}
+                    {selectedType === 'all'
+                      ? 'Both Income & Expense'
+                      : selectedType === 'expense'
+                      ? 'Expense Only'
+                      : 'Income Only'}{' '}
+                    • {activeCategoryLabel}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* 5. Action Buttons */}
@@ -480,7 +539,7 @@ export function ExportPdfDialog({
             <button
               type="button"
               onClick={handleDownload}
-              disabled={!isRangeValid || isExporting}
+              disabled={!isRangeValid || isExporting || isLoadingScope || previewTransactions.length === 0}
               className="w-2/3 py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isExporting ? (
@@ -488,6 +547,8 @@ export function ExportPdfDialog({
                   <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   <span>{exportProgress || 'Preparing statement…'}</span>
                 </>
+              ) : previewTransactions.length === 0 && !isLoadingScope ? (
+                <span>No Transactions to Export</span>
               ) : (
                 <>
                   <span aria-hidden="true">📥</span>
