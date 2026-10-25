@@ -37,6 +37,7 @@ export default async function HomePage({
     id: string;
     email?: string;
     displayName?: string;
+    username?: string;
   } | null = null;
 
   try {
@@ -50,23 +51,26 @@ export default async function HomePage({
         user.user_metadata?.username ||
         user.user_metadata?.display_name ||
         user.user_metadata?.full_name;
+      let username: string | undefined = user.user_metadata?.username;
 
-      if (!displayName) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', user.id)
-          .maybeSingle();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, username')
+        .eq('id', user.id)
+        .maybeSingle();
 
-        if (profile?.display_name) {
-          displayName = profile.display_name;
-        }
+      if (profile?.username) {
+        username = profile.username;
+      }
+      if (profile?.display_name) {
+        displayName = profile.display_name;
       }
 
       authenticatedUser = {
         id: user.id,
         email: user.email,
         displayName: displayName || undefined,
+        username: username || undefined,
       };
     }
   } catch {

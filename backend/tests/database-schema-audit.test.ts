@@ -23,7 +23,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0010_database_hardening.sql',
       '0011_history_protection_and_settlement_hardening.sql',
       '0012_dashboard_summary.sql',
-      '0013_auth_username_support.sql'
+      '0013_auth_username_support.sql',
+      '0014_username_authentication_and_lookup.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -152,5 +153,18 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('fn_handle_new_user'), 'Auth trigger function must be updated');
     assert.ok(sql.includes("NEW.raw_user_meta_data->>'username'"), 'Username must be extracted from metadata');
     assert.ok(sql.includes('ON CONFLICT (id) DO UPDATE'), 'Must handle conflict and update display name');
+  });
+
+  test('0014_username_authentication_and_lookup.sql enforces case-insensitive uniqueness, format check, and service_role isolation', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0014_username_authentication_and_lookup.sql'), 'utf-8');
+    assert.ok(sql.includes('ALTER TABLE public.profiles'), 'Must alter public.profiles to add username');
+    assert.ok(sql.includes('chk_profiles_username_format'), 'Check constraint for username format must exist');
+    assert.ok(sql.includes('uq_profiles_lower_username'), 'Case-insensitive unique index must exist');
+    assert.ok(sql.includes('fn_get_email_by_username'), 'Lookup function must exist');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_get_email_by_username(TEXT) FROM anon;'), 'Lookup must be revoked from anon');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_get_email_by_username(TEXT) FROM authenticated;'), 'Lookup must be revoked from authenticated');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_get_email_by_username(TEXT) TO service_role;'), 'Lookup must only be granted to service_role');
+    assert.ok(sql.includes('fn_check_username_available'), 'Public availability check function must exist');
+    assert.ok(sql.includes('fn_set_own_username'), 'Self-service username assignment function must exist');
   });
 });

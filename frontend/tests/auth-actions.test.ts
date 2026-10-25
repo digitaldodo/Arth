@@ -8,50 +8,261 @@ process.env.INTERNAL_API_URL = 'http://127.0.0.1:3001';
 
 import {
   signInWithEmailAction,
+  signInAction,
   signUpWithEmailAction,
   resendConfirmationEmailAction,
   requestPasswordResetAction,
   updatePasswordAction,
+  setUsernameAction,
+  checkUsernameAvailabilityAction,
 } from '../src/app/login/actions.js';
 
 describe('Frontend Authentication Server Actions & Validation', () => {
   // 1. Sign In Action Validation
-  describe('signInWithEmailAction validation', () => {
-    test('rejects empty email', async () => {
+  describe('signInWithEmailAction validation & identifier handling', () => {
+    test('signInAction is alias of signInWithEmailAction', () => {
+      assert.equal(signInAction, signInWithEmailAction);
+    });
+
+    test('rejects empty identifier', async () => {
       const formData = new FormData();
-      formData.set('email', '');
+      formData.set('identifier', '');
       formData.set('password', 'ValidPass123!');
 
       const res = await signInWithEmailAction(formData);
-      assert.equal(res.error, 'Please enter a valid email address.');
-    });
-
-    test('rejects invalid email formats', async () => {
-      const invalidEmails = ['plainaddress', '@missingusername.com', 'user@domain'];
-      for (const email of invalidEmails) {
-        const formData = new FormData();
-        formData.set('email', email);
-        formData.set('password', 'ValidPass123!');
-
-        const res = await signInWithEmailAction(formData);
-        assert.equal(res.error, 'Please enter a valid email address.', `Failed for ${email}`);
-      }
+      assert.equal(res.error, 'Please enter your email or username.');
     });
 
     test('rejects empty password', async () => {
       const formData = new FormData();
-      formData.set('email', 'user@example.com');
+      formData.set('identifier', 'user@example.com');
       formData.set('password', '');
 
       const res = await signInWithEmailAction(formData);
       assert.equal(res.error, 'Please enter your password.');
     });
+
+    test('informs user if SUPABASE_SERVICE_ROLE_KEY is unconfigured for username login', async () => {
+      const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      try {
+        const formData = new FormData();
+        formData.set('identifier', 'valid_user');
+        formData.set('password', 'ValidPass123!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.ok(res.error);
+        assert.ok(
+          res.error.includes('SUPABASE_SERVICE_ROLE_KEY') ||
+          res.error.includes('Please sign in using your registered email address')
+        );
+      } finally {
+        if (originalServiceKey) {
+          process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
+        }
+      }
+    });
+
+    test('login with valid email and password succeeds', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'fake-access-token',
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: 'fake-refresh-token',
+                user: {
+                  id: '00000000-0000-7000-8000-000000000001',
+                  email: 'user@example.com',
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('identifier', 'user@example.com');
+        formData.set('password', 'ValidPass123!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.equal(res.success, true);
+        assert.equal(res.redirectUrl, '/');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('login with valid username resolves email and succeeds (including case-insensitivity)', async () => {
+      const originalFetch = globalThis.fetch;
+      const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+
+      try {
+        let queriedUsername = '';
+        let signInEmail = '';
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+
+          // Mock fn_get_email_by_username
+          if (urlStr.includes('/rest/v1/rpc/fn_get_email_by_username')) {
+            const body = typeof opts?.body === 'string' ? JSON.parse(opts.body) : {};
+            queriedUsername = body.p_username;
+            if (queriedUsername === 'rahul_sharma') {
+              return new Response(JSON.stringify('rahul@example.com'), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
+            return new Response(JSON.stringify(null), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Mock password token endpoint
+          if (urlStr.includes('/auth/v1/token')) {
+            const body = typeof opts?.body === 'string' ? JSON.parse(opts.body) : {};
+            signInEmail = body.email;
+            return new Response(
+              JSON.stringify({
+                access_token: 'fake-access-token',
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: 'fake-refresh-token',
+                user: {
+                  id: '00000000-0000-7000-8000-000000000002',
+                  email: 'rahul@example.com',
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return originalFetch(url, opts);
+        };
+
+        // Pass mixed-case username: RAHUL_Sharma
+        const formData = new FormData();
+        formData.set('identifier', 'RAHUL_Sharma');
+        formData.set('password', 'SecretPassword123');
+
+        const res = await signInWithEmailAction(formData);
+        assert.equal(res.success, true);
+        assert.equal(queriedUsername, 'rahul_sharma', 'Username must be normalized to lowercase');
+        assert.equal(signInEmail, 'rahul@example.com', 'Resolved email must be passed to Supabase auth');
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalServiceKey) {
+          process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
+        } else {
+          delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        }
+      }
+    });
+
+    test('generic failure when the username does not exist', async () => {
+      const originalFetch = globalThis.fetch;
+      const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/rest/v1/rpc/fn_get_email_by_username')) {
+            return new Response(JSON.stringify(null), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('identifier', 'nonexistent_user');
+        formData.set('password', 'Password123!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.equal(
+          res.error,
+          'Invalid email, username, or password. Please verify your credentials and try again.'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalServiceKey) {
+          process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
+        } else {
+          delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        }
+      }
+    });
+
+    test('generic failure when password is incorrect', async () => {
+      const originalFetch = globalThis.fetch;
+      const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/rest/v1/rpc/fn_get_email_by_username')) {
+            return new Response(JSON.stringify('known@example.com'), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (urlStr.includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                error: 'invalid_grant',
+                error_description: 'Invalid login credentials',
+              }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('identifier', 'known_user');
+        formData.set('password', 'WrongPassword!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.equal(
+          res.error,
+          'Invalid email, username, or password. Please verify your credentials and try again.'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalServiceKey) {
+          process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
+        } else {
+          delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        }
+      }
+    });
   });
 
   // 2. Sign Up Action Validation
-  describe('signUpWithEmailAction validation', () => {
-    test('rejects missing or invalid username', async () => {
-      const invalidUsernames = ['', 'a', 'ab', 'user with spaces', 'user@bad!', 'a'.repeat(35)];
+  describe('signUpWithEmailAction validation & rules', () => {
+    test('rejects missing or invalid username characters and lengths', async () => {
+      const invalidUsernames = [
+        '',
+        'a',
+        'ab',
+        'user with spaces',
+        'user@bad!',
+        'invalid.dots',
+        'special$char',
+        'a'.repeat(35),
+      ];
       for (const username of invalidUsernames) {
         const formData = new FormData();
         formData.set('username', username);
@@ -100,16 +311,134 @@ describe('Frontend Authentication Server Actions & Validation', () => {
       const res = await signUpWithEmailAction(formData);
       assert.equal(res.error, 'Passwords do not match. Please verify both fields.');
     });
+
+    test('rejects duplicate username prior to sign-up', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/rest/v1/rpc/fn_check_username_available')) {
+            // Return false to indicate username is already taken
+            return new Response(JSON.stringify(false), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('username', 'existing_user');
+        formData.set('email', 'newemail@example.com');
+        formData.set('password', 'Password123');
+        formData.set('confirmPassword', 'Password123');
+
+        const res = await signUpWithEmailAction(formData);
+        assert.equal(
+          res.error,
+          'This username is already taken. Please choose another username.'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('registers successfully with username, email, and password requiring confirmation', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        let submittedMetadata: { username?: string; full_name?: string } | null = null;
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/rest/v1/rpc/fn_check_username_available')) {
+            return new Response(JSON.stringify(true), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (urlStr.includes('/auth/v1/signup')) {
+            const body = typeof opts?.body === 'string' ? JSON.parse(opts.body) : {};
+            submittedMetadata = body.data;
+            return new Response(
+              JSON.stringify({
+                id: '00000000-0000-7000-8000-000000000099',
+                email: 'newuser@example.com',
+                confirmation_sent_at: '2026-10-25T11:00:00Z',
+                session: null,
+                user: {
+                  id: '00000000-0000-7000-8000-000000000099',
+                  email: 'newuser@example.com',
+                  user_metadata: { username: 'newuser' },
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('username', 'NewUser_99');
+        formData.set('email', 'newuser@example.com');
+        formData.set('password', 'Password123');
+        formData.set('confirmPassword', 'Password123');
+
+        const res = await signUpWithEmailAction(formData);
+        assert.equal(res.success, true);
+        assert.equal(res.needsConfirmation, true);
+        assert.equal(
+          (submittedMetadata as { username?: string } | null)?.username,
+          'newuser_99',
+          'Username must be stored normalized in lowercase'
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   // 3. Password Reset Request Action Validation
-  describe('requestPasswordResetAction validation', () => {
-    test('rejects invalid email address', async () => {
-      const formData = new FormData();
-      formData.set('email', 'invalid-email-address');
+  describe('requestPasswordResetAction validation & privacy', () => {
+    test('password recovery when given a username explains that recovery requires registered email without leaking email', async () => {
+      const usernames = ['testuser', 'rahul_99', 'my-admin'];
+      for (const username of usernames) {
+        const formData = new FormData();
+        formData.set('email', username);
 
-      const res = await requestPasswordResetAction(formData);
-      assert.equal(res.error, 'Please enter a valid email address.');
+        const res = await requestPasswordResetAction(formData);
+        assert.equal(
+          res.error,
+          'Password recovery requires your registered email address. Please enter the email address associated with your account.',
+          `Failed for username: ${username}`
+        );
+      }
+    });
+
+    test('password recovery when given an email dispatches reset and returns generic message', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/recover')) {
+            return new Response(JSON.stringify({}), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('email', 'registered@example.com');
+
+        const res = await requestPasswordResetAction(formData);
+        assert.ok(res.message);
+        assert.ok(
+          res.message.includes('If an account exists with this email address, a password recovery link has been dispatched')
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 
@@ -134,7 +463,49 @@ describe('Frontend Authentication Server Actions & Validation', () => {
     });
   });
 
-  // 5. Sign In with Unconfirmed Account & Confirmation States
+  // 5. Existing Accounts & Claiming Usernames (setUsernameAction & checkUsernameAvailabilityAction)
+  describe('setUsernameAction & checkUsernameAvailabilityAction', () => {
+    test('setUsernameAction rejects invalid username characters and lengths', async () => {
+      const invalidUsernames = ['a', 'user with space', 'ab@cd', 'a'.repeat(35)];
+      for (const name of invalidUsernames) {
+        const formData = new FormData();
+        formData.set('username', name);
+
+        const res = await setUsernameAction(formData);
+        assert.equal(
+          res.error,
+          'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.'
+        );
+      }
+    });
+
+    test('checkUsernameAvailabilityAction checks valid and invalid format', async () => {
+      const badRes = await checkUsernameAvailabilityAction('bad!');
+      assert.equal(badRes.available, false);
+      assert.ok(badRes.error);
+
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/rest/v1/rpc/fn_check_username_available')) {
+            return new Response(JSON.stringify(true), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const goodRes = await checkUsernameAvailabilityAction('available_name');
+        assert.equal(goodRes.available, true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  // 6. Sign In with Unconfirmed Account & Confirmation States
   describe('Email confirmation handling in Auth actions', () => {
     test('signInWithEmailAction informs user when email is unconfirmed', async () => {
       const originalFetch = globalThis.fetch;
@@ -154,7 +525,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         };
 
         const formData = new FormData();
-        formData.set('email', 'unconfirmed@example.com');
+        formData.set('identifier', 'unconfirmed@example.com');
         formData.set('password', 'ValidPass123!');
 
         const res = await signInWithEmailAction(formData);
@@ -162,48 +533,6 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         assert.ok(
           res.error.includes('Your email address has not been confirmed yet'),
           'Expected clear unconfirmed email message'
-        );
-      } finally {
-        globalThis.fetch = originalFetch;
-      }
-    });
-
-    test('signUpWithEmailAction returns needsConfirmation when email confirmation required', async () => {
-      const originalFetch = globalThis.fetch;
-      try {
-        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
-          if (url.toString().includes('/auth/v1/signup')) {
-            return new Response(
-              JSON.stringify({
-                id: '00000000-0000-7000-8000-000000000001',
-                email: 'newuser@example.com',
-                confirmation_sent_at: '2026-10-25T11:00:00Z',
-                // session is null when email confirmation is enabled
-                session: null,
-                user: {
-                  id: '00000000-0000-7000-8000-000000000001',
-                  email: 'newuser@example.com',
-                  user_metadata: { username: 'newuser' },
-                },
-              }),
-              { status: 200, headers: { 'Content-Type': 'application/json' } }
-            );
-          }
-          return originalFetch(url, opts);
-        };
-
-        const formData = new FormData();
-        formData.set('username', 'newuser');
-        formData.set('email', 'newuser@example.com');
-        formData.set('password', 'ValidPass123!');
-        formData.set('confirmPassword', 'ValidPass123!');
-
-        const res = await signUpWithEmailAction(formData);
-        assert.equal(res.success, true);
-        assert.equal(res.needsConfirmation, true);
-        assert.ok(
-          res.message?.toLowerCase().includes('check your email to confirm your account'),
-          'Expected confirmation message'
         );
       } finally {
         globalThis.fetch = originalFetch;

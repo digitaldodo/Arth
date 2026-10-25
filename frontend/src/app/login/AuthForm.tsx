@@ -24,6 +24,7 @@ export function AuthForm({ initialError }: AuthFormProps) {
   const [isGooglePending, startGoogleTransition] = useTransition();
 
   // Field states
+  const [identifier, setIdentifier] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -44,6 +45,20 @@ export function AuthForm({ initialError }: AuthFormProps) {
     setMode(newMode);
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (newMode === 'signin' && (email || username)) {
+      setIdentifier(email || username);
+    } else if (newMode === 'signup' && identifier) {
+      if (identifier.includes('@')) {
+        setEmail(identifier);
+      } else {
+        setUsername(identifier);
+      }
+    } else if (newMode === 'forgot' && identifier) {
+      if (identifier.includes('@')) {
+        setEmail(identifier);
+      }
+    }
   };
 
   const handleSignIn = (e: React.FormEvent<HTMLFormElement>) => {
@@ -58,7 +73,7 @@ export function AuthForm({ initialError }: AuthFormProps) {
       if (res.error) {
         setErrorMessage(res.error);
         if (res.error.includes('not been confirmed')) {
-          setUnconfirmedEmail(email);
+          setUnconfirmedEmail(identifier.includes('@') ? identifier : '');
         }
       } else if (res.redirectUrl) {
         window.location.href = res.redirectUrl;
@@ -304,23 +319,23 @@ export function AuthForm({ initialError }: AuthFormProps) {
       {/* MODE 1: SIGN IN */}
       {mode === 'signin' && (
         <form onSubmit={handleSignIn} className="space-y-3.5">
-          {/* Email field */}
+          {/* Identifier field (Email or username) */}
           <div className="space-y-1">
             <label
-              htmlFor="signin-email"
+              htmlFor="signin-identifier"
               className="block text-[12px] font-medium text-[var(--text-primary)]"
             >
-              Email address
+              Email or username
             </label>
             <input
-              id="signin-email"
-              name="email"
-              type="email"
+              id="signin-identifier"
+              name="identifier"
+              type="text"
               required
-              autoComplete="email"
-              placeholder="you@domain.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              placeholder="you@domain.com or username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
             />
           </div>
@@ -872,7 +887,7 @@ export function AuthForm({ initialError }: AuthFormProps) {
             <input
               id="reset-email"
               name="email"
-              type="email"
+              type="text"
               required
               autoComplete="email"
               placeholder="you@domain.com"

@@ -37,35 +37,131 @@ function isValidPassword(password: string): boolean {
   return typeof password === 'string' && password.length >= 8;
 }
 
+function hasServiceRoleKey(): boolean {
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
+
 /**
- * 1. Email and Password Sign In Action
+ * Checks whether SUPABASE_SERVICE_ROLE_KEY is configured on the server.
+ */
+export async function isServiceRoleConfigured(): Promise<boolean> {
+  return hasServiceRoleKey();
+}
+
+/**
+ * Server-only helper to resolve a normalized username to its associated account email.
+ * Uses SUPABASE_SERVICE_ROLE_KEY on the server to execute privileged RPC fn_get_email_by_username.
+ * Never exposed to client bundles or browser endpoints.
+ * Never logs credentials, tokens, or email addresses.
+ */
+export async function resolveEmailFromUsername(
+  normalizedUsername: string
+): Promise<string | null> {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const supabaseUrl =
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!serviceRoleKey || !supabaseUrl) {
+    return null;
+  }
+
+  try {
+    const { createClient: createServiceClient } = await import(
+      '@supabase/supabase-js'
+    );
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    const { data: email, error } = await serviceClient.rpc(
+      'fn_get_email_by_username',
+      { p_username: normalizedUsername }
+    );
+
+    if (error || !email || typeof email !== 'string') {
+      return null;
+    }
+
+    return email.trim().toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 1. Email or Username and Password Sign In Action
+ * Accepts either an email address or a registered username.
+ * For usernames, performs secure server-side resolution to email before invoking
+ * standard Supabase password authentication.
  */
 export async function signInWithEmailAction(
   formData: FormData
 ): Promise<AuthActionResult> {
-  const email = (formData.get('email') as string)?.trim().toLowerCase();
+  const rawIdentifier = (
+    (formData.get('identifier') || formData.get('email') || '') as string
+  ).trim();
   const password = formData.get('password') as string;
 
-  if (!email || !isValidEmail(email)) {
-    return { error: 'Please enter a valid email address.' };
+  if (!rawIdentifier) {
+    return { error: 'Please enter your email or username.' };
   }
 
   if (!password) {
     return { error: 'Please enter your password.' };
   }
 
+  const isEmail = isValidEmail(rawIdentifier);
+  let targetEmail: string | null = null;
+
+  if (isEmail) {
+    targetEmail = rawIdentifier.toLowerCase();
+  } else {
+    // Input is a username
+    const normalizedUsername = rawIdentifier.toLowerCase();
+    if (!isValidUsername(normalizedUsername)) {
+      // Return the generic message to avoid disclosing username constraints to probing attackers
+      return {
+        error:
+          'Invalid email, username, or password. Please verify your credentials and try again.',
+      };
+    }
+
+    targetEmail = await resolveEmailFromUsername(normalizedUsername);
+
+    if (!targetEmail) {
+      if (!hasServiceRoleKey()) {
+        return {
+          error:
+            'Username login requires server configuration (SUPABASE_SERVICE_ROLE_KEY). Please sign in using your registered email address.',
+        };
+      }
+      // Generic authentication failure to prevent username enumeration
+      return {
+        error:
+          'Invalid email, username, or password. Please verify your credentials and try again.',
+      };
+    }
+  }
+
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: targetEmail,
       password,
     });
 
     if (error) {
-      if (error.message.includes('Invalid login credentials')) {
+      if (
+        error.message.includes('Invalid login credentials') ||
+        error.message.includes('invalid_grant')
+      ) {
         return {
           error:
-            'Invalid email address or password. Please verify your credentials and try again.',
+            'Invalid email, username, or password. Please verify your credentials and try again.',
         };
       }
       if (error.message.includes('Email not confirmed')) {
@@ -95,6 +191,11 @@ export async function signInWithEmailAction(
     return { error: message };
   }
 }
+
+/**
+ * Semantic alias for signInWithEmailAction supporting both identifier types.
+ */
+export const signInAction = signInWithEmailAction;
 
 /**
  * 2. Account Registration Action (Sign Up)
@@ -129,6 +230,8 @@ export async function signUpWithEmailAction(
     return { error: 'Passwords do not match. Please verify both fields.' };
   }
 
+  const normalizedUsername = username.toLowerCase();
+
   try {
     let headersList;
     try {
@@ -141,12 +244,24 @@ export async function signUpWithEmailAction(
     const confirmUrl = getAuthConfirmUrl(origin);
     const supabase = await createClient();
 
+    // Verify username availability prior to creation
+    const { data: isAvailable, error: checkError } = await supabase.rpc(
+      'fn_check_username_available',
+      { p_username: normalizedUsername }
+    );
+
+    if (!checkError && isAvailable === false) {
+      return {
+        error: 'This username is already taken. Please choose another username.',
+      };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          username,
+          username: normalizedUsername,
           full_name: username,
         },
         emailRedirectTo: confirmUrl,
@@ -258,11 +373,23 @@ export async function resendConfirmationEmailAction(
 export async function requestPasswordResetAction(
   formData: FormData
 ): Promise<AuthActionResult> {
-  const email = (formData.get('email') as string)?.trim().toLowerCase();
+  const rawInput = (
+    (formData.get('email') || formData.get('identifier') || '') as string
+  ).trim();
 
-  if (!email || !isValidEmail(email)) {
-    return { error: 'Please enter a valid email address.' };
+  if (!rawInput) {
+    return { error: 'Please enter your registered email address.' };
   }
+
+  // If user entered a username instead of an email address
+  if (!isValidEmail(rawInput)) {
+    return {
+      error:
+        'Password recovery requires your registered email address. Please enter the email address associated with your account.',
+    };
+  }
+
+  const email = rawInput.toLowerCase();
 
   try {
     const headersList = await headers();
@@ -394,5 +521,97 @@ export async function signInWithGoogleAction(clientOrigin?: string): Promise<{
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'OAuth error';
     return { error: message };
+  }
+}
+
+/**
+ * 6. Set / Claim Username Action (for authenticated users e.g. Google OAuth or legacy accounts)
+ */
+export async function setUsernameAction(
+  formData: FormData
+): Promise<AuthActionResult> {
+  const rawUsername = (formData.get('username') as string)?.trim();
+
+  if (!rawUsername || !isValidUsername(rawUsername)) {
+    return {
+      error:
+        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
+    };
+  }
+
+  const normalizedUsername = rawUsername.toLowerCase();
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        error: 'Active session required to set a username. Please sign in.',
+      };
+    }
+
+    // Call authoritative RPC fn_set_own_username
+    const { error: rpcError } = await supabase.rpc('fn_set_own_username', {
+      p_username: normalizedUsername,
+    });
+
+    if (rpcError) {
+      if (
+        rpcError.code === '23505' ||
+        rpcError.message.includes('already taken')
+      ) {
+        return {
+          error: 'This username is already taken. Please choose another username.',
+        };
+      }
+      return {
+        error: rpcError.message || 'Failed to update username. Please try again.',
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Your username has been set successfully.',
+      redirectUrl: '/',
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Failed to update username';
+    return { error: message };
+  }
+}
+
+/**
+ * 7. Check Username Availability Action
+ */
+export async function checkUsernameAvailabilityAction(
+  username: string
+): Promise<{ available: boolean; error?: string }> {
+  const cleanUsername = username?.trim().toLowerCase();
+  if (!cleanUsername || !isValidUsername(cleanUsername)) {
+    return {
+      available: false,
+      error:
+        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
+    };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data: isAvailable, error } = await supabase.rpc(
+      'fn_check_username_available',
+      { p_username: cleanUsername }
+    );
+
+    if (error) {
+      return { available: false, error: error.message };
+    }
+
+    return { available: Boolean(isAvailable) };
+  } catch {
+    return { available: false, error: 'Failed to verify availability' };
   }
 }

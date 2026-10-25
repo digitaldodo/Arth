@@ -9,6 +9,7 @@ import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
+import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -16,6 +17,7 @@ interface TransactionAppShellProps {
     id: string;
     email?: string;
     displayName?: string;
+    username?: string;
   } | null;
 }
 
@@ -27,6 +29,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
+  const [currentUsername, setCurrentUsername] = useState<string | undefined>(user?.username);
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
@@ -115,7 +118,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="hidden sm:inline-block text-xs font-mono text-[var(--text-secondary)] truncate max-w-[150px]">
-                  {user.displayName || user.email}
+                  {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
                 </span>
                 <form action="/auth/logout" method="POST">
                   <button
@@ -150,6 +153,25 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               className="text-emerald-600 dark:text-emerald-400 font-bold ml-2"
             >
               ✕
+            </button>
+          </div>
+        )}
+
+        {/* Subtle prompt for accounts without a username */}
+        {user && !currentUsername && (
+          <div className="mb-4 p-3 text-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-secondary)] rounded-md flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span>💡</span>
+              <span>
+                You haven&apos;t set a username yet. Choose one to enable sign-in with your username.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveView('more')}
+              className="text-xs font-medium text-[var(--text-primary)] underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
+            >
+              Choose username &rarr;
             </button>
           </div>
         )}
@@ -229,7 +251,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     <ThemeToggle />
                   </div>
 
-                  <div className="p-4 space-y-2">
+                  <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">👤</span>
                       <div>
@@ -243,6 +265,15 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                         </p>
                       </div>
                     </div>
+
+                    {/* Username Management */}
+                    <div className="pt-2 border-t border-[var(--border-hairline)]">
+                      <UsernameClaimForm
+                        currentUsername={currentUsername}
+                        onUsernameSet={(newUsername) => setCurrentUsername(newUsername)}
+                      />
+                    </div>
+
                     <div className="text-[10px] text-[var(--text-muted)] font-mono pt-1">
                       Timezone: Asia/Kolkata (IST) • Currency: INR (₹) • System: Ledger Minimal
                     </div>
