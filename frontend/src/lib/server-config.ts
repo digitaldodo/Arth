@@ -1,8 +1,82 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Server-only configuration and safe proxy utilities for Next.js Route Handlers.
  */
+
+export interface AuthenticatedSessionResult {
+  accessToken: string | null;
+  userId: string | null;
+  errorResponse?: NextResponse;
+}
+
+/**
+ * Authoritatively retrieves the caller's verified Supabase access token for BFF proxying.
+ * Uses supabase.auth.getUser() to validate the token against the Supabase Auth server,
+ * refreshing expired session tokens automatically in cookies if needed.
+ */
+export async function getAuthenticatedSession(): Promise<AuthenticatedSessionResult> {
+  try {
+    const supabase = await createClient();
+
+    // Authoritatively validate user and refresh tokens if expired
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        accessToken: null,
+        userId: null,
+        errorResponse: NextResponse.json(
+          {
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'Active session required',
+          },
+          { status: 401 }
+        ),
+      };
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const accessToken = session?.access_token || null;
+    if (!accessToken) {
+      return {
+        accessToken: null,
+        userId: user.id,
+        errorResponse: NextResponse.json(
+          {
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'Active session required',
+          },
+          { status: 401 }
+        ),
+      };
+    }
+
+    return { accessToken, userId: user.id };
+  } catch {
+    return {
+      accessToken: null,
+      userId: null,
+      errorResponse: NextResponse.json(
+        {
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Active session required',
+        },
+        { status: 401 }
+      ),
+    };
+  }
+}
 
 /**
  * Returns the configured base URL for internal Fastify backend API requests.

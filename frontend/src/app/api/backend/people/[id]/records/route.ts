@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
+import {
+  getBackendBaseUrl,
+  safeBackendErrorResponse,
+  getAuthenticatedSession,
+} from '@/lib/server-config';
 
 /**
  * BFF proxy POST /api/backend/people/[id]/records -> Fastify POST /api/v1/people/:id/records
@@ -10,14 +13,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !session?.access_token) {
-      return NextResponse.json(
+    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    if (errorResponse || !accessToken) {
+      return errorResponse || NextResponse.json(
         {
           statusCode: 401,
           error: 'Unauthorized',
@@ -34,7 +32,7 @@ export async function POST(
     const backendRes = await fetch(`${backendBaseUrl}/api/v1/people/${encodeURIComponent(id)}/records`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },

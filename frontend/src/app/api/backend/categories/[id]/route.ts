@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
+import {
+  getBackendBaseUrl,
+  safeBackendErrorResponse,
+  getAuthenticatedSession,
+} from '@/lib/server-config';
 
 /**
  * BFF proxy PATCH /api/backend/categories/[id] -> Fastify PATCH /api/v1/categories/:id
@@ -10,14 +13,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !session?.access_token) {
-      return NextResponse.json(
+    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    if (errorResponse || !accessToken) {
+      return errorResponse || NextResponse.json(
         {
           statusCode: 401,
           error: 'Unauthorized',
@@ -34,7 +32,7 @@ export async function PATCH(
     const backendRes = await fetch(`${backendBaseUrl}/api/v1/categories/${id}`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
+import {
+  getBackendBaseUrl,
+  safeBackendErrorResponse,
+  getAuthenticatedSession,
+} from '@/lib/server-config';
 
 /**
  * Narrowly scoped, authenticated BFF proxy endpoint for the identity route (GET /api/v1/auth/me).
@@ -9,14 +12,9 @@ import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config
  */
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !session?.access_token) {
-      return NextResponse.json(
+    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    if (errorResponse || !accessToken) {
+      return errorResponse || NextResponse.json(
         {
           statusCode: 401,
           error: 'Unauthorized',
@@ -31,7 +29,7 @@ export async function GET() {
     const backendResponse = await fetch(`${backendBaseUrl}/api/v1/auth/me`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
       cache: 'no-store',

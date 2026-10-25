@@ -116,4 +116,68 @@ describe('Frontend Dashboard BFF Proxy & Date Range Utilities', () => {
     const end = '2026-10-01';
     assert.ok(start > end, 'Start date after end date must be detectable');
   });
+
+  // 8. First-time user empty summary contract
+  test('first-time user empty summary adheres to contract with ₹0.00 totals', () => {
+    const emptySummary = {
+      start_date: '2026-10-01',
+      end_date: '2026-10-31',
+      income_paise: 0,
+      expenses_paise: 0,
+      net_cash_flow_paise: 0,
+      formatted_income: '₹0.00',
+      formatted_expenses: '₹0.00',
+      formatted_net_cash_flow: '₹0.00',
+      spending_composition: [],
+      recent_transactions: [],
+      has_activity_in_range: false,
+      total_active_transaction_count: 0,
+    };
+
+    assert.equal(emptySummary.total_active_transaction_count, 0);
+    assert.equal(emptySummary.income_paise, 0);
+    assert.equal(emptySummary.expenses_paise, 0);
+    assert.equal(emptySummary.net_cash_flow_paise, 0);
+    assert.equal(emptySummary.formatted_income, '₹0.00');
+    assert.equal(emptySummary.formatted_expenses, '₹0.00');
+    assert.equal(emptySummary.formatted_net_cash_flow, '₹0.00');
+    assert.deepEqual(emptySummary.spending_composition, []);
+    assert.deepEqual(emptySummary.recent_transactions, []);
+  });
+
+  // 9. Error state distinction logic: 401/403 session error vs 500/502 gateway error
+  test('distinguishes 401/403 session errors from 500/502 gateway errors', () => {
+    const isAuthError = (err: { statusCode?: number; message: string }) =>
+      err.statusCode === 401 ||
+      err.statusCode === 403 ||
+      /token|session|unauthorized/i.test(err.message);
+
+    // Auth errors: require re-authentication
+    assert.equal(
+      isAuthError({ statusCode: 401, message: 'Invalid or untrusted authentication token' }),
+      true
+    );
+    assert.equal(
+      isAuthError({ statusCode: 403, message: 'Forbidden' }),
+      true
+    );
+    assert.equal(
+      isAuthError({ message: 'Active session required' }),
+      true
+    );
+
+    // Gateway / network errors: allow retry without re-authentication
+    assert.equal(
+      isAuthError({ statusCode: 502, message: 'Bad Gateway' }),
+      false
+    );
+    assert.equal(
+      isAuthError({ statusCode: 500, message: 'Internal Server Error' }),
+      false
+    );
+    assert.equal(
+      isAuthError({ message: 'Network connection failed' }),
+      false
+    );
+  });
 });

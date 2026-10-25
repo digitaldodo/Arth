@@ -234,4 +234,51 @@ describe('Backend Authentication & JWT Verification', () => {
 
     await app.close();
   });
+
+  test('Accepts token when secret has surrounding quotes and whitespace', async () => {
+    // Config with quotes and whitespace as commonly entered in dashboard env vars
+    const quotedConfig = {
+      ...appConfig,
+      supabaseJwtSecret: `  "${TEST_SECRET}"  `,
+    };
+    const app = await buildApp(quotedConfig);
+    const validToken = await generateTestToken({
+      sub: '98765432-1234-4321-a123-987654321000',
+      email: 'owner@arth.finance',
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: {
+        authorization: `Bearer ${validToken}`,
+      },
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body: AuthIdentityResponse = JSON.parse(res.body);
+    assert.equal(body.userId, '98765432-1234-4321-a123-987654321000');
+    await app.close();
+  });
+
+  test('Accepts token with iss: "supabase" when configured with Supabase project issuer', async () => {
+    const app = await buildApp(appConfig);
+    const supabaseIssToken = await generateTestToken({
+      issuer: 'supabase',
+      sub: '98765432-1234-4321-a123-987654321000',
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: {
+        authorization: `Bearer ${supabaseIssToken}`,
+      },
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body: AuthIdentityResponse = JSON.parse(res.body);
+    assert.equal(body.userId, '98765432-1234-4321-a123-987654321000');
+    await app.close();
+  });
 });

@@ -1,20 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
+import {
+  getBackendBaseUrl,
+  safeBackendErrorResponse,
+  getAuthenticatedSession,
+} from '@/lib/server-config';
 
 /**
  * BFF proxy GET /api/backend/dashboard -> Fastify GET /api/v1/dashboard/summary
  */
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error || !session?.access_token) {
-      return NextResponse.json(
+    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    if (errorResponse || !accessToken) {
+      return errorResponse || NextResponse.json(
         {
           statusCode: 401,
           error: 'Unauthorized',
@@ -52,7 +50,7 @@ export async function GET(req: NextRequest) {
     const backendRes = await fetch(targetUrl, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
       cache: 'no-store',
