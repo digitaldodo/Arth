@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 
 export function UnauthenticatedHome() {
@@ -23,7 +22,6 @@ export function UnauthenticatedHome() {
           >
             Sign In
           </Link>
-          <ThemeToggle />
         </div>
       </header>
 

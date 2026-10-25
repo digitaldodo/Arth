@@ -55,24 +55,24 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-24 md:pb-12">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-12">
       {/* Top Application Header */}
-      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3.5">
+      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3 sm:py-3.5">
         <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
               <ArthLogo
                 variant="full"
-                className="h-6 sm:h-7 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
+                className="h-6 sm:h-7 w-auto max-w-[110px] sm:max-w-[130px] text-[var(--text-primary)] group-hover:opacity-90 transition-opacity shrink-0"
               />
-              <span className="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold px-1.5 sm:px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shrink-0 select-none">
                 Ledger
               </span>
             </Link>
 
             {/* Desktop Navigation Switcher */}
             {user && (
-              <div className="hidden sm:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-md border border-[var(--border-hairline)] ml-4">
+              <div className="hidden sm:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-md border border-[var(--border-hairline)] ml-2 lg:ml-4">
                 <button
                   type="button"
                   onClick={() => setActiveView('home')}
@@ -134,8 +134,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
           <div className="flex items-center gap-3">
             {user ? (
-              <div className="flex items-center gap-3">
-                <span className="hidden sm:inline-block text-sm font-mono text-[var(--text-secondary)] truncate max-w-[200px]">
+              <div className="hidden sm:flex items-center gap-3">
+                <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
                   {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
                 </span>
                 <form action="/auth/logout" method="POST">
@@ -155,7 +155,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 Sign In
               </Link>
             )}
-            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -256,7 +255,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     <span className="text-xs text-[var(--text-muted)]">&rarr;</span>
                   </button>
 
-                  <div className="p-4 flex items-center justify-between">
+                  <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">🌓</span>
                       <div>
@@ -274,11 +273,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">👤</span>
-                      <div>
+                      <div className="min-w-0">
                         <h3 className="text-xs font-semibold text-[var(--text-primary)]">
                           Account Profile
                         </h3>
-                        <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                        <p className="text-[11px] text-[var(--text-muted)] font-mono truncate break-all">
                           {user.displayName
                             ? `${user.displayName} (${user.email})`
                             : user.email}
@@ -367,66 +366,75 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       {/* Mobile Fixed Bottom Navigation with Central Quick Add (+) */}
       {/* 5 destinations: Home | Ledger | Add (+) | People | More */}
       {user && (
-        <nav aria-label="Mobile Navigation" className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-3 py-1.5 flex items-center justify-around">
+        <nav
+          aria-label="Mobile Navigation"
+          className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-2 pt-1 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around"
+        >
           {/* 1. Home */}
           <button
+            type="button"
             onClick={() => setActiveView('home')}
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'home'
                 ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none">🏠</span>
+            <span className="text-base leading-none" aria-hidden="true">🏠</span>
             <span className="truncate">Home</span>
           </button>
 
           {/* 2. Ledger */}
           <button
+            type="button"
             onClick={() => setActiveView('ledger')}
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'ledger'
                 ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none">📊</span>
+            <span className="text-base leading-none" aria-hidden="true">📊</span>
             <span className="truncate">Ledger</span>
           </button>
 
           {/* 3. Central Floating Quick Add Action (+) */}
-          <button
-            type="button"
-            onClick={() => setIsQuickAddOpen(true)}
-            aria-label="Add transaction"
-            className="flex items-center justify-center w-11 h-11 -mt-4 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-lg hover:scale-105 active:scale-95 transition-transform"
-          >
-            <span className="text-2xl font-light leading-none">+</span>
-          </button>
+          <div className="flex items-center justify-center flex-1 max-w-[56px] -mt-5">
+            <button
+              type="button"
+              onClick={() => setIsQuickAddOpen(true)}
+              aria-label="Add transaction"
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-md hover:scale-105 active:scale-95 transition-transform cursor-pointer border-2 border-[var(--bg-surface)]"
+            >
+              <span className="text-2xl font-light leading-none mb-0.5" aria-hidden="true">+</span>
+            </button>
+          </div>
 
           {/* 4. People */}
           <button
+            type="button"
             onClick={() => setActiveView('people')}
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'people'
                 ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none">👥</span>
+            <span className="text-base leading-none" aria-hidden="true">👥</span>
             <span className="truncate">People</span>
           </button>
 
           {/* 5. More */}
           <button
+            type="button"
             onClick={() => setActiveView('more')}
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors w-12 ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'more' || activeView === 'categories'
                 ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none">☰</span>
+            <span className="text-base leading-none" aria-hidden="true">☰</span>
             <span className="truncate">More</span>
           </button>
         </nav>

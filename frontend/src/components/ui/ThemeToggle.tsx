@@ -35,18 +35,21 @@ function getServerSnapshot(): "light" | "dark" {
   return "light";
 }
 
-export function ThemeToggle() {
+export interface ThemeToggleProps {
+  className?: string;
+}
+
+export function ThemeToggle({ className = "" }: ThemeToggleProps) {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const toggleTheme = () => {
-    const nextTheme = theme === "light" ? "dark" : "light";
-    if (nextTheme === "dark") {
+  const setTheme = (targetTheme: "light" | "dark") => {
+    if (targetTheme === "dark") {
       document.documentElement.classList.remove("light");
       document.documentElement.classList.add("dark");
       try {
         localStorage.setItem("theme", "dark");
       } catch {
-        // ignore localStorage errors in sandboxed environments
+        // ignore storage errors
       }
     } else {
       document.documentElement.classList.remove("dark");
@@ -54,26 +57,50 @@ export function ThemeToggle() {
       try {
         localStorage.setItem("theme", "light");
       } catch {
-        // ignore localStorage errors in sandboxed environments
+        // ignore storage errors
       }
     }
   };
 
   return (
-    <button
-      type="button"
-      onClick={toggleTheme}
-      className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-[3px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
-      aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+    <div
+      role="group"
+      aria-label="Appearance & Theme selection"
+      className={`inline-flex items-center p-0.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-xs font-medium shrink-0 ${className}`}
     >
-      <span
-        className="w-2 h-2 rounded-full"
-        style={{
-          backgroundColor: theme === "light" ? "#F59E0B" : "#818CF8",
-        }}
-        aria-hidden="true"
-      />
-      <span>{theme === "light" ? "Light (Warm Paper)" : "Dark (Obsidian)"}</span>
-    </button>
+      <button
+        type="button"
+        onClick={() => setTheme("light")}
+        aria-pressed={theme === "light"}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+          theme === "light"
+            ? "bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs border border-[var(--border-subtle)]"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <span
+          className="w-2 h-2 rounded-full bg-amber-500 shrink-0"
+          aria-hidden="true"
+        />
+        <span>Light (Warm Paper)</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setTheme("dark")}
+        aria-pressed={theme === "dark"}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+          theme === "dark"
+            ? "bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs border border-[var(--border-subtle)]"
+            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <span
+          className="w-2 h-2 rounded-full bg-indigo-400 shrink-0"
+          aria-hidden="true"
+        />
+        <span>Dark (Obsidian)</span>
+      </button>
+    </div>
   );
 }

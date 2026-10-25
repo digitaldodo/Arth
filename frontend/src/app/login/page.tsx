@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 import { AuthForm } from './AuthForm';
@@ -58,14 +57,13 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
       {/* Responsive Header Bar */}
-      <header className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex items-center justify-between">
+      <header className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex items-center justify-between">
         <Link
           href="/"
           className="text-xs sm:text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-2 font-medium cursor-pointer"
         >
           <span aria-hidden="true">&larr;</span> Back to Home
         </Link>
-        <ThemeToggle />
       </header>
 
       {/* Main Authentication Section: 2-column on desktop, 1-column on mobile */}
