@@ -1,21 +1,34 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   type TransactionDTO,
   type CategoryDTO,
   type TransactionType,
 } from '@arth/contracts';
-import { fetchTransactions, fetchCategories } from '@/lib/api-client';
+import {
+  fetchTransactions,
+  fetchCategories,
+  deleteTransaction,
+  restoreTransaction,
+} from '@/lib/api-client';
 import { formatDateHuman } from '@/lib/format';
-import { exportLedgerToPdf } from './ledger-pdf-exporter';
+import { ExportPdfDialog } from './ExportPdfDialog';
+import { TransactionDetailDrawer } from './TransactionDetailDrawer';
+import { DeleteTransactionModal } from './DeleteTransactionModal';
+import { QuickAddModal } from './QuickAddModal';
 
 interface TransactionLedgerProps {
   onOpenQuickAdd: () => void;
   refreshTrigger: number;
+  onTransactionMutated?: () => void;
 }
 
-export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: TransactionLedgerProps) {
+export function TransactionLedger({
+  onOpenQuickAdd,
+  refreshTrigger,
+  onTransactionMutated,
+}: TransactionLedgerProps) {
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -25,37 +38,22 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // PDF Export State
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [exportProgress, setExportProgress] = useState<string>('');
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportSuccess, setExportSuccess] = useState<boolean>(false);
+  // Interactive transaction details & mutations state
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionDTO | null>(null);
+  const [deletingTransaction, setDeletingTransaction] = useState<TransactionDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const handleExportPdf = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    setExportProgress('Initiating export…');
-    setExportError(null);
-    setExportSuccess(false);
+  // Undo soft-delete state
+  const [undoTxn, setUndoTxn] = useState<TransactionDTO | null>(null);
+  const [isUndoing, setIsUndoing] = useState<boolean>(false);
+  const undoTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    try {
-      await exportLedgerToPdf({
-        selectedType,
-        selectedCategory,
-        categories,
-        onProgress: (status) => setExportProgress(status),
-      });
-      setExportSuccess(true);
-      setTimeout(() => setExportSuccess(false), 4000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to export ledger to PDF';
-      setExportError(msg);
-    } finally {
-      setIsExporting(false);
-      setExportProgress('');
-    }
-  };
+  // PDF Export Dialog State
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState<boolean>(false);
 
+  // Load transactions and categories
   useEffect(() => {
     let isMounted = true;
 
@@ -84,6 +82,15 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
       isMounted = false;
     };
   }, [selectedType, selectedCategory, refreshTrigger]);
+
+  // Clean up undo timer on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) {
+        clearTimeout(undoTimerRef.current);
+      }
+    };
+  }, []);
 
   // Compute Net Cash Flow strictly from visible transactions
   const { totalIncomePaise, totalExpensePaise, netCashFlowPaise } = useMemo(() => {
@@ -120,6 +127,82 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
 
     return `${isNeg ? '-' : '+'}${formatted}.${frac.toString().padStart(2, '0')}`;
   }, [netCashFlowPaise]);
+
+  // Handler: Open edit modal from details drawer
+  const handleOpenEdit = (txn: TransactionDTO) => {
+    setSelectedTransaction(null);
+    setEditingTransaction(txn);
+  };
+
+  // Handler: Open delete modal from details drawer
+  const handleOpenDelete = (txn: TransactionDTO) => {
+    setSelectedTransaction(null);
+    setDeleteError(null);
+    setDeletingTransaction(txn);
+  };
+
+  // Handler: Confirm delete
+  const handleConfirmDelete = async () => {
+    if (!deletingTransaction) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await deleteTransaction(deletingTransaction.id);
+
+      // Successfully soft-deleted: remove from visible transactions list
+      const target = deletingTransaction;
+      setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+      setDeletingTransaction(null);
+
+      // Offer Undo notification
+      setUndoTxn(target);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = setTimeout(() => {
+        setUndoTxn(null);
+      }, 7000);
+
+      // Notify parent to refresh dashboard totals and stats
+      onTransactionMutated?.();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete transaction';
+      setDeleteError(msg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handler: Undo soft-delete
+  const handleUndo = async () => {
+    if (!undoTxn || isUndoing) return;
+
+    setIsUndoing(true);
+    try {
+      const res = await restoreTransaction(undoTxn.id);
+      setUndoTxn(null);
+
+      // Prepend or reinsert restored transaction
+      setTransactions((prev) => {
+        if (prev.some((t) => t.id === res.transaction.id)) return prev;
+        return [res.transaction, ...prev];
+      });
+
+      // Notify parent to refresh dashboard totals
+      onTransactionMutated?.();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to restore transaction';
+      setError(msg);
+    } finally {
+      setIsUndoing(false);
+    }
+  };
+
+  // Handler: Edit saved successfully
+  const handleEditSuccess = () => {
+    setEditingTransaction(null);
+    onTransactionMutated?.();
+  };
 
   return (
     <div className="space-y-6">
@@ -164,7 +247,36 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
         </div>
       </div>
 
-      {/* 2. Filter Bar & Quick Add Trigger */}
+      {/* Undo Notification Banner */}
+      {undoTxn && (
+        <div className="p-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] rounded-lg shadow-sm flex items-center justify-between transition-all">
+          <div className="flex items-center gap-2">
+            <span>🗑️</span>
+            <span>
+              Removed <strong>{undoTxn.description || undoTxn.category_name || 'transaction'}</strong> ({undoTxn.formatted_inr}) from active ledger.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={isUndoing}
+              className="px-2.5 py-1 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+            >
+              {isUndoing ? 'Restoring...' : 'Undo'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setUndoTxn(null)}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Filter Bar & Action Triggers */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-[var(--border-hairline)]">
         <div className="flex items-center gap-2">
           {/* Type Segmented Filter */}
@@ -188,7 +300,7 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden"
+            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
           >
             <option value="all">All Categories</option>
             {categories.map((c) => (
@@ -200,24 +312,15 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Download PDF Trigger Button - Opens Export Dialog */}
           <button
             type="button"
-            onClick={handleExportPdf}
-            disabled={isExporting}
-            title="Export complete filtered transaction history to PDF"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+            onClick={() => setIsExportDialogOpen(true)}
+            title="Configure and download transaction statement PDF"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs"
           >
-            {isExporting ? (
-              <>
-                <span className="inline-block w-3 h-3 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
-                <span className="truncate max-w-[140px]">{exportProgress || 'Preparing…'}</span>
-              </>
-            ) : (
-              <>
-                <span className="text-xs">📄</span>
-                <span>Download PDF</span>
-              </>
-            )}
+            <span className="text-xs" aria-hidden="true">📄</span>
+            <span>Download PDF</span>
           </button>
 
           <button
@@ -229,26 +332,6 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
           </button>
         </div>
       </div>
-
-      {/* Export Notifications */}
-      {exportError && (
-        <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-md flex items-center justify-between">
-          <span>{exportError}</span>
-          <button
-            type="button"
-            onClick={() => setExportError(null)}
-            className="text-xs font-bold px-1 hover:opacity-75 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {exportSuccess && (
-        <div className="p-3 text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-md">
-          ✓ PDF ledger export downloaded successfully.
-        </div>
-      )}
 
       {/* 3. Transaction Items / Table View */}
       {error && (
@@ -290,12 +373,22 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
             return (
               <div
                 key={txn.id}
-                className="flex items-center justify-between p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-subtle)] transition-colors"
+                role="button"
+                tabIndex={0}
+                aria-label={`Transaction ${txn.description || txn.category_name || 'entry'}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}`}
+                onClick={() => setSelectedTransaction(txn)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedTransaction(txn);
+                  }
+                }}
+                className="flex items-center justify-between p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden transition-all cursor-pointer group"
               >
                 {/* Left: Category, Date, Badges */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:underline underline-offset-2">
                       {txn.description || txn.category_name || 'Uncategorized'}
                     </span>
                     {txn.description && txn.category_name && (
@@ -328,7 +421,7 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
                   </div>
                 </div>
 
-                {/* Right: Amount */}
+                {/* Right: Amount & Note Marker */}
                 <div className="text-right">
                   <div
                     className={`font-mono text-sm md:text-base font-semibold tracking-tight ${
@@ -350,6 +443,46 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
           })}
         </div>
       )}
+
+      {/* Interactive Transaction Details Drawer */}
+      <TransactionDetailDrawer
+        transaction={selectedTransaction}
+        isOpen={Boolean(selectedTransaction)}
+        onClose={() => setSelectedTransaction(null)}
+        onEdit={handleOpenEdit}
+        onDelete={handleOpenDelete}
+      />
+
+      {/* Edit Transaction Modal (Reuses QuickAddModal) */}
+      {editingTransaction && (
+        <QuickAddModal
+          isOpen={true}
+          onClose={() => setEditingTransaction(null)}
+          onSuccess={handleEditSuccess}
+          editingTransaction={editingTransaction}
+        />
+      )}
+
+      {/* Delete Transaction Confirmation Dialog */}
+      <DeleteTransactionModal
+        transaction={deletingTransaction}
+        isOpen={Boolean(deletingTransaction)}
+        isDeleting={isDeleting}
+        onClose={() => {
+          if (!isDeleting) setDeletingTransaction(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        errorMessage={deleteError}
+      />
+
+      {/* Flexible Ledger PDF Export Dialog */}
+      <ExportPdfDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        categories={categories}
+        initialType={selectedType}
+        initialCategoryId={selectedCategory}
+      />
     </div>
   );
 }

@@ -4,19 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { v7 as uuidv7 } from 'uuid';
 import {
   type CategoryDTO,
+  type TransactionDTO,
   type TransactionType,
   type PaymentMethod,
   type NecessityClass,
   type CreateTransactionResponse,
+  type UpdateTransactionResponse,
 } from '@arth/contracts';
-import { createTransaction, fetchCategories } from '@/lib/api-client';
+import { createTransaction, updateTransaction, fetchCategories } from '@/lib/api-client';
 import { getTodayIST } from '@/lib/format';
 
 interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (res: CreateTransactionResponse) => void;
+  onSuccess: (res: CreateTransactionResponse | UpdateTransactionResponse) => void;
   categoryVersion?: number;
+  editingTransaction?: TransactionDTO | null;
 }
 
 export function QuickAddModal({
@@ -24,24 +27,34 @@ export function QuickAddModal({
   onClose,
   onSuccess,
   categoryVersion = 0,
+  editingTransaction = null,
 }: QuickAddModalProps) {
-  // Stable UUID v7 for this submission session (retained on retry)
-  const [txnId] = useState<string>(() => uuidv7());
-  const [type, setType] = useState<TransactionType>('expense');
-  const [amount, setAmount] = useState<string>('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [transactionDate, setTransactionDate] = useState<string>(() => getTodayIST());
+  const isEditMode = Boolean(editingTransaction);
+
+  // Stable UUID v7 for creation sessions (retained on retry)
+  const [txnId, setTxnId] = useState<string>(() => uuidv7());
+  const [type, setType] = useState<TransactionType>(() => editingTransaction?.type ?? 'expense');
+  const [amount, setAmount] = useState<string>(() => editingTransaction?.amount_decimal ?? '');
+  const [categoryId, setCategoryId] = useState<string>(() => editingTransaction?.category_id ?? '');
+  const [transactionDate, setTransactionDate] = useState<string>(
+    () => editingTransaction?.transaction_date ?? getTodayIST()
+  );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
+    if (editingTransaction?.payment_method) return editingTransaction.payment_method;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('arth_last_payment_method');
       if (saved === 'online' || saved === 'cash') return saved;
     }
     return 'online';
   });
-  const [necessity, setNecessity] = useState<NecessityClass>('essential');
-  const [description, setDescription] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
-  const [showNotes, setShowNotes] = useState<boolean>(false);
+  const [necessity, setNecessity] = useState<NecessityClass>(
+    () => editingTransaction?.necessity ?? 'essential'
+  );
+  const [description, setDescription] = useState<string>(
+    () => editingTransaction?.description ?? ''
+  );
+  const [notes, setNotes] = useState<string>(() => editingTransaction?.notes ?? '');
+  const [showNotes, setShowNotes] = useState<boolean>(() => Boolean(editingTransaction?.notes));
 
   // Categories state
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -52,21 +65,65 @@ export function QuickAddModal({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Populate or reset form whenever modal opens or editingTransaction changes
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (editingTransaction) {
+      setType(editingTransaction.type);
+      setAmount(editingTransaction.amount_decimal);
+      setCategoryId(editingTransaction.category_id);
+      setTransactionDate(editingTransaction.transaction_date);
+      setPaymentMethod(editingTransaction.payment_method);
+      setNecessity(editingTransaction.necessity || 'essential');
+      setDescription(editingTransaction.description || '');
+      setNotes(editingTransaction.notes || '');
+      setShowNotes(Boolean(editingTransaction.notes));
+      setErrorMessage(null);
+    } else {
+      setTxnId(uuidv7());
+      setType('expense');
+      setAmount('');
+      setCategoryId('');
+      setTransactionDate(getTodayIST());
+      setNecessity('essential');
+      setDescription('');
+      setNotes('');
+      setShowNotes(false);
+      setErrorMessage(null);
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('arth_last_payment_method');
+        if (saved === 'online' || saved === 'cash') setPaymentMethod(saved);
+      }
+    }
+  }, [isOpen, editingTransaction]);
+
   // Load categories asynchronously when transaction type changes
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
+    setCategoriesLoading(true);
+
     fetchCategories({ type })
       .then((res) => {
         if (!isMounted) return;
         const cats = res.categories || [];
         setCategories(cats);
-        if (cats.length > 0) {
-          setCategoryId(cats[0].id);
-        } else {
-          setCategoryId('');
-        }
+
+        setCategoryId((prev) => {
+          if (prev && cats.some((c) => c.id === prev)) {
+            return prev;
+          }
+          if (
+            editingTransaction &&
+            editingTransaction.type === type &&
+            cats.some((c) => c.id === editingTransaction.category_id)
+          ) {
+            return editingTransaction.category_id;
+          }
+          return cats.length > 0 ? cats[0].id : '';
+        });
         setCategoriesLoading(false);
       })
       .catch(() => {
@@ -79,7 +136,7 @@ export function QuickAddModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, type, categoryVersion]);
+  }, [isOpen, type, categoryVersion, editingTransaction]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -98,7 +155,6 @@ export function QuickAddModal({
     if (newType === type) return;
     setType(newType);
     setErrorMessage(null);
-    setCategoriesLoading(true);
   };
 
   const handlePaymentMethodChange = (method: PaymentMethod) => {
@@ -126,25 +182,44 @@ export function QuickAddModal({
 
     setIsSubmitting(true);
     try {
-      const response = await createTransaction({
-        id: txnId, // Idempotent UUID v7
-        amount: amount.trim(),
-        type,
-        category_id: categoryId,
-        transaction_date: transactionDate,
-        payment_method: paymentMethod,
-        necessity: type === 'expense' ? necessity : null,
-        description: description.trim() || null,
-        notes: notes.trim() || null,
-      });
+      if (isEditMode && editingTransaction) {
+        const response = await updateTransaction(editingTransaction.id, {
+          amount: amount.trim(),
+          type,
+          category_id: categoryId,
+          transaction_date: transactionDate,
+          payment_method: paymentMethod,
+          necessity: type === 'expense' ? necessity : null,
+          description: description.trim() || null,
+          notes: notes.trim() || null,
+        });
 
-      onSuccess(response);
-      onClose();
+        onSuccess(response);
+        onClose();
+      } else {
+        const response = await createTransaction({
+          id: txnId, // Idempotent UUID v7
+          amount: amount.trim(),
+          type,
+          category_id: categoryId,
+          transaction_date: transactionDate,
+          payment_method: paymentMethod,
+          necessity: type === 'expense' ? necessity : null,
+          description: description.trim() || null,
+          notes: notes.trim() || null,
+        });
+
+        onSuccess(response);
+        onClose();
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record transaction';
+      const msg =
+        err instanceof Error
+          ? err.message
+          : isEditMode
+          ? 'Failed to update transaction'
+          : 'Failed to record transaction';
       setErrorMessage(msg);
-      // Notice: txnId is NOT regenerated on failure!
-      // This guarantees that clicking "Retry" submits the exact same UUID v7.
     } finally {
       setIsSubmitting(false);
     }
@@ -159,7 +234,7 @@ export function QuickAddModal({
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-xs transition-opacity p-0 md:p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="quick-add-title"
+      aria-labelledby="transaction-modal-title"
     >
       {/* Backdrop tap to dismiss */}
       <div
@@ -179,8 +254,8 @@ export function QuickAddModal({
 
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border-hairline)]">
-          <h2 id="quick-add-title" className="text-base font-semibold text-[var(--text-primary)]">
-            Record Transaction
+          <h2 id="transaction-modal-title" className="text-base font-semibold text-[var(--text-primary)]">
+            {isEditMode ? 'Edit Transaction' : 'Record Transaction'}
           </h2>
           <button
             type="button"
@@ -249,7 +324,7 @@ export function QuickAddModal({
                 }}
                 disabled={isSubmitting}
                 required
-                autoFocus
+                autoFocus={!isEditMode}
                 className="w-full bg-transparent font-mono text-2xl md:text-3xl text-[var(--text-primary)] tracking-tight focus:outline-hidden"
               />
             </div>
@@ -309,7 +384,7 @@ export function QuickAddModal({
                       setShowMoreCategories(false);
                     }}
                     disabled={isSubmitting}
-                    className={`px-2.5 py-1.5 text-xs rounded-md border transition-all text-left ${
+                    className={`px-2.5 py-1.5 text-xs rounded-md border transition-all text-left cursor-pointer ${
                       isSelected
                         ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)] font-medium'
                         : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
@@ -325,7 +400,7 @@ export function QuickAddModal({
                   type="button"
                   onClick={() => setShowMoreCategories(!showMoreCategories)}
                   disabled={isSubmitting}
-                  className={`px-2.5 py-1.5 text-xs rounded-md border border-dashed transition-all ${
+                  className={`px-2.5 py-1.5 text-xs rounded-md border border-dashed transition-all cursor-pointer ${
                     isSelectedInRemaining || showMoreCategories
                       ? 'border-[var(--text-primary)] text-[var(--text-primary)] font-medium'
                       : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -351,7 +426,7 @@ export function QuickAddModal({
                       setCategoryId(cat.id);
                       setShowMoreCategories(false);
                     }}
-                    className={`p-1.5 text-xs text-left rounded-md truncate ${
+                    className={`p-1.5 text-xs text-left rounded-md truncate cursor-pointer ${
                       categoryId === cat.id
                         ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] font-medium'
                         : 'hover:bg-[var(--bg-surface)] text-[var(--text-secondary)]'
@@ -374,7 +449,7 @@ export function QuickAddModal({
                 type="button"
                 onClick={() => handlePaymentMethodChange('online')}
                 disabled={isSubmitting}
-                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all ${
+                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer ${
                   paymentMethod === 'online'
                     ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
                     : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
@@ -386,7 +461,7 @@ export function QuickAddModal({
                 type="button"
                 onClick={() => handlePaymentMethodChange('cash')}
                 disabled={isSubmitting}
-                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all ${
+                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer ${
                   paymentMethod === 'cash'
                     ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
                     : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
@@ -410,7 +485,7 @@ export function QuickAddModal({
                     type="button"
                     onClick={() => setNecessity(n)}
                     disabled={isSubmitting}
-                    className={`py-1.5 px-2 rounded-md border capitalize transition-all ${
+                    className={`py-1.5 px-2 rounded-md border capitalize transition-all cursor-pointer ${
                       necessity === n
                         ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
                         : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
@@ -479,9 +554,13 @@ export function QuickAddModal({
               } disabled:opacity-60 disabled:cursor-not-allowed`}
             >
               {isSubmitting
-                ? 'Recording...'
+                ? isEditMode
+                  ? 'Saving Changes...'
+                  : 'Recording...'
                 : errorMessage
                 ? 'Retry Submission'
+                : isEditMode
+                ? 'Save Changes'
                 : `Record ${type === 'expense' ? 'Expense' : 'Income'}`}
             </button>
           </div>

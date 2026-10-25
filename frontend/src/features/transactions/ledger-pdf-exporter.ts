@@ -12,6 +12,9 @@ export interface ExportPdfOptions {
   selectedType: TransactionType | 'all';
   selectedCategory: string; // 'all' or category ID
   categories: CategoryDTO[];
+  startDate?: string;
+  endDate?: string;
+  dateRangeLabel?: string;
   onProgress?: (status: string) => void;
 }
 
@@ -59,9 +62,9 @@ async function loadFonts(): Promise<{ regular: string; bold: string }> {
 }
 
 /**
- * Formats a Date object into an Asia/Kolkata (IST) timestamp string.
+ * Formats a Date object into an Asia/Kolkata (IST) timestamp string: "25 Oct 2026, 06:15 PM IST".
  */
-function getTimestampIST(): string {
+export function getTimestampIST(): string {
   const now = new Date();
   const options: Intl.DateTimeFormatOptions = {
     timeZone: 'Asia/Kolkata',
@@ -72,9 +75,7 @@ function getTimestampIST(): string {
     minute: '2-digit',
     hour12: true,
   };
-  return (
-    new Intl.DateTimeFormat('en-IN', options).format(now) + ' IST'
-  );
+  return new Intl.DateTimeFormat('en-IN', options).format(now) + ' IST';
 }
 
 /**
@@ -84,6 +85,8 @@ function getTimestampIST(): string {
 export async function fetchAllMatchingTransactions(
   selectedType: TransactionType | 'all',
   selectedCategory: string,
+  startDate?: string,
+  endDate?: string,
   onProgress?: (status: string) => void
 ): Promise<TransactionDTO[]> {
   const allTransactions: TransactionDTO[] = [];
@@ -98,6 +101,8 @@ export async function fetchAllMatchingTransactions(
     const response = await fetchTransactions({
       type: selectedType === 'all' ? undefined : selectedType,
       category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+      start_date: startDate,
+      end_date: endDate,
       page: currentPage,
       page_size: 50,
     });
@@ -131,12 +136,22 @@ export async function fetchAllMatchingTransactions(
  * Generates and downloads a production-grade PDF export of the user's filtered transaction ledger.
  */
 export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void> {
-  const { selectedType, selectedCategory, categories, onProgress } = options;
+  const {
+    selectedType,
+    selectedCategory,
+    categories,
+    startDate,
+    endDate,
+    dateRangeLabel,
+    onProgress,
+  } = options;
 
   // 1. Fetch complete matching records across all pages
   const transactions = await fetchAllMatchingTransactions(
     selectedType,
     selectedCategory,
+    startDate,
+    endDate,
     onProgress
   );
 
@@ -161,7 +176,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
 
-  // 4. Header: Arth Emblem & Wordmark (Vector drawing)
+  // 4. Header: Arth Emblem & Wordmark (Vector drawing using exact monochrome logo design)
   doc.setFillColor(28, 25, 23); // #1C1917
   doc.roundedRect(margin, 14, 7, 7, 1.5, 1.5, 'F');
   doc.setTextColor(255, 255, 255);
@@ -182,7 +197,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   doc.setFontSize(7.5);
   doc.text('LEDGER', margin + 24, 19);
 
-  // Right-aligned Generation Timestamp
+  // Right-aligned Generation Timestamp in Asia/Kolkata
   doc.setFontSize(8);
   doc.setTextColor(120, 113, 108);
   const generatedTimeText = `Generated: ${getTimestampIST()}`;
@@ -192,7 +207,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   doc.setFont('NotoSans', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(28, 25, 23);
-  doc.text('Transaction Ledger Export', margin, 29);
+  doc.text('Transaction Statement', margin, 29);
 
   // Determine Category Name
   let categoryLabel = 'All Categories';
@@ -204,29 +219,30 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   // Determine Type Label
   const typeLabel =
     selectedType === 'all'
-      ? 'All Types'
+      ? 'Both Income & Expense'
       : selectedType === 'expense'
-      ? 'Expenses Only'
+      ? 'Expense Only'
       : 'Income Only';
 
-  // Determine Date Coverage
-  let dateCoverage = 'No transactions recorded';
-  if (transactions.length > 0) {
-    const dates = transactions.map((t) => t.transaction_date).filter(Boolean);
-    dates.sort();
-    const earliest = dates[0];
-    const latest = dates[dates.length - 1];
-    dateCoverage =
-      earliest === latest
-        ? formatDateHuman(earliest)
-        : `${formatDateHuman(earliest)} – ${formatDateHuman(latest)}`;
+  // Determine Date Range Label
+  let effectivePeriod = dateRangeLabel;
+  if (!effectivePeriod) {
+    if (startDate && endDate) {
+      effectivePeriod = `${formatDateHuman(startDate)} – ${formatDateHuman(endDate)}`;
+    } else if (transactions.length > 0) {
+      const dates = transactions.map((t) => t.transaction_date).filter(Boolean);
+      dates.sort();
+      effectivePeriod = `${formatDateHuman(dates[0])} – ${formatDateHuman(dates[dates.length - 1])}`;
+    } else {
+      effectivePeriod = 'All Recorded Dates';
+    }
   }
 
   doc.setFont('NotoSans', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(87, 83, 78);
   doc.text(
-    `Scope: ${typeLabel}  |  Category: ${categoryLabel}  |  Coverage: ${dateCoverage}`,
+    `Period: ${effectivePeriod}   |   Type: ${typeLabel}   |   Category: ${categoryLabel}`,
     margin,
     34
   );
@@ -317,35 +333,26 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   doc.setFontSize(6.5);
   doc.setTextColor(168, 162, 158);
   doc.text(
-    '* Net Cash Flow is computed as Total Income minus Total Expenses from the exported records. It does not represent an account balance.',
+    '* Net Cash Flow is computed as Total Income minus Total Expenses from the exported records. It strictly excludes People Tracker balances.',
     margin,
     57
   );
 
-  // 7. Prepare Table Rows
+  // 7. Prepare Table Rows (Columns: Date, Transaction Name, Type, Category, Payment Method, Amount)
   const tableRows = transactions.map((t) => {
     const isIncome = t.type === 'income';
-    const amountStr = isIncome
-      ? `+${t.formatted_inr}`
-      : `-${t.formatted_inr}`;
-
-    const description =
-      t.description?.trim() || t.category_name?.trim() || 'Transaction';
-
+    const amountStr = isIncome ? `+${t.formatted_inr}` : `-${t.formatted_inr}`;
+    const name = t.description?.trim() || t.category_name?.trim() || 'Transaction';
     const category = t.category_name?.trim() || 'Uncategorized';
     const type = isIncome ? 'Income' : 'Expense';
     const method = t.payment_method === 'online' ? 'Online' : 'Cash';
-    const necessity = t.necessity
-      ? t.necessity.charAt(0).toUpperCase() + t.necessity.slice(1)
-      : '—';
 
     return [
       t.transaction_date,
-      description,
-      category,
+      name,
       type,
+      category,
       method,
-      necessity,
       amountStr,
     ];
   });
@@ -354,8 +361,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   if (tableRows.length === 0) {
     tableRows.push([
       '—',
-      'No transactions match the selected filter criteria',
-      '—',
+      'No transactions found for the selected period',
       '—',
       '—',
       '—',
@@ -370,11 +376,10 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
     head: [
       [
         'Date',
-        'Description / Name',
-        'Category',
+        'Transaction Name',
         'Type',
-        'Method',
-        'Necessity',
+        'Category',
+        'Payment Method',
         'Amount',
       ],
     ],
@@ -402,20 +407,15 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
     },
     columnStyles: {
       0: { cellWidth: 20 }, // Date
-      1: { cellWidth: 'auto' }, // Description (flexible wrap)
-      2: { cellWidth: 26 }, // Category
-      3: { cellWidth: 16 }, // Type
-      4: { cellWidth: 16 }, // Method
-      5: { cellWidth: 18 }, // Necessity
-      6: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }, // Amount
-    },
-    didDrawPage: () => {
-      // Top spacing when table continues onto new pages
-      // Additional per-page background setup if needed
+      1: { cellWidth: 'auto' }, // Transaction Name (flexible wrap)
+      2: { cellWidth: 18 }, // Type
+      3: { cellWidth: 28 }, // Category
+      4: { cellWidth: 22 }, // Payment Method
+      5: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }, // Amount
     },
   });
 
-  // 9. Footers on all pages (with accurate total page count)
+  // 9. Footers on all pages (with statement date range, note, and accurate total page count)
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -429,7 +429,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
     doc.line(margin, 287, pageWidth - margin, 287);
 
     doc.text(
-      'Arth · Personal Finance Ledger · Private & Confidential',
+      `Statement Period: ${effectivePeriod}   •   Generated from Arth · Private & Confidential`,
       margin,
       291
     );
@@ -439,6 +439,6 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   }
 
   // 10. Save and Trigger Browser Download
-  const filename = `Arth-Ledger-${getTodayIST()}.pdf`;
+  const filename = `Arth-Statement-${startDate || 'all'}-to-${endDate || getTodayIST()}.pdf`;
   doc.save(filename);
 }

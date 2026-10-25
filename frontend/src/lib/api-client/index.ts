@@ -3,6 +3,10 @@ import type {
   HealthCheckResponse,
   CreateTransactionRequest,
   CreateTransactionResponse,
+  UpdateTransactionRequest,
+  UpdateTransactionResponse,
+  DeleteTransactionResponse,
+  RestoreTransactionResponse,
   TransactionListQuery,
   TransactionListResponse,
   CategoryListQuery,
@@ -103,6 +107,88 @@ export async function createTransaction(
 /**
  * Lists the authenticated user's active transactions through the BFF proxy.
  */
+
+/**
+ * Updates an existing transaction through the BFF proxy.
+ */
+export async function updateTransaction(
+  id: string,
+  req: UpdateTransactionRequest
+): Promise<UpdateTransactionResponse> {
+  const response = await fetch(`/api/backend/transactions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const message = data.message || `Failed to update transaction (${response.status})`;
+    const error = new Error(message) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Soft-deletes a transaction from the active ledger through the BFF proxy.
+ */
+export async function deleteTransaction(
+  id: string
+): Promise<DeleteTransactionResponse> {
+  const response = await fetch(`/api/backend/transactions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const message = data.message || `Failed to delete transaction (${response.status})`;
+    const error = new Error(message) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Restores a soft-deleted transaction through the BFF proxy.
+ */
+export async function restoreTransaction(
+  id: string
+): Promise<RestoreTransactionResponse> {
+  const response = await fetch(`/api/backend/transactions/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const message = data.message || `Failed to restore transaction (${response.status})`;
+    const error = new Error(message) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
 export async function fetchTransactions(
   query: TransactionListQuery = {}
 ): Promise<TransactionListResponse> {

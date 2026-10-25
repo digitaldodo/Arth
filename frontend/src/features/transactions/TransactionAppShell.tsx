@@ -207,6 +207,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <TransactionLedger
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 refreshTrigger={refreshTrigger}
+                onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
               />
             )}
 

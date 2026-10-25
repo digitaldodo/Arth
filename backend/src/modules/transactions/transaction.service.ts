@@ -12,7 +12,9 @@ import type { AppConfig } from '../../config/index.js';
 import {
   ValidationError,
   ConflictError,
+  NotFoundError,
   type ValidatedCreateTransactionInput,
+  type ValidatedUpdateTransactionInput,
   type ValidatedTransactionListQuery,
   type ValidatedCategoryListQuery,
 } from './transaction.validation.js';
@@ -63,6 +65,25 @@ export interface ITransactionService {
     input: ValidatedCreateTransactionInput,
     token?: string
   ): Promise<{ transaction: TransactionDTO; isReplay: boolean }>;
+
+  updateTransaction(
+    userId: string,
+    id: string,
+    input: ValidatedUpdateTransactionInput,
+    token?: string
+  ): Promise<TransactionDTO>;
+
+  deleteTransaction(
+    userId: string,
+    id: string,
+    token?: string
+  ): Promise<{ success: boolean; id: string }>;
+
+  restoreTransaction(
+    userId: string,
+    id: string,
+    token?: string
+  ): Promise<TransactionDTO>;
 
   listTransactions(
     userId: string,
@@ -357,6 +378,164 @@ export class SupabaseTransactionService implements ITransactionService {
 
     return { categories };
   }
+
+    async updateTransaction(
+    userId: string,
+    id: string,
+    input: ValidatedUpdateTransactionInput,
+    token?: string
+  ): Promise<TransactionDTO> {
+    const client = this.getScopedClient(token);
+
+    // 1. Fetch existing transaction belonging to caller
+    const { data: existing, error: fetchErr } = await client
+      .from('transactions')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !existing || existing.deleted_at !== null) {
+      throw new NotFoundError('Transaction not found or has been deleted');
+    }
+
+    const finalType = input.type ?? (existing.type as TransactionType);
+    const finalCategoryId = input.category_id ?? (existing.category_id as string);
+
+    // 2. Validate category if category or type changed
+    const { data: category, error: catErr } = await client
+      .from('categories')
+      .select('id, name, type')
+      .eq('id', finalCategoryId)
+      .is('archived_at', null)
+      .maybeSingle();
+
+    if (catErr || !category) {
+      throw new ValidationError('Selected category does not exist or does not belong to the user');
+    }
+
+    if (category.type !== finalType) {
+      throw new ValidationError(
+        `Category '${category.name}' is of type '${category.type}', but transaction is '${finalType}'`
+      );
+    }
+
+    // 3. Validate necessity against final type
+    let finalNecessity: 'essential' | 'optional' | 'luxury' | null;
+    if (finalType === 'income') {
+      finalNecessity = null;
+    } else {
+      finalNecessity = input.necessity !== undefined
+        ? input.necessity
+        : (existing.necessity as 'essential' | 'optional' | 'luxury' | null);
+      if (!finalNecessity) {
+        throw new ValidationError(
+          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
+        );
+      }
+    }
+
+    // 4. Build update payload
+    const updateData: Record<string, unknown> = {
+      type: finalType,
+      category_id: finalCategoryId,
+      necessity: finalNecessity,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (input.amount_paise !== undefined) {
+      updateData.amount_paise = Number(input.amount_paise);
+    }
+    if (input.transaction_date !== undefined) {
+      updateData.transaction_date = input.transaction_date;
+    }
+    if (input.payment_method !== undefined) {
+      updateData.payment_method = input.payment_method;
+    }
+    if (input.description !== undefined) {
+      updateData.description = input.description;
+    }
+    if (input.notes !== undefined) {
+      updateData.notes = input.notes;
+    }
+
+    const { data: updated, error: updateErr } = await client
+      .from('transactions')
+      .update(updateData)
+      .eq('id', id)
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .single();
+
+    if (updateErr || !updated) {
+      throw new Error(`Failed to update transaction: ${updateErr?.message || 'Unknown error'}`);
+    }
+
+    const catName = (updated.categories as unknown as { name?: string } | null)?.name || category.name;
+    return mapToTransactionDTO(updated as unknown as StoredTransactionRecord, catName);
+  }
+
+  async deleteTransaction(
+    userId: string,
+    id: string,
+    token?: string
+  ): Promise<{ success: boolean; id: string }> {
+    const client = this.getScopedClient(token);
+
+    // Verify existing active record
+    const { data: existing, error: fetchErr } = await client
+      .from('transactions')
+      .select('id, deleted_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !existing || existing.deleted_at !== null) {
+      throw new NotFoundError('Transaction not found or already deleted');
+    }
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await client
+      .from('transactions')
+      .update({ deleted_at: now, updated_at: now })
+      .eq('id', id);
+
+    if (updateErr) {
+      throw new Error(`Failed to delete transaction: ${updateErr.message}`);
+    }
+
+    return { success: true, id };
+  }
+
+  async restoreTransaction(
+    userId: string,
+    id: string,
+    token?: string
+  ): Promise<TransactionDTO> {
+    const client = this.getScopedClient(token);
+
+    const { data: existing, error: fetchErr } = await client
+      .from('transactions')
+      .select('id, deleted_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !existing) {
+      throw new NotFoundError('Transaction not found');
+    }
+
+    const now = new Date().toISOString();
+    const { data: restored, error: updateErr } = await client
+      .from('transactions')
+      .update({ deleted_at: null, updated_at: now })
+      .eq('id', id)
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .single();
+
+    if (updateErr || !restored) {
+      throw new Error(`Failed to restore transaction: ${updateErr?.message || 'Unknown error'}`);
+    }
+
+    const catName = (restored.categories as unknown as { name?: string } | null)?.name;
+    return mapToTransactionDTO(restored as unknown as StoredTransactionRecord, catName);
+  }
 }
 
 /**
@@ -584,5 +763,125 @@ export class InMemoryTransactionService implements ITransactionService {
     }));
 
     return { categories };
+  }
+
+  async updateTransaction(
+    userId: string,
+    id: string,
+    input: ValidatedUpdateTransactionInput
+  ): Promise<TransactionDTO> {
+    const existing = this.transactions.find((t) => t.id === id);
+    if (!existing || existing.user_id !== userId || existing.deleted_at !== null) {
+      throw new NotFoundError('Transaction not found or has been deleted');
+    }
+
+    const finalType = input.type ?? existing.type;
+    const finalCategoryId = input.category_id ?? existing.category_id;
+
+    const category = this.categories.find(
+      (c) => c.id === finalCategoryId && c.user_id === userId && c.archived_at === null
+    );
+
+    if (!category) {
+      throw new ValidationError('Selected category does not exist or does not belong to the user');
+    }
+
+    if (category.type !== finalType) {
+      throw new ValidationError(
+        `Category '${category.name}' is of type '${category.type}', but transaction is '${finalType}'`
+      );
+    }
+
+    let finalNecessity: 'essential' | 'optional' | 'luxury' | null;
+    if (finalType === 'income') {
+      finalNecessity = null;
+    } else {
+      finalNecessity = input.necessity !== undefined ? input.necessity : existing.necessity;
+      if (!finalNecessity) {
+        throw new ValidationError(
+          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
+        );
+      }
+    }
+
+    const now = new Date().toISOString();
+    if (input.amount_paise !== undefined) existing.amount_paise = Number(input.amount_paise);
+    existing.type = finalType;
+    existing.category_id = finalCategoryId;
+    existing.category_name = category.name;
+    existing.necessity = finalNecessity;
+    if (input.transaction_date !== undefined) existing.transaction_date = input.transaction_date;
+    if (input.payment_method !== undefined) existing.payment_method = input.payment_method;
+    if (input.description !== undefined) existing.description = input.description;
+    if (input.notes !== undefined) existing.notes = input.notes;
+    existing.updated_at = now;
+
+    this.outboxEvents.push({
+      id: `outbox-${id}-${Date.now()}`,
+      user_id: userId,
+      entity_type: 'transaction',
+      entity_id: id,
+      event_type: 'transaction.updated',
+      payload: { ...existing },
+      status: 'pending',
+      created_at: now,
+    });
+
+    return mapToTransactionDTO(existing, category.name);
+  }
+
+  async deleteTransaction(
+    userId: string,
+    id: string
+  ): Promise<{ success: boolean; id: string }> {
+    const existing = this.transactions.find((t) => t.id === id);
+    if (!existing || existing.user_id !== userId || existing.deleted_at !== null) {
+      throw new NotFoundError('Transaction not found or already deleted');
+    }
+
+    const now = new Date().toISOString();
+    existing.deleted_at = now;
+    existing.updated_at = now;
+
+    this.outboxEvents.push({
+      id: `outbox-${id}-${Date.now()}`,
+      user_id: userId,
+      entity_type: 'transaction',
+      entity_id: id,
+      event_type: 'transaction.deleted',
+      payload: { ...existing },
+      status: 'pending',
+      created_at: now,
+    });
+
+    return { success: true, id };
+  }
+
+  async restoreTransaction(
+    userId: string,
+    id: string
+  ): Promise<TransactionDTO> {
+    const existing = this.transactions.find((t) => t.id === id);
+    if (!existing || existing.user_id !== userId) {
+      throw new NotFoundError('Transaction not found');
+    }
+
+    const now = new Date().toISOString();
+    existing.deleted_at = null;
+    existing.updated_at = now;
+
+    this.outboxEvents.push({
+      id: `outbox-${id}-${Date.now()}`,
+      user_id: userId,
+      entity_type: 'transaction',
+      entity_id: id,
+      event_type: 'transaction.restored',
+      payload: { ...existing },
+      status: 'pending',
+      created_at: now,
+    });
+
+    const cat = this.categories.find((c) => c.id === existing.category_id);
+    return mapToTransactionDTO(existing, cat?.name);
   }
 }

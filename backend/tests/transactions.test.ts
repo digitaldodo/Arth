@@ -475,4 +475,165 @@ describe('Backend Transactions & Categories API', () => {
       assert.ok(body.items[0].transaction_date >= body.items[1].transaction_date);
     }
   });
+
+  // 7. Transaction Updates, Soft Deletion, and Restoration
+  test('PATCH /api/v1/transactions/:id updates transaction fields and records outbox event', async () => {
+    const txnId = uuidv7();
+    const foodCat = service.categories.find((c) => c.user_id === userA.userId && c.name === 'Food & Dining')!;
+
+    // Create transaction
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: txnId,
+        amount: '250.00',
+        type: 'expense',
+        category_id: foodCat.id,
+        transaction_date: '2026-10-25',
+        payment_method: 'online',
+        necessity: 'essential',
+        description: 'Initial lunch',
+      },
+    });
+
+    // Update amount, necessity, and description
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/transactions/${txnId}`,
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        amount: '350.50',
+        necessity: 'optional',
+        description: 'Team lunch buffet',
+        notes: 'Celebration note',
+      },
+    });
+
+    assert.equal(patchRes.statusCode, 200);
+    const updated = patchRes.json().transaction;
+    assert.equal(updated.amount_paise, 35050);
+    assert.equal(updated.amount_decimal, '350.50');
+    assert.equal(updated.necessity, 'optional');
+    assert.equal(updated.description, 'Team lunch buffet');
+    assert.equal(updated.notes, 'Celebration note');
+
+    // Verify outbox event recorded
+    const updateEvent = service.outboxEvents.find(
+      (e) => e.entity_id === txnId && e.event_type === 'transaction.updated'
+    );
+    assert.ok(updateEvent);
+    assert.equal(updateEvent.user_id, userA.userId);
+  });
+
+  test('PATCH /api/v1/transactions/:id rejects cross-user modification with 404', async () => {
+    const txnId = uuidv7();
+    const catA = service.categories.find((c) => c.user_id === userA.userId && c.name === 'Food & Dining')!;
+
+    // Created by User A
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: txnId,
+        amount: '100.00',
+        type: 'expense',
+        category_id: catA.id,
+        transaction_date: '2026-10-25',
+        payment_method: 'cash',
+        necessity: 'essential',
+      },
+    });
+
+    // User B attempts to edit User A's transaction
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/transactions/${txnId}`,
+      headers: { authorization: 'Bearer user-b-token' },
+      payload: {
+        amount: '999.00',
+      },
+    });
+    assert.equal(res.statusCode, 404);
+  });
+
+  test('DELETE /api/v1/transactions/:id soft-deletes record and POST /restore un-deletes it', async () => {
+    const txnId = uuidv7();
+    const cat = service.categories.find((c) => c.user_id === userA.userId && c.name === 'Transport')!;
+
+    // Create transaction
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: txnId,
+        amount: '50.00',
+        type: 'expense',
+        category_id: cat.id,
+        transaction_date: '2026-10-25',
+        payment_method: 'cash',
+        necessity: 'essential',
+        description: 'Bus ticket',
+      },
+    });
+
+    // Delete transaction
+    const delRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/transactions/${txnId}`,
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(delRes.statusCode, 200);
+    assert.equal(delRes.json().success, true);
+
+    // Verify it is excluded from active ledger listing
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    const items = listRes.json().items;
+    assert.ok(items.every((t: { id: string }) => t.id !== txnId));
+
+    // Verify outbox event for deletion
+    const delEvent = service.outboxEvents.find(
+      (e) => e.entity_id === txnId && e.event_type === 'transaction.deleted'
+    );
+    assert.ok(delEvent);
+
+    // Attempting to delete again returns 404
+    const delAgainRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/transactions/${txnId}`,
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(delAgainRes.statusCode, 404);
+
+    // Restore transaction
+    const restoreRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/transactions/${txnId}/restore`,
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(restoreRes.statusCode, 200);
+    assert.equal(restoreRes.json().transaction.id, txnId);
+
+    // Verify restored transaction is back in active ledger listing
+    const listResAfter = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    const itemsAfter = listResAfter.json().items;
+    assert.ok(itemsAfter.some((t: { id: string }) => t.id === txnId));
+
+    // Verify outbox event for restoration
+    const restoreEvent = service.outboxEvents.find(
+      (e) => e.entity_id === txnId && e.event_type === 'transaction.restored'
+    );
+    assert.ok(restoreEvent);
+  });
 });

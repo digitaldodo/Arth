@@ -31,6 +31,14 @@ export class ConflictError extends Error {
   }
 }
 
+export class NotFoundError extends Error {
+  public readonly statusCode = 404;
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotFoundError';
+  }
+}
+
 export interface ValidatedCreateTransactionInput {
   id: string;
   amount_paise: bigint;
@@ -249,4 +257,141 @@ export function validateCategoryListQuery(
   }
 
   return { type };
+}
+
+export function validateTransactionId(id: unknown): string {
+  if (typeof id !== 'string' || !UUID_REGEX.test(id)) {
+    throw new ValidationError('Invalid transaction ID: must be a valid UUID');
+  }
+  return id.toLowerCase();
+}
+
+export interface ValidatedUpdateTransactionInput {
+  amount_paise?: bigint;
+  type?: TransactionType;
+  category_id?: string;
+  transaction_date?: string;
+  payment_method?: PaymentMethod;
+  necessity?: NecessityClass | null;
+  description?: string | null;
+  notes?: string | null;
+}
+
+export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdateTransactionInput {
+  if (!body || typeof body !== 'object') {
+    throw new ValidationError('Request body must be a valid JSON object');
+  }
+
+  const payload = body as Record<string, unknown>;
+  const result: ValidatedUpdateTransactionInput = {};
+
+  if (payload.type !== undefined) {
+    if (payload.type !== 'income' && payload.type !== 'expense') {
+      throw new ValidationError("Transaction type must be 'income' or 'expense'");
+    }
+    result.type = payload.type;
+  }
+
+  if (payload.amount !== undefined) {
+    if (typeof payload.amount !== 'string') {
+      throw new ValidationError('Amount must be provided as a decimal string');
+    }
+    try {
+      result.amount_paise = parseINRToPaise(payload.amount);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Invalid amount';
+      throw new ValidationError(msg);
+    }
+  }
+
+  if (payload.category_id !== undefined) {
+    if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
+      throw new ValidationError('Category ID must be a valid UUID');
+    }
+    result.category_id = payload.category_id.toLowerCase();
+  }
+
+  if (payload.transaction_date !== undefined) {
+    if (typeof payload.transaction_date !== 'string' || !DATE_REGEX.test(payload.transaction_date)) {
+      throw new ValidationError('Transaction date must be in YYYY-MM-DD format');
+    }
+    const [year, month, day] = payload.transaction_date.split('-').map(Number);
+    const parsedDate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      isNaN(parsedDate.getTime()) ||
+      parsedDate.getUTCFullYear() !== year ||
+      parsedDate.getUTCMonth() !== month - 1 ||
+      parsedDate.getUTCDate() !== day
+    ) {
+      throw new ValidationError('Transaction date is not a valid calendar date');
+    }
+    result.transaction_date = payload.transaction_date;
+  }
+
+  if (payload.payment_method !== undefined) {
+    if (payload.payment_method !== 'online' && payload.payment_method !== 'cash') {
+      throw new ValidationError("Payment method must be 'online' or 'cash'");
+    }
+    result.payment_method = payload.payment_method;
+  }
+
+  if (payload.necessity !== undefined) {
+    if (result.type === 'expense' || payload.type === 'expense') {
+      if (
+        payload.necessity !== 'essential' &&
+        payload.necessity !== 'optional' &&
+        payload.necessity !== 'luxury'
+      ) {
+        throw new ValidationError(
+          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
+        );
+      }
+      result.necessity = payload.necessity;
+    } else if (result.type === 'income' || payload.type === 'income') {
+      if (payload.necessity !== null && payload.necessity !== '') {
+        throw new ValidationError('Income transactions must not have a necessity value');
+      }
+      result.necessity = null;
+    } else {
+      if (
+        payload.necessity !== null &&
+        payload.necessity !== 'essential' &&
+        payload.necessity !== 'optional' &&
+        payload.necessity !== 'luxury'
+      ) {
+        throw new ValidationError('Invalid necessity value');
+      }
+      result.necessity = payload.necessity as NecessityClass | null;
+    }
+  }
+
+  if (payload.description !== undefined) {
+    if (payload.description === null) {
+      result.description = null;
+    } else if (typeof payload.description === 'string') {
+      const trimmed = payload.description.trim();
+      if (trimmed.length > 500) {
+        throw new ValidationError('Description cannot exceed 500 characters');
+      }
+      result.description = trimmed.length > 0 ? trimmed : null;
+    } else {
+      throw new ValidationError('Description must be a string or null');
+    }
+  }
+
+  if (payload.notes !== undefined) {
+    if (payload.notes === null) {
+      result.notes = null;
+    } else if (typeof payload.notes === 'string') {
+      const trimmed = payload.notes.trim();
+      if (trimmed.length > 1000) {
+        throw new ValidationError('Notes cannot exceed 1000 characters');
+      }
+      result.notes = trimmed.length > 0 ? trimmed : null;
+    } else {
+      throw new ValidationError('Notes must be a string or null');
+    }
+  }
+
+  return result;
 }

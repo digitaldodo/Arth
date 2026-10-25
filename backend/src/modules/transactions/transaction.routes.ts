@@ -3,7 +3,10 @@ import type { AppConfig } from '../../config/index.js';
 import {
   ValidationError,
   ConflictError,
+  NotFoundError,
   validateCreateTransactionRequest,
+  validateUpdateTransactionRequest,
+  validateTransactionId,
   validateTransactionListQuery,
 } from './transaction.validation.js';
 import {
@@ -116,6 +119,175 @@ export const transactionRoutes: FastifyPluginAsync<TransactionRoutesOptions> = a
           statusCode: 500,
           error: 'Internal Server Error',
           message: 'An unexpected error occurred while retrieving transactions',
+        });
+      }
+    }
+  );
+
+  // C. PATCH /api/v1/transactions/:id - Update transaction
+  app.patch(
+    '/api/v1/transactions/:id',
+    {
+      preHandler: [app.verifyAuth],
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      try {
+        const { id } = request.params as { id: string };
+        const validId = validateTransactionId(id);
+        const input = validateUpdateTransactionRequest(request.body);
+
+        const transaction = await service.updateTransaction(
+          request.user.userId,
+          validId,
+          input,
+          request.token
+        );
+
+        return reply.status(200).send({ transaction });
+      } catch (err: unknown) {
+        if (err instanceof ValidationError) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'Bad Request',
+            message: err.message,
+          });
+        }
+        if (err instanceof ConflictError) {
+          return reply.status(409).send({
+            statusCode: 409,
+            error: 'Conflict',
+            message: err.message,
+          });
+        }
+        if (err instanceof NotFoundError) {
+          return reply.status(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: err.message,
+          });
+        }
+
+        request.log.error(err, 'Failed to update transaction');
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while updating the transaction',
+        });
+      }
+    }
+  );
+
+  // D. DELETE /api/v1/transactions/:id - Soft-delete transaction
+  app.delete(
+    '/api/v1/transactions/:id',
+    {
+      preHandler: [app.verifyAuth],
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      try {
+        const { id } = request.params as { id: string };
+        const validId = validateTransactionId(id);
+
+        const result = await service.deleteTransaction(
+          request.user.userId,
+          validId,
+          request.token
+        );
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Transaction removed from active ledger',
+          id: result.id,
+        });
+      } catch (err: unknown) {
+        if (err instanceof ValidationError) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'Bad Request',
+            message: err.message,
+          });
+        }
+        if (err instanceof NotFoundError) {
+          return reply.status(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: err.message,
+          });
+        }
+
+        request.log.error(err, 'Failed to delete transaction');
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while deleting the transaction',
+        });
+      }
+    }
+  );
+
+  // E. POST /api/v1/transactions/:id/restore - Restore soft-deleted transaction
+  app.post(
+    '/api/v1/transactions/:id/restore',
+    {
+      preHandler: [app.verifyAuth],
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      try {
+        const { id } = request.params as { id: string };
+        const validId = validateTransactionId(id);
+
+        const transaction = await service.restoreTransaction(
+          request.user.userId,
+          validId,
+          request.token
+        );
+
+        return reply.status(200).send({ transaction });
+      } catch (err: unknown) {
+        if (err instanceof ValidationError) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'Bad Request',
+            message: err.message,
+          });
+        }
+        if (err instanceof NotFoundError) {
+          return reply.status(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: err.message,
+          });
+        }
+
+        request.log.error(err, 'Failed to restore transaction');
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'An unexpected error occurred while restoring the transaction',
         });
       }
     }

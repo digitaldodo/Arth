@@ -39,3 +39,21 @@ export function formatDateHuman(dateStr: string): string {
     timeZone: 'UTC',
   }).format(d);
 }
+
+/**
+ * Formats an ISO timestamp into human-readable IST: "24 Oct 2026, 04:30 PM"
+ */
+export function formatDateTimeIST(isoStr: string): string {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(d);
+}

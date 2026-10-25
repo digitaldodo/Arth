@@ -37,6 +37,31 @@ export interface CreateTransactionResponse {
   idempotent_replay?: boolean;
 }
 
+export interface UpdateTransactionRequest {
+  amount?: string; // Exact decimal string in INR (e.g. "250.00", "150.5")
+  type?: TransactionType;
+  category_id?: string; // Category UUID belonging to caller and matching type
+  transaction_date?: string; // YYYY-MM-DD
+  payment_method?: PaymentMethod;
+  necessity?: NecessityClass | null; // Required if type is 'expense'; strictly null/absent if 'income'
+  description?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateTransactionResponse {
+  transaction: TransactionDTO;
+}
+
+export interface DeleteTransactionResponse {
+  success: boolean;
+  message: string;
+  id: string;
+}
+
+export interface RestoreTransactionResponse {
+  transaction: TransactionDTO;
+}
+
 export interface TransactionListQuery {
   page?: number;
   page_size?: number;
