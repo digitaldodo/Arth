@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArthLogo } from '@/components/brand/ArthLogo';
 import {
   signInWithEmailAction,
   signUpWithEmailAction,
@@ -204,9 +205,10 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
       {/* 1. Arth Wordmark & Brand Identifier */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-            Arth
-          </span>
+          <ArthLogo
+            variant="full"
+            className="h-6 sm:h-7 w-auto text-[var(--text-primary)]"
+          />
           <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
             Ledger
           </span>

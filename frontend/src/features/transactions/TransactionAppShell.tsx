@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { ArthLogo } from '@/components/brand/ArthLogo';
 import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
@@ -56,10 +57,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3.5">
         <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <span className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                Arth
-              </span>
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <ArthLogo
+                variant="full"
+                className="h-6 sm:h-7 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
+              />
               <span className="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                 Ledger
               </span>

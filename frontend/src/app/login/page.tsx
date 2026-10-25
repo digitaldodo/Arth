@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { ArthLogo } from '@/components/brand/ArthLogo';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 import { AuthForm } from './AuthForm';
 
@@ -73,10 +74,11 @@ export default async function LoginPage({
           {/* Left Column: Product Branding & Ledger Minimal Design Showcase (Visible on lg+) */}
           <div className="hidden lg:flex lg:col-span-6 flex-col justify-center space-y-8 pr-4">
             <div className="space-y-3">
-              <div className="flex items-center gap-2.5">
-                <span className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                  Arth
-                </span>
+              <div className="flex items-center gap-3">
+                <ArthLogo
+                  variant="full"
+                  className="h-8 sm:h-9 w-auto text-[var(--text-primary)]"
+                />
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
                   Ledger Minimal
                 </span>

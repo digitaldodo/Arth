@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { ArthLogo } from '@/components/brand/ArthLogo';
 
 export function UnauthenticatedHome() {
   return (
@@ -7,9 +8,10 @@ export function UnauthenticatedHome() {
       {/* Slim Header */}
       <header className="w-full max-w-4xl mx-auto px-6 py-5 flex items-center justify-between border-b border-[var(--border-hairline)]">
         <Link href="/" className="flex items-center gap-2 group">
-          <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
-            Arth
-          </span>
+          <ArthLogo
+            variant="full"
+            className="h-6 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
+          />
           <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
             Ledger
           </span>
