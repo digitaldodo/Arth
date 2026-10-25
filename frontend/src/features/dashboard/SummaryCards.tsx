@@ -23,51 +23,51 @@ export function SummaryCards({
   const isNetNegative = netCashFlowPaise < 0;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
       {/* 1. Income Card */}
-      <div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
+      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Income
           </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
             Money In
           </span>
         </div>
-        <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-emerald-700 dark:text-emerald-400 truncate">
+        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-emerald-700 dark:text-emerald-400 truncate tabular-nums">
           {incomePaise > 0 ? `+${formattedIncome}` : formattedIncome}
         </div>
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
           Active income transactions in period
         </p>
       </div>
 
       {/* 2. Expenses Card */}
-      <div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
+      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Expenses
           </span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-sm bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60">
             Money Out
           </span>
         </div>
-        <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-rose-700 dark:text-rose-400 truncate">
+        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-rose-700 dark:text-rose-400 truncate tabular-nums">
           {expensesPaise > 0 ? `-${formattedExpenses}` : formattedExpenses}
         </div>
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
           Active expense transactions in period
         </p>
       </div>
 
       {/* 3. Net Cash Flow Card */}
-      <div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
+      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Net Cash Flow
           </span>
           <span
-            className={`text-[10px] font-medium px-1.5 py-0.5 rounded-sm border ${
+            className={`text-xs font-medium px-2 py-0.5 rounded-sm border ${
               isNetPositive
                 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/60'
                 : isNetNegative
@@ -79,7 +79,7 @@ export function SummaryCards({
           </span>
         </div>
         <div
-          className={`text-xl sm:text-2xl font-bold font-mono tracking-tight truncate ${
+          className={`text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight truncate tabular-nums ${
             isNetPositive
               ? 'text-emerald-700 dark:text-emerald-400'
               : isNetNegative
@@ -89,7 +89,7 @@ export function SummaryCards({
         >
           {isNetPositive ? `+${formattedNetCashFlow}` : formattedNetCashFlow}
         </div>
-        <p className="text-[11px] text-[var(--text-muted)]">
+        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
           Income minus expenses in period
         </p>
       </div>

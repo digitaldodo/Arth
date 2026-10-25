@@ -51,25 +51,25 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-24 md:pb-12">
       {/* Top Application Header */}
-      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 py-3">
-        <div className="max-w-[760px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
+      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3.5">
+        <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-2.5">
+              <span className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
                 Arth
               </span>
-              <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+              <span className="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                 Ledger
               </span>
             </Link>
 
             {/* Desktop Navigation Switcher */}
             {user && (
-              <div className="hidden sm:flex items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-md border border-[var(--border-hairline)] ml-2">
+              <div className="hidden sm:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-md border border-[var(--border-hairline)] ml-4">
                 <button
                   type="button"
                   onClick={() => setActiveView('home')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'home'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -80,7 +80,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => setActiveView('ledger')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'ledger'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -91,7 +91,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => setActiveView('people')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'people'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -102,7 +102,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => setActiveView('categories')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-xs transition-colors ${
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'categories'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -114,16 +114,16 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             {user ? (
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline-block text-xs font-mono text-[var(--text-secondary)] truncate max-w-[150px]">
+              <div className="flex items-center gap-3">
+                <span className="hidden sm:inline-block text-sm font-mono text-[var(--text-secondary)] truncate max-w-[200px]">
                   {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
                 </span>
                 <form action="/auth/logout" method="POST">
                   <button
                     type="submit"
-                    className="px-2.5 py-1 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                    className="px-3 py-1.5 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                   >
                     Sign Out
                   </button>
@@ -132,7 +132,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             ) : (
               <Link
                 href="/login"
-                className="px-3 py-1 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors"
+                className="px-3.5 py-1.5 text-xs sm:text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors"
               >
                 Sign In
               </Link>
@@ -143,7 +143,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-[760px] mx-auto px-4 py-6">
+      <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Success Confirmation Banner */}
         {saveSuccessBanner && (
           <div className="mb-4 p-3 text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200 rounded-lg flex items-center justify-between transition-all">

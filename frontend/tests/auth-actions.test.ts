@@ -95,6 +95,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         assert.equal(res.success, true);
         assert.equal(res.redirectUrl, '/');
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -339,6 +340,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           'This username is already taken. Please choose another username.'
         );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -392,6 +394,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           'Username must be stored normalized in lowercase'
         );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -437,6 +440,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           res.message.includes('If an account exists with this email address, a password recovery link has been dispatched')
         );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -500,6 +504,78 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         const goodRes = await checkUsernameAvailabilityAction('available_name');
         assert.equal(goodRes.available, true);
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('setUsernameAction gracefully falls back to direct profile update when fn_set_own_username is missing from schema cache', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        let profileUpdated = false;
+        let requestedUsername = '';
+
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'header.payload.signature',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'user@example.com',
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+
+          if (urlStr.includes('/auth/v1/user')) {
+            return new Response(
+              JSON.stringify({
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'user@example.com',
+                user_metadata: {},
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (urlStr.includes('/rest/v1/rpc/fn_set_own_username')) {
+            return new Response(
+              JSON.stringify({
+                code: 'PGRST202',
+                message: 'Could not find the function public.fn_set_own_username(p_username) in the schema cache',
+              }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (urlStr.includes('/rest/v1/profiles')) {
+            const body = typeof opts?.body === 'string' ? JSON.parse(opts.body) : {};
+            profileUpdated = true;
+            requestedUsername = body.username;
+            return new Response(
+              JSON.stringify([{ id: '00000000-0000-7000-8000-000000000001', username: requestedUsername }]),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('username', 'fallback_user');
+
+        const res = await setUsernameAction(formData);
+        assert.equal(res.success, true);
+        assert.ok(profileUpdated, 'Direct profile update should have succeeded as fallback');
+        assert.equal(requestedUsername, 'fallback_user');
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -535,6 +611,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           'Expected clear unconfirmed email message'
         );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -565,8 +642,12 @@ describe('Frontend Authentication Server Actions & Validation', () => {
 
         const res = await resendConfirmationEmailAction(formData);
         assert.equal(res.success, true);
-        assert.ok(res.message?.includes('a new confirmation link has been sent'));
+        assert.ok(
+          res.message?.includes('confirmation') &&
+          (res.message?.includes('dispatched') || res.message?.includes('sent'))
+        );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });
@@ -598,6 +679,39 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           'Expected friendly rate-limit error message'
         );
       } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('resendConfirmationEmailAction reports actionable error when SMTP fails', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/resend')) {
+            return new Response(
+              JSON.stringify({
+                error: 'smtp_error',
+                message: 'Error sending confirmation email: 535 Authentication Failed',
+              }),
+              { status: 500, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('email', 'unconfirmed@example.com');
+
+        const res = await resendConfirmationEmailAction(formData);
+        assert.ok(res.error);
+        assert.ok(
+          res.error.includes('Unable to dispatch confirmation email') ||
+          res.error.includes('Google App Password'),
+          'Expected actionable SMTP diagnostic error'
+        );
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
       }
     });

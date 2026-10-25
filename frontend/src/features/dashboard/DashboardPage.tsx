@@ -108,12 +108,12 @@ export function DashboardPage({
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[var(--text-primary)]">
             Dashboard
           </h1>
-          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+          <p className="text-sm sm:text-base text-[var(--text-secondary)] mt-1">
             Cash flow overview and category composition
           </p>
         </div>
@@ -121,7 +121,7 @@ export function DashboardPage({
         <button
           type="button"
           onClick={onOpenQuickAdd}
-          className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs"
+          className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
         >
           <span>+</span>
           <span>Quick Add</span>
@@ -227,26 +227,26 @@ export function DashboardPage({
         <div className="space-y-6">
           {/* Entire Ledger Empty State (First-time user onboarding banner) */}
           {summary.total_active_transaction_count === 0 && (
-            <div className="p-6 sm:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1.5">
+            <div className="p-6 sm:p-8 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
+                    <span className="text-[11px] font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
                       Welcome to Arth
                     </span>
                   </div>
-                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-[var(--text-primary)]">
-                    Your ledger is ready
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                    Your financial journey starts here
                   </h2>
-                  <p className="text-xs text-[var(--text-secondary)] max-w-lg leading-relaxed">
-                    Add your first transaction to start tracking your income, expenses, and cash flow.
+                  <p className="text-sm sm:text-base text-[var(--text-secondary)] max-w-2xl leading-relaxed">
+                    Add your first transaction to see your cash flow and spending patterns. Category breakdowns, spending trends, and insights will appear automatically as you record your transactions.
                   </p>
                 </div>
-                <div className="flex items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={onOpenQuickAdd}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer"
                   >
                     <span>+</span>
                     <span>Add your first transaction</span>
@@ -254,7 +254,7 @@ export function DashboardPage({
                   <button
                     type="button"
                     onClick={onNavigateToLedger}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
                   >
                     <span>View Ledger</span>
                   </button>
@@ -275,27 +275,32 @@ export function DashboardPage({
 
           {/* Empty Range Notice if user has transactions elsewhere in their ledger, but none in this period */}
           {summary.total_active_transaction_count > 0 && !summary.has_activity_in_range && (
-            <div className="p-4 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl text-center space-y-1">
-              <p className="text-xs font-medium text-[var(--text-secondary)]">
+            <div className="p-5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl text-center space-y-1.5">
+              <p className="text-sm font-medium text-[var(--text-secondary)]">
                 No transactions recorded during this period
               </p>
-              <p className="text-[11px] text-[var(--text-muted)]">
+              <p className="text-xs text-[var(--text-muted)]">
                 Switch to a different date range or select &quot;This Year&quot; to view activity from other periods.
               </p>
             </div>
           )}
 
-          {/* Spending Composition */}
-          <SpendingComposition
-            categories={summary.spending_composition}
-            totalExpensesPaise={summary.expenses_paise}
-          />
+          {/* Spending Composition and Recent Activity in a balanced wide multi-column layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+            <div className="lg:col-span-5 space-y-6">
+              <SpendingComposition
+                categories={summary.spending_composition}
+                totalExpensesPaise={summary.expenses_paise}
+              />
+            </div>
 
-          {/* Recent Activity Preview */}
-          <RecentActivity
-            transactions={summary.recent_transactions}
-            onNavigateToLedger={onNavigateToLedger}
-          />
+            <div className="lg:col-span-7 space-y-6">
+              <RecentActivity
+                transactions={summary.recent_transactions}
+                onNavigateToLedger={onNavigateToLedger}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

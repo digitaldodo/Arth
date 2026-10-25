@@ -22,9 +22,9 @@ export async function createClient(
     );
   }
 
-  const inMemoryCookies: { name: string; value: string }[] = initialCookies
-    ? [...initialCookies]
-    : [];
+  const inMemoryCookies: { name: string; value: string }[] =
+    (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies ||
+    (initialCookies ? [...initialCookies] : []);
 
   let cookieStore: {
     getAll: () => { name: string; value: string }[];

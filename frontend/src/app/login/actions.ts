@@ -136,7 +136,7 @@ export async function signInWithEmailAction(
       if (!hasServiceRoleKey()) {
         return {
           error:
-            'Username login requires server configuration (SUPABASE_SERVICE_ROLE_KEY). Please sign in using your registered email address.',
+            'Username login requires server configuration (SUPABASE_SERVICE_ROLE_KEY). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel project environment variables, or sign in using your registered email address.',
         };
       }
       // Generic authentication failure to prevent username enumeration
@@ -283,6 +283,14 @@ export async function signUpWithEmailAction(
       };
     }
 
+    // Check if Supabase returned an empty identities array (means user already exists with confirmation required)
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return {
+        error:
+          'An account with this email address already exists. Please sign in or reset your password.',
+      };
+    }
+
     // If session is immediately available (email confirmation disabled on Supabase project)
     if (data.session) {
       return { success: true, redirectUrl: '/' };
@@ -293,7 +301,7 @@ export async function signUpWithEmailAction(
       success: true,
       needsConfirmation: true,
       message:
-        'Account created! A confirmation link has been sent to your email address. Please check your email to confirm your account.',
+        'Confirmation request accepted. A confirmation link has been dispatched to your email address. Please check your inbox (including spam/junk folders) to activate your account.',
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Registration failed';
@@ -352,13 +360,16 @@ export async function resendConfirmationEmailAction(
             'This email address has already been confirmed. You can sign in immediately.',
         };
       }
+      return {
+        error: `Unable to dispatch confirmation email: ${error.message}. If you configured custom Gmail SMTP in Supabase, ensure a 16-character Google App Password is used with port 587.`,
+      };
     }
 
     // Uniform response to prevent account enumeration
     return {
       success: true,
       message:
-        'If an unconfirmed account exists with this email address, a new confirmation link has been sent to your inbox.',
+        'If an unconfirmed account exists with this email address, a confirmation email has been dispatched. Please check your inbox and spam folder.',
     };
   } catch (err: unknown) {
     const message =
@@ -567,6 +578,57 @@ export async function setUsernameAction(
           error: 'This username is already taken. Please choose another username.',
         };
       }
+
+      // If function is missing from schema cache (e.g. migration 0014 not run yet or cache stale),
+      // gracefully attempt direct profile update if table column exists
+      if (
+        rpcError.message.includes('schema cache') ||
+        rpcError.code === 'PGRST202'
+      ) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            username: normalizedUsername,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (updateError) {
+          if (
+            updateError.code === '23505' ||
+            updateError.message.includes('unique') ||
+            updateError.message.includes('already taken')
+          ) {
+            return {
+              error: 'This username is already taken. Please choose another username.',
+            };
+          }
+          if (
+            updateError.message.includes('column "username" of relation "profiles" does not exist') ||
+            updateError.code === '42703'
+          ) {
+            return {
+              error:
+                'Database migration required: Migration 0014 has not been applied to your Supabase project. Please run migration 0014 in the Supabase SQL Editor.',
+            };
+          }
+          return {
+            error: updateError.message || 'Failed to update username. Please try again.',
+          };
+        }
+
+        // Also update auth user metadata
+        await supabase.auth.updateUser({
+          data: { username: normalizedUsername },
+        });
+
+        return {
+          success: true,
+          message: `Your username @${normalizedUsername} has been set successfully.`,
+          redirectUrl: '/',
+        };
+      }
+
       return {
         error: rpcError.message || 'Failed to update username. Please try again.',
       };
