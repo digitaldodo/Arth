@@ -1,0 +1,27 @@
+{
+  "packageId": "com.digitaldodo.arth",
+  "host": "arth-9h3f.vercel.app",
+  "name": "Arth",
+  "launcherName": "Arth",
+  "themeColor": "#1C1917",
+  "themeColorDark": "#0C0A09",
+  "navigationColor": "#1C1917",
+  "navigationColorDark": "#0C0A09",
+  "navigationDividerColor": "#292524",
+  "navigationDividerColorDark": "#292524",
+  "backgroundColor": "#FBFBF9",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://arth-9h3f.vercel.app/icons/icon-512x512.png",
+  "maskableIconUrl": "https://arth-9h3f.vercel.app/icons/icon-512x512-maskable.png",
+  "splashScreenFadeOutDuration": 300,
+  "signing": {
+    "file": "release.keystore",
+    "alias": "arth"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "minSdkVersion": 21,
+  "targetSdkVersion": 34,
+  "generatorApp": "bubblewrap-cli"
+}

@@ -37,3 +37,15 @@ next-env.d.ts
 
 # Vercel
 .vercel
+
+# Android build outputs & keystores
+android/.gradle/
+android/build/
+android/app/build/
+*.keystore
+*.jks
+*.apk
+*.aab
+
+# Scratch files
+scratch/

@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+def keystoreFilePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE") ?: "release.keystore"
+def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+def keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "arth"
+def keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+def certFingerprint = System.getenv("ANDROID_CERT_SHA256") ?: "CERT_FINGERPRINT_PLACEHOLDER"
+
+android {
+    namespace 'com.digitaldodo.arth'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.digitaldodo.arth"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        resValue "string", "appName", "Arth"
+        resValue "string", "defaultUrl", "https://arth-9h3f.vercel.app/"
+        resValue "string", "hostName", "arth-9h3f.vercel.app"
+        resValue "string", "assetStatements", '[{"relation": ["delegate_permission/common.handle_all_urls"], "target": {"namespace": "android_app", "package_name": "com.digitaldodo.arth", "sha256_cert_fingerprints": ["' + certFingerprint + '"]}}]'
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePassword && keyPassword && file(keystoreFilePath).exists()) {
+                storeFile file(keystoreFilePath)
+                storePassword keystorePassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePassword && keyPassword && file(keystoreFilePath).exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.browser:browser:1.8.0'
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

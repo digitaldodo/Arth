@@ -8,6 +8,7 @@ import {
 } from '@arth/contracts';
 import { fetchTransactions, fetchCategories } from '@/lib/api-client';
 import { formatDateHuman } from '@/lib/format';
+import { exportLedgerToPdf } from './ledger-pdf-exporter';
 
 interface TransactionLedgerProps {
   onOpenQuickAdd: () => void;
@@ -23,6 +24,37 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
   // Filters
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // PDF Export State
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportProgress, setExportProgress] = useState<string>('');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<boolean>(false);
+
+  const handleExportPdf = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setExportProgress('Initiating export…');
+    setExportError(null);
+    setExportSuccess(false);
+
+    try {
+      await exportLedgerToPdf({
+        selectedType,
+        selectedCategory,
+        categories,
+        onProgress: (status) => setExportProgress(status),
+      });
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to export ledger to PDF';
+      setExportError(msg);
+    } finally {
+      setIsExporting(false);
+      setExportProgress('');
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -167,14 +199,56 @@ export function TransactionLedger({ onOpenQuickAdd, refreshTrigger }: Transactio
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenQuickAdd}
-          className="inline-flex items-center justify-center gap-1 px-4 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer"
-        >
-          <span>+ Record Entry</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={isExporting}
+            title="Export complete filtered transaction history to PDF"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+          >
+            {isExporting ? (
+              <>
+                <span className="inline-block w-3 h-3 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
+                <span className="truncate max-w-[140px]">{exportProgress || 'Preparing…'}</span>
+              </>
+            ) : (
+              <>
+                <span className="text-xs">📄</span>
+                <span>Download PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenQuickAdd}
+            className="inline-flex items-center justify-center gap-1 px-4 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer"
+          >
+            <span>+ Record Entry</span>
+          </button>
+        </div>
       </div>
+
+      {/* Export Notifications */}
+      {exportError && (
+        <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-md flex items-center justify-between">
+          <span>{exportError}</span>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="text-xs font-bold px-1 hover:opacity-75 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {exportSuccess && (
+        <div className="p-3 text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-md">
+          ✓ PDF ledger export downloaded successfully.
+        </div>
+      )}
 
       {/* 3. Transaction Items / Table View */}
       {error && (

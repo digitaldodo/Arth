@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Set default directory for execution
+APP_HOME=$(cd "$(dirname "$0")" && pwd)
+
+# Execute Gradle with wrapper or system gradle
+if [ -f "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" ]; then
+    exec java -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" "$@"
+else
+    exec gradle "$@"
+fi

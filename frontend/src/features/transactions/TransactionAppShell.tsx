@@ -10,6 +10,7 @@ import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
+import { AndroidDownloadCard } from '@/features/android/AndroidDownloadCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import { SetPasswordForm } from '@/features/profile/SetPasswordForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
@@ -230,6 +231,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     Application settings, category customization, and account details
                   </p>
                 </div>
+
+                <AndroidDownloadCard />
 
                 <InstallPromptCard />
 
