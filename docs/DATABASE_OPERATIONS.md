@@ -227,6 +227,7 @@ All database modifications follow a strict append-only Flyway/Supabase numbering
 | `0013` | `auth_username_support` | Auto-provision user display name and profile username from `raw_user_meta_data` on sign-up |
 | `0014` | `username_authentication_and_lookup` | Case-insensitive username uniqueness constraint, format check, RPC email lookup for `service_role`, and username assignment |
 | `0015` | `category_reorder_hardening` | Fully qualify column references in `fn_reorder_categories` with table alias `c.` and `#variable_conflict use_column` to prevent PostgreSQL error 42702 |
+| `0016` | `account_deletion_support` | Stored procedure `fn_delete_own_account` with `SECURITY DEFINER` providing reverse-dependency atomic data purge |
 
 ---
 

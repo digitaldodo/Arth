@@ -25,7 +25,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0012_dashboard_summary.sql',
       '0013_auth_username_support.sql',
       '0014_username_authentication_and_lookup.sql',
-      '0015_category_reorder_hardening.sql'
+      '0015_category_reorder_hardening.sql',
+      '0016_account_deletion_support.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -179,5 +180,21 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('FOR UPDATE'), 'Must maintain FOR UPDATE row lock');
     assert.ok(sql.includes('SECURITY INVOKER'), 'Must remain SECURITY INVOKER');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_reorder_categories'), 'Must grant execute to authenticated');
+  });
+
+  test('0016_account_deletion_support.sql defines atomic purge in reverse-dependency order with SECURITY DEFINER', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0016_account_deletion_support.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_delete_own_account'), 'Must define fn_delete_own_account');
+    assert.ok(sql.includes('SECURITY DEFINER'), 'Must execute with SECURITY DEFINER to purge restricted records');
+    assert.ok(sql.includes('v_user_id UUID := auth.uid();'), 'Must isolate to auth.uid()');
+    assert.ok(sql.includes('DELETE FROM public.person_money_settlements'), 'Must purge settlements first');
+    assert.ok(sql.includes('DELETE FROM public.person_money_records'), 'Must purge money records second');
+    assert.ok(sql.includes('DELETE FROM public.people'), 'Must purge people third');
+    assert.ok(sql.includes('DELETE FROM public.transactions'), 'Must purge transactions fourth');
+    assert.ok(sql.includes('DELETE FROM public.categories'), 'Must purge categories fifth');
+    assert.ok(sql.includes('DELETE FROM public.outbox_events'), 'Must purge outbox events sixth');
+    assert.ok(sql.includes('DELETE FROM public.profiles'), 'Must purge profile seventh');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_delete_own_account() FROM anon'), 'Must revoke from anon');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_delete_own_account() TO authenticated'), 'Must grant execute to authenticated');
   });
 });

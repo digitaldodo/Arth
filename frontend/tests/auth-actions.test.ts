@@ -15,6 +15,7 @@ import {
   updatePasswordAction,
   setUsernameAction,
   checkUsernameAvailabilityAction,
+  deleteAccountAction,
 } from '../src/app/login/actions.js';
 
 describe('Frontend Authentication Server Actions & Validation', () => {
@@ -710,6 +711,221 @@ describe('Frontend Authentication Server Actions & Validation', () => {
           res.error.includes('Google App Password'),
           'Expected actionable SMTP diagnostic error'
         );
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  // 7. Delete Account Action Validation & Execution
+  describe('deleteAccountAction security invariants & purge execution', () => {
+    test('rejects missing or non-matching confirmation string', async () => {
+      const formData = new FormData();
+      formData.set('confirmation', 'delete'); // lowercase!
+      formData.set('password', 'SecretPass123!');
+
+      const res = await deleteAccountAction(formData);
+      assert.equal(res.success, undefined);
+      assert.match(res.error || '', /must type DELETE/);
+    });
+
+    test('rejects unauthenticated user', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/user')) {
+            return new Response(JSON.stringify({ error: 'invalid_token' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('confirmation', 'DELETE');
+        formData.set('password', 'SecretPass123!');
+
+        const res = await deleteAccountAction(formData);
+        assert.match(res.error || '', /Active session required/);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('rejects email/password user if password is not provided', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'header.payload.signature',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          if (url.toString().includes('/auth/v1/user')) {
+            return new Response(
+              JSON.stringify({
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('confirmation', 'DELETE');
+        formData.set('password', '');
+
+        const res = await deleteAccountAction(formData);
+        assert.match(res.error || '', /Current password is required/);
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('rejects email/password user if password is incorrect', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'header.payload.signature',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user')) {
+            return new Response(
+              JSON.stringify({
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          if (urlStr.includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                error: 'invalid_grant',
+                error_description: 'Invalid login credentials',
+              }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('confirmation', 'DELETE');
+        formData.set('password', 'WrongPassword123!');
+
+        const res = await deleteAccountAction(formData);
+        assert.match(res.error || '', /Incorrect password/);
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('executes fn_delete_own_account, signs out, and redirects when confirmed and authorized', async () => {
+      const originalFetch = globalThis.fetch;
+      let rpcPurgeCalled = false;
+      let signOutCalled = false;
+
+      try {
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'header.payload.signature',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user')) {
+            return new Response(
+              JSON.stringify({
+                id: '00000000-0000-7000-8000-000000000001',
+                email: 'delete_me@example.com',
+                app_metadata: { provider: 'email' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          if (urlStr.includes('/auth/v1/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'header.payload.signature',
+                token_type: 'bearer',
+                expires_in: 3600,
+                refresh_token: 'fake-refresh-token',
+                user: { id: '00000000-0000-7000-8000-000000000001', email: 'delete_me@example.com' },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          if (urlStr.includes('/rest/v1/rpc/fn_delete_own_account')) {
+            rpcPurgeCalled = true;
+            return new Response(JSON.stringify(true), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (urlStr.includes('/auth/v1/logout')) {
+            signOutCalled = true;
+            return new Response(JSON.stringify({}), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('confirmation', 'DELETE');
+        formData.set('password', 'CorrectPassword123!');
+
+        const res = await deleteAccountAction(formData);
+        assert.equal(res.success, true);
+        assert.ok(rpcPurgeCalled, 'Expected RPC fn_delete_own_account to have been invoked');
+        assert.ok(signOutCalled, 'Expected user to be signed out');
+        assert.equal(res.redirectUrl, '/login?message=account_deleted');
       } finally {
         delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;

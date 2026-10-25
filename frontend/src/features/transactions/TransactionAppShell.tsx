@@ -10,6 +10,7 @@ import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
+import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
 interface TransactionAppShellProps {
@@ -30,6 +31,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>(user?.username);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
@@ -109,6 +111,17 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   }`}
                 >
                   Categories
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('more')}
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                    activeView === 'more'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Settings
                 </button>
               </div>
             )}
@@ -280,10 +293,35 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   </div>
                 </div>
 
+                {/* Danger Zone: Delete Account */}
+                <div className="bg-[var(--bg-surface)] border border-rose-200 dark:border-rose-900/40 rounded-xl p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+                    <span className="text-base">⚠</span>
+                    <h3 className="text-xs font-bold tracking-tight uppercase">Danger Zone</h3>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                    <div>
+                      <h4 className="text-xs font-semibold text-[var(--text-primary)]">
+                        Delete Account &amp; Financial Records
+                      </h4>
+                      <p className="text-[11px] text-[var(--text-muted)] max-w-lg mt-0.5">
+                        Permanently purge your account, transaction ledger, category taxonomy, and people debt/loan tracker. This operation cannot be reversed.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDeleteModalOpen(true)}
+                      className="px-3.5 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 rounded-md transition-colors cursor-pointer shrink-0"
+                    >
+                      Delete Account...
+                    </button>
+                  </div>
+                </div>
+
                 <form action="/auth/logout" method="POST">
                   <button
                     type="submit"
-                    className="w-full py-2.5 text-xs font-medium border border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-400 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-100/50 rounded-lg transition-colors"
+                    className="w-full py-2.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"
                   >
                     Sign Out of Arth
                   </button>
@@ -386,6 +424,15 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsQuickAddOpen(false)}
           onSuccess={handleTransactionCreated}
           categoryVersion={categoryVersion}
+        />
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <DeleteAccountModal
+          isOpen={true}
+          onClose={() => setIsDeleteModalOpen(false)}
+          userEmail={user?.email}
         />
       )}
     </div>

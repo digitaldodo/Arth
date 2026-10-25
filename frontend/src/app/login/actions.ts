@@ -677,3 +677,109 @@ export async function checkUsernameAvailabilityAction(
     return { available: false, error: 'Failed to verify availability' };
   }
 }
+
+/**
+ * 8. Delete Account Action
+ * Secure hard purge:
+ * 1. Validates that confirmation equals 'DELETE'.
+ * 2. Authenticates caller and verifies password if caller has an email identity.
+ * 3. Calls atomic reverse-dependency database procedure fn_delete_own_account.
+ * 4. Permanently deletes user from Supabase Auth via service-role admin if configured.
+ * 5. Invalidates caller session and signs out.
+ */
+export async function deleteAccountAction(
+  formData: FormData
+): Promise<AuthActionResult> {
+  const confirmation = (formData.get('confirmation') as string)?.trim();
+  const password = (formData.get('password') as string) || '';
+
+  if (confirmation !== 'DELETE') {
+    return {
+      error: 'You must type DELETE in capital letters to confirm account deletion.',
+    };
+  }
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        error: 'Active session required to delete account. Please sign in.',
+      };
+    }
+
+    // Determine if account is an email/password account requiring password verification
+    const isEmailUser =
+      user.app_metadata?.provider === 'email' ||
+      user.identities?.some((id) => id.provider === 'email');
+
+    if (isEmailUser) {
+      if (!password) {
+        return {
+          error: 'Current password is required to verify your identity and delete your account.',
+        };
+      }
+
+      // Verify credentials using signInWithPassword
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password,
+      });
+
+      if (verifyError) {
+        return {
+          error: 'Incorrect password. Account deletion aborted.',
+        };
+      }
+    }
+
+    // 1. Atomically delete all user financial records and profile data in reverse-dependency order
+    const { error: rpcError } = await supabase.rpc('fn_delete_own_account');
+    if (rpcError) {
+      return {
+        error: `Failed to purge account records: ${rpcError.message}`,
+      };
+    }
+
+    // 2. If service role key is configured, permanently delete user from auth.users
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    const supabaseUrl =
+      process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (serviceRoleKey && supabaseUrl) {
+      try {
+        const { createClient: createServiceClient } = await import(
+          '@supabase/supabase-js'
+        );
+        const adminClient = createServiceClient(supabaseUrl, serviceRoleKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        });
+        await adminClient.auth.admin.deleteUser(user.id);
+      } catch {
+        // Continue; public schema data is already permanently purged
+      }
+    }
+
+    // 3. Sign out caller session and invalidate cookies
+    await supabase.auth.signOut();
+
+    return {
+      success: true,
+      message: 'Your account and all associated financial records have been permanently deleted.',
+      redirectUrl: '/login?message=account_deleted',
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'An unexpected error occurred during account deletion';
+    return { error: message };
+  }
+}
+

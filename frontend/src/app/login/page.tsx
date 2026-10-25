@@ -13,6 +13,7 @@ export default async function LoginPage({
   searchParams: Promise<{
     error?: string;
     error_description?: string;
+    message?: string;
     code?: string;
     next?: string;
   }>;
@@ -44,6 +45,14 @@ export default async function LoginPage({
   const resolvedError = params.error
     ? formatAuthError(params.error, params.error_description)
     : undefined;
+
+  let resolvedMessage: string | undefined = undefined;
+  if (params.message === 'account_deleted') {
+    resolvedMessage =
+      'Your account and all associated financial records have been permanently deleted.';
+  } else if (params.message) {
+    resolvedMessage = params.message;
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
@@ -148,7 +157,7 @@ export default async function LoginPage({
           {/* Right Column: Authentication Card Form */}
           <div className="w-full max-w-[440px] mx-auto lg:max-w-none lg:col-span-6">
             <div className="p-6 sm:p-8 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs">
-              <AuthForm initialError={resolvedError} />
+              <AuthForm initialError={resolvedError} initialMessage={resolvedMessage} />
             </div>
           </div>
         </div>

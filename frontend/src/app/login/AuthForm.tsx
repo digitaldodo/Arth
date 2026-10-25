@@ -15,9 +15,10 @@ type AuthMode = 'signin' | 'signup' | 'forgot' | 'resend_confirm';
 
 interface AuthFormProps {
   initialError?: string;
+  initialMessage?: string;
 }
 
-export function AuthForm({ initialError }: AuthFormProps) {
+export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('signin');
   const [isPending, startTransition] = useTransition();
@@ -39,7 +40,9 @@ export function AuthForm({ initialError }: AuthFormProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(
     initialError ? decodeURIComponent(initialError) : null
   );
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(
+    initialMessage ? decodeURIComponent(initialMessage) : null
+  );
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
