@@ -37,8 +37,16 @@ function isValidPassword(password: string): boolean {
   return typeof password === 'string' && password.length >= 8;
 }
 
+function getServiceRoleKey(): string | undefined {
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    process.env.SUPABASE_SERVICE_KEY?.trim() ||
+    process.env.SUPABASE_SECRET_KEY?.trim()
+  );
+}
+
 function hasServiceRoleKey(): boolean {
-  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  return Boolean(getServiceRoleKey());
 }
 
 /**
@@ -57,7 +65,7 @@ export async function isServiceRoleConfigured(): Promise<boolean> {
 export async function resolveEmailFromUsername(
   normalizedUsername: string
 ): Promise<string | null> {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const serviceRoleKey = getServiceRoleKey();
   const supabaseUrl =
     process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -490,6 +498,87 @@ export async function updatePasswordAction(
 }
 
 /**
+ * Set or Update Account Password Action (Authenticated User)
+ * Allows authenticated users (including those originally registered via Google OAuth)
+ * to choose and confirm a new password on their existing account.
+ *
+ * Rules:
+ * 1. Requires active, valid authenticated user session (auth.getUser()).
+ * 2. Enforces password length >= 8 characters.
+ * 3. Enforces confirmPassword matching.
+ * 4. Calls supabase.auth.updateUser({ password }) to set the password on the existing auth user.
+ * 5. Respects reauthentication requirements if enforced by Supabase security policies.
+ * 6. Never logs, prints, or exposes the password.
+ * 7. Does not alter the user's email, profile, username, or financial records.
+ */
+export async function setAccountPasswordAction(
+  formData: FormData
+): Promise<AuthActionResult> {
+  const password = ((formData.get('password') as string) || '').trim();
+  const confirmPassword = (
+    (formData.get('confirmPassword') as string) || ''
+  ).trim();
+
+  if (!isValidPassword(password)) {
+    return {
+      error: 'New password must be at least 8 characters in length.',
+    };
+  }
+
+  if (password !== confirmPassword) {
+    return {
+      error: 'Passwords do not match. Please verify both fields.',
+    };
+  }
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        error:
+          'Your session has expired. Please sign in again before setting a password.',
+      };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      const errMsg = error.message?.toLowerCase() || '';
+      if (
+        errMsg.includes('reauthenticate') ||
+        errMsg.includes('recent login') ||
+        error.status === 422 ||
+        (error as { code?: string }).code === 'reauthentication_needed'
+      ) {
+        return {
+          error:
+            'Security policy requires recent authentication before setting a password. Please sign out and sign back in, then try again.',
+        };
+      }
+
+      return {
+        error: error.message || 'Failed to set password. Please try again.',
+      };
+    }
+
+    return {
+      success: true,
+      message:
+        'Password successfully set! You can now sign in using your email and password, or continue using Google sign-in.',
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Password update failed';
+    return { error: message };
+  }
+}
+
+/**
  * 5. Google OAuth Initiation Action
  * Uses server-side createClient to establish PKCE code verifier and returns
  * the authoritative redirect URL to the caller.
@@ -746,7 +835,7 @@ export async function deleteAccountAction(
     }
 
     // 2. If service role key is configured, permanently delete user from auth.users
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    const serviceRoleKey = getServiceRoleKey();
     const supabaseUrl =
       process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 

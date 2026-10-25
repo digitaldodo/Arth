@@ -13,6 +13,7 @@ import {
   resendConfirmationEmailAction,
   requestPasswordResetAction,
   updatePasswordAction,
+  setAccountPasswordAction,
   setUsernameAction,
   checkUsernameAvailabilityAction,
   deleteAccountAction,
@@ -926,6 +927,182 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         assert.ok(rpcPurgeCalled, 'Expected RPC fn_delete_own_account to have been invoked');
         assert.ok(signOutCalled, 'Expected user to be signed out');
         assert.equal(res.redirectUrl, '/login?message=account_deleted');
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  // 8. Authenticated Set / Update Account Password Action (Google and Email accounts)
+  describe('setAccountPasswordAction validation & execution', () => {
+    test('rejects empty or password shorter than 8 characters', async () => {
+      const formData = new FormData();
+      formData.set('password', 'short7');
+      formData.set('confirmPassword', 'short7');
+
+      const res = await setAccountPasswordAction(formData);
+      assert.equal(res.error, 'New password must be at least 8 characters in length.');
+    });
+
+    test('rejects mismatching confirm password', async () => {
+      const formData = new FormData();
+      formData.set('password', 'StrongPass123!');
+      formData.set('confirmPassword', 'MismatchPass456!');
+
+      const res = await setAccountPasswordAction(formData);
+      assert.equal(res.error, 'Passwords do not match. Please verify both fields.');
+    });
+
+    test('rejects when user is not authenticated or session expired', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [];
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user')) {
+            return new Response(JSON.stringify({ error: 'invalid token' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('password', 'StrongPass123!');
+        formData.set('confirmPassword', 'StrongPass123!');
+
+        const res = await setAccountPasswordAction(formData);
+        assert.equal(
+          res.error,
+          'Your session has expired. Please sign in again before setting a password.'
+        );
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('successfully updates password via supabase.auth.updateUser for authenticated Google user', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        let updateUserCalled = false;
+        let submittedPassword = '';
+
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'google-session-token',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: 'google-user-12345',
+                email: 'googleuser@gmail.com',
+                app_metadata: { provider: 'google', providers: ['google'] },
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user')) {
+            if (opts?.method === 'PUT') {
+              updateUserCalled = true;
+              const body = JSON.parse((opts?.body as string) || '{}');
+              submittedPassword = body.password;
+              return new Response(
+                JSON.stringify({
+                  id: 'google-user-12345',
+                  email: 'googleuser@gmail.com',
+                  app_metadata: { provider: 'google', providers: ['google', 'email'] },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } }
+              );
+            }
+            return new Response(
+              JSON.stringify({
+                id: 'google-user-12345',
+                email: 'googleuser@gmail.com',
+                app_metadata: { provider: 'google', providers: ['google'] },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('password', 'NewSecurePassword123!');
+        formData.set('confirmPassword', 'NewSecurePassword123!');
+
+        const res = await setAccountPasswordAction(formData);
+        assert.equal(res.success, true);
+        assert.ok(updateUserCalled, 'Expected updateUser to be called');
+        assert.equal(submittedPassword, 'NewSecurePassword123!');
+        assert.ok(
+          res.message?.includes('Password successfully set!'),
+          'Expected confirmation message'
+        );
+      } finally {
+        delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('gracefully handles security policy reauthentication requirement', async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
+          {
+            name: 'sb-127-auth-token',
+            value: JSON.stringify({
+              access_token: 'old-session-token',
+              refresh_token: 'mock-refresh-token',
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+              user: {
+                id: 'google-user-12345',
+                email: 'googleuser@gmail.com',
+                app_metadata: { provider: 'google', providers: ['google'] },
+              },
+            }),
+          },
+        ];
+
+        globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+          const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user')) {
+            if (opts?.method === 'PUT') {
+              return new Response(
+                JSON.stringify({
+                  message: 'A recent login is required to change password',
+                  error: 'reauthentication_needed',
+                }),
+                { status: 422, headers: { 'Content-Type': 'application/json' } }
+              );
+            }
+            return new Response(
+              JSON.stringify({
+                id: 'google-user-12345',
+                email: 'googleuser@gmail.com',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            );
+          }
+          return originalFetch(url, opts);
+        };
+
+        const formData = new FormData();
+        formData.set('password', 'NewSecurePassword123!');
+        formData.set('confirmPassword', 'NewSecurePassword123!');
+
+        const res = await setAccountPasswordAction(formData);
+        assert.ok(
+          res.error?.includes('recent authentication before setting a password'),
+          `Expected reauthentication guidance, got: ${res.error}`
+        );
       } finally {
         delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;

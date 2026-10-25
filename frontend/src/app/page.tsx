@@ -38,6 +38,7 @@ export default async function HomePage({
     email?: string;
     displayName?: string;
     username?: string;
+    providers?: string[];
   } | null = null;
 
   try {
@@ -66,11 +67,18 @@ export default async function HomePage({
         displayName = profile.display_name;
       }
 
+      const providers: string[] = Array.isArray(user.app_metadata?.providers)
+        ? (user.app_metadata.providers as string[])
+        : user.app_metadata?.provider
+          ? [user.app_metadata.provider as string]
+          : [];
+
       authenticatedUser = {
         id: user.id,
         email: user.email,
         displayName: displayName || undefined,
         username: username || undefined,
+        providers,
       };
     }
   } catch {

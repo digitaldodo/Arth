@@ -11,6 +11,7 @@ import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
+import { SetPasswordForm } from '@/features/profile/SetPasswordForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import type { CreateTransactionResponse } from '@arth/contracts';
 
@@ -20,6 +21,7 @@ interface TransactionAppShellProps {
     email?: string;
     displayName?: string;
     username?: string;
+    providers?: string[];
   } | null;
 }
 
@@ -286,6 +288,14 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                       <UsernameClaimForm
                         currentUsername={currentUsername}
                         onUsernameSet={(newUsername) => setCurrentUsername(newUsername)}
+                      />
+                    </div>
+
+                    {/* Account Security: Set / Update Password */}
+                    <div className="pt-2 border-t border-[var(--border-hairline)]">
+                      <SetPasswordForm
+                        userEmail={user.email}
+                        providers={user.providers}
                       />
                     </div>
 
