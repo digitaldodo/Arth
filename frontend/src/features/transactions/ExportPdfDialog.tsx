@@ -12,6 +12,7 @@ import {
 import {
   exportLedgerToPdf,
   fetchAllMatchingTransactions,
+  type UserProfileSummary,
 } from './ledger-pdf-exporter';
 import {
   computeCategoryCounts,
@@ -19,13 +20,14 @@ import {
   resolveEligibleCategory,
 } from './export-category-filter';
 
-interface ExportPdfDialogProps {
+export interface ExportPdfDialogProps {
   isOpen: boolean;
   onClose: () => void;
   categories: CategoryDTO[];
   initialType?: TransactionType | 'all';
   initialCategoryId?: string; // 'all' or category ID
   initialNecessity?: NecessityClass | 'all';
+  userProfile?: UserProfileSummary;
 }
 
 export function ExportPdfDialog({
@@ -35,6 +37,7 @@ export function ExportPdfDialog({
   initialType = 'all',
   initialCategoryId = 'all',
   initialNecessity = 'all',
+  userProfile,
 }: ExportPdfDialogProps) {
   // Preset & Dates
   const [preset, setPreset] = useState<DateRangePreset>('this_month');
@@ -226,6 +229,7 @@ export function ExportPdfDialog({
         endDate: effectiveRange.endDate,
         dateRangeLabel,
         prefetchedTransactions: previewTransactions,
+        userProfile,
         onProgress: (status) => setExportProgress(status),
       });
       onClose();

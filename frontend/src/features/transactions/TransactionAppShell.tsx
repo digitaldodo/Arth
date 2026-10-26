@@ -329,6 +329,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
             <div className={activeView === 'ledger' ? 'block' : 'hidden'}>
               <TransactionLedger
+                userProfile={{
+                  displayName: user?.displayName,
+                  username: currentUsername || user?.username,
+                  email: user?.email,
+                }}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}

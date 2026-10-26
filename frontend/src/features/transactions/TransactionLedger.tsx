@@ -15,17 +15,20 @@ import {
 } from '@/lib/api-client';
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { ExportPdfDialog } from './ExportPdfDialog';
+import { type UserProfileSummary } from './ledger-pdf-exporter';
 import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
 
-interface TransactionLedgerProps {
+export interface TransactionLedgerProps {
+  userProfile?: UserProfileSummary;
   onOpenQuickAdd: () => void;
   refreshTrigger: number;
   onTransactionMutated?: () => void;
 }
 
 export function TransactionLedger({
+  userProfile,
   onOpenQuickAdd,
   refreshTrigger,
   onTransactionMutated,
@@ -508,6 +511,7 @@ export function TransactionLedger({
         initialType={selectedType}
         initialCategoryId={selectedCategory}
         initialNecessity={selectedNecessity}
+        userProfile={userProfile}
       />
     </div>
   );
