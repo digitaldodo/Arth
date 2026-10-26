@@ -2,6 +2,9 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getGcpProviderResourceName,
+  getGcpDefaultAudience,
+  resolveGcpAudienceConfig,
+  getVercelTeamSlug,
   getGcpAudience,
   getServiceAccountEmail,
   getGoogleAuthMode,
@@ -26,6 +29,10 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
     'GCP_WORKLOAD_IDENTITY_POOL_ID',
     'GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID',
     'GCP_AUDIENCE',
+    'GCP_AUDIENCE_MODE',
+    'GCP_PROVIDER_RESOURCE_NAME',
+    'VERCEL_TEAM_SLUG',
+    'VERCEL_PROJECT_OWNER',
     'GOOGLE_SERVICE_ACCOUNT_EMAIL',
     'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
     'GOOGLE_SERVICE_ACCOUNT_KEY',
@@ -51,7 +58,7 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
   });
 
   describe('1. Audience Configuration & Provider Resource Derivation', () => {
-    test('computes standard GCP STS provider resource name from components', () => {
+    test('computes standard GCP STS provider resource name and defaults to Allowed Audiences', () => {
       process.env.GCP_PROJECT_NUMBER = '123456789012';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
@@ -61,27 +68,137 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
         providerResource,
         '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
       );
-      assert.equal(getGcpAudience(), providerResource);
+      assert.equal(
+        getGcpDefaultAudience(),
+        'https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
+
+      // Default mode is 'allowed' matching the official Vercel GCP guide
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'allowed');
+      assert.equal(audienceConfig.stsAudience, providerResource);
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://vercel.com/anshkmrn-8908s-projects'
+      );
+      assert.equal(getGcpAudience(), 'https://vercel.com/anshkmrn-8908s-projects');
     });
 
-    test('respects explicit GCP_AUDIENCE override', () => {
+    test('Allowed Audiences mode: respects VERCEL_TEAM_SLUG when set', () => {
+      process.env.GCP_PROJECT_NUMBER = '123456789012';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
+      process.env.VERCEL_TEAM_SLUG = 'custom-team-slug';
+
+      assert.equal(getVercelTeamSlug(), 'custom-team-slug');
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'allowed');
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://vercel.com/custom-team-slug'
+      );
+      assert.equal(getGcpAudience(), 'https://vercel.com/custom-team-slug');
+      // STS audience remains the GCP provider resource name
+      assert.equal(
+        audienceConfig.stsAudience,
+        '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
+    });
+
+    test('Allowed Audiences mode: respects explicit GCP_AUDIENCE override without polluting STS resource name', () => {
       process.env.GCP_PROJECT_NUMBER = '123456789012';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
       process.env.GCP_AUDIENCE = 'https://custom-audience.example.com';
 
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'allowed');
+      assert.equal(audienceConfig.oidcAudience, 'https://custom-audience.example.com');
       assert.equal(getGcpAudience(), 'https://custom-audience.example.com');
-      // Provider resource name is still preserved for STS endpoint
+      // STS audience is strictly preserved as the GCP resource URI
+      assert.equal(
+        audienceConfig.stsAudience,
+        '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
       assert.equal(
         getGcpProviderResourceName(),
         '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
       );
     });
 
-    test('returns null when required components are missing', () => {
+    test('Default Audience mode: supports GCP_AUDIENCE_MODE=default', () => {
+      process.env.GCP_PROJECT_NUMBER = '123456789012';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
+      process.env.GCP_AUDIENCE_MODE = 'default';
+
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'default');
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
+      assert.equal(
+        audienceConfig.stsAudience,
+        '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
+      assert.equal(
+        getGcpAudience(),
+        'https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
+    });
+
+    test('Default Audience mode: supports GCP_AUDIENCE=default or full GCP IAM URL', () => {
+      process.env.GCP_PROJECT_NUMBER = '973069107406';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel';
+      process.env.GCP_AUDIENCE = 'default';
+
+      let audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'default');
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel'
+      );
+
+      process.env.GCP_AUDIENCE =
+        'https://iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel';
+      audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'default');
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel'
+      );
+    });
+
+    test('GCP_AUDIENCE_MODE=allowed overrides GCP IAM URL in GCP_AUDIENCE', () => {
+      process.env.GCP_PROJECT_NUMBER = '973069107406';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel';
+      process.env.GCP_AUDIENCE =
+        'https://iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel';
+      process.env.GCP_AUDIENCE_MODE = 'allowed';
+
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'allowed');
+      assert.equal(
+        audienceConfig.oidcAudience,
+        'https://vercel.com/anshkmrn-8908s-projects'
+      );
+      assert.equal(
+        audienceConfig.stsAudience,
+        '//iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel'
+      );
+    });
+
+    test('returns null when required components are missing and unconfigured', () => {
       process.env.GCP_PROJECT_NUMBER = '123456789012';
       // Missing pool and provider IDs
       assert.equal(getGcpProviderResourceName(), null);
+      assert.equal(getGcpDefaultAudience(), null);
+      const config = resolveGcpAudienceConfig();
+      assert.equal(config.stsAudience, null);
+      assert.equal(config.oidcAudience, null);
       assert.equal(getGcpAudience(), null);
     });
   });
@@ -145,9 +262,13 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
           .serviceAccountImpersonationUrl,
         'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/arth-sync@gcp-project.iam.gserviceaccount.com:generateAccessToken'
       );
+      assert.equal(
+        (client as unknown as { audience: string }).audience,
+        '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+      );
     });
 
-    test('invokes custom subject token supplier with expected audience', async () => {
+    test('invokes custom subject token supplier with expected audience in Allowed Audiences mode', async () => {
       process.env.GCP_PROJECT_NUMBER = '123456789012';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
       process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
@@ -171,7 +292,36 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
       assert.ok(recorded);
       assert.equal(
         recorded.audience,
-        '//iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
+        'https://vercel.com/anshkmrn-8908s-projects'
+      );
+    });
+
+    test('invokes custom subject token supplier with expected audience in Default Audience mode', async () => {
+      process.env.GCP_PROJECT_NUMBER = '123456789012';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = 'vercel-pool';
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = 'vercel-provider';
+      process.env.GCP_SERVICE_ACCOUNT_EMAIL = 'arth-sync@gcp-project.iam.gserviceaccount.com';
+      process.env.GCP_AUDIENCE_MODE = 'default';
+
+      let supplierCalledWith: { audience?: string } | null = null;
+      const client = createGcpExternalAccountClient({
+        customSubjectTokenSupplier: async (ctx) => {
+          supplierCalledWith = ctx;
+          return 'mock-subject-token-default-mode';
+        },
+      });
+
+      assert.ok(client);
+      const subjectToken = await (
+        client as unknown as { retrieveSubjectToken: () => Promise<string> }
+      ).retrieveSubjectToken();
+
+      assert.equal(subjectToken, 'mock-subject-token-default-mode');
+      const recorded = supplierCalledWith as { audience?: string } | null;
+      assert.ok(recorded);
+      assert.equal(
+        recorded.audience,
+        'https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/vercel-pool/providers/vercel-provider'
       );
     });
   });
@@ -539,6 +689,234 @@ describe('Google Cloud Workload Identity Federation with Vercel OIDC', () => {
       } finally {
         global.fetch = originalFetch;
       }
+    });
+  });
+
+  describe('7. Regression Suite: Workload Identity Federation Audience Mismatch Resolution', () => {
+    const PROD_PROJECT_ID = 'project-714a095d-5530-43be-bda';
+    const PROD_PROJECT_NUMBER = '973069107406';
+    const PROD_POOL_ID = 'vercel';
+    const PROD_PROVIDER_ID = 'vercel';
+    const PROD_TEAM_SLUG = 'anshkmrn-8908s-projects';
+    const PROD_SA_EMAIL =
+      'arth-sheets-sync@project-714a095d-5530-43be-bda.iam.gserviceaccount.com';
+    const PROD_DEFAULT_AUDIENCE = `https://iam.googleapis.com/projects/${PROD_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROD_POOL_ID}/providers/${PROD_PROVIDER_ID}`;
+    const PROD_ALLOWED_AUDIENCE = `https://vercel.com/${PROD_TEAM_SLUG}`;
+    const PROD_STS_RESOURCE = `//iam.googleapis.com/projects/${PROD_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROD_POOL_ID}/providers/${PROD_PROVIDER_ID}`;
+
+    test('reproduces production error when token audience is Default Audience but GCP provider expects Allowed Audience', async () => {
+      process.env.GCP_PROJECT_ID = PROD_PROJECT_ID;
+      process.env.GCP_PROJECT_NUMBER = PROD_PROJECT_NUMBER;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = PROD_POOL_ID;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = PROD_PROVIDER_ID;
+      process.env.GCP_SERVICE_ACCOUNT_EMAIL = PROD_SA_EMAIL;
+      process.env.VERCEL_TEAM_SLUG = PROD_TEAM_SLUG;
+      // Simulate buggy configuration where GCP_AUDIENCE was set to Default Audience URL
+      process.env.GCP_AUDIENCE = PROD_DEFAULT_AUDIENCE;
+
+      // In the mock STS endpoint, GCP Provider vercel has Allowed Audiences = [PROD_ALLOWED_AUDIENCE]
+      const gcpProviderExpectedAudience = PROD_ALLOWED_AUDIENCE;
+
+      const client = createGcpExternalAccountClient({
+        customSubjectTokenSupplier: async (ctx) => {
+          // Token is minted with ctx.audience (PROD_DEFAULT_AUDIENCE)
+          return `mock-jwt-with-aud:${ctx.audience}`;
+        },
+      });
+      assert.ok(client);
+
+      (
+        client as unknown as {
+          stsCredential: {
+            transporter: {
+              request: (opts: { data: URLSearchParams }) => Promise<unknown>;
+            };
+          };
+        }
+      ).stsCredential.transporter.request = async (opts) => {
+        const subjectToken = opts.data.get('subject_token') || '';
+        const tokenAudience = subjectToken.replace('mock-jwt-with-aud:', '');
+
+        if (tokenAudience !== gcpProviderExpectedAudience) {
+          throw new Error(
+            `invalid_grant: The audience in ID Token [${tokenAudience}] does not match the expected audience.`
+          );
+        }
+
+        return {
+          status: 200,
+          data: { access_token: 'sts-ok-token', expires_in: 3600 },
+        };
+      };
+
+      setCachedExternalClient(client);
+
+      // Verify that the exact production error is thrown
+      await assert.rejects(
+        async () => {
+          await getGoogleSheetsAccessToken();
+        },
+        {
+          name: 'Error',
+          message:
+            /invalid_grant: The audience in ID Token \[https:\/\/iam\.googleapis\.com\/projects\/973069107406\/locations\/global\/workloadIdentityPools\/vercel\/providers\/vercel\] does not match the expected audience\./,
+        }
+      );
+    });
+
+    test('verifies fix: Allowed Audiences configuration matches GCP provider and acquires access token', async () => {
+      process.env.GCP_PROJECT_ID = PROD_PROJECT_ID;
+      process.env.GCP_PROJECT_NUMBER = PROD_PROJECT_NUMBER;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = PROD_POOL_ID;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = PROD_PROVIDER_ID;
+      process.env.GCP_SERVICE_ACCOUNT_EMAIL = PROD_SA_EMAIL;
+      process.env.VERCEL_TEAM_SLUG = PROD_TEAM_SLUG;
+      // Do not set GCP_AUDIENCE -> defaults cleanly to Allowed Audience (https://vercel.com/anshkmrn-8908s-projects)
+
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'allowed');
+      assert.equal(audienceConfig.stsAudience, PROD_STS_RESOURCE);
+      assert.equal(audienceConfig.oidcAudience, PROD_ALLOWED_AUDIENCE);
+
+      let requestedSubjectTokenAudience: string | undefined;
+      let stsAudiencePassed: string | null = null;
+
+      const client = createGcpExternalAccountClient({
+        customSubjectTokenSupplier: async (ctx) => {
+          requestedSubjectTokenAudience = ctx.audience;
+          return `mock-jwt-with-aud:${ctx.audience}`;
+        },
+      });
+      assert.ok(client);
+
+      (
+        client as unknown as {
+          stsCredential: {
+            transporter: {
+              request: (opts: { data: URLSearchParams }) => Promise<unknown>;
+            };
+          };
+        }
+      ).stsCredential.transporter.request = async (opts) => {
+        stsAudiencePassed = opts.data.get('audience');
+        const subjectToken = opts.data.get('subject_token') || '';
+        const tokenAudience = subjectToken.replace('mock-jwt-with-aud:', '');
+
+        // Provider checks that token audience matches its Allowed Audiences list
+        if (tokenAudience !== PROD_ALLOWED_AUDIENCE) {
+          throw new Error(
+            `invalid_grant: The audience in ID Token [${tokenAudience}] does not match the expected audience.`
+          );
+        }
+
+        return {
+          status: 200,
+          data: {
+            access_token: 'sts-federated-token-production-fixed',
+            expires_in: 3600,
+          },
+        };
+      };
+
+      (
+        client as unknown as {
+          transporter: {
+            request: () => Promise<unknown>;
+          };
+        }
+      ).transporter.request = async () => ({
+        status: 200,
+        data: {
+          accessToken: 'ya29.production-ready-google-sheets-oauth-token',
+          expireTime: new Date(Date.now() + 3600000).toISOString(),
+        },
+      });
+
+      setCachedExternalClient(client);
+
+      const token = await getGoogleSheetsAccessToken();
+
+      assert.equal(token, 'ya29.production-ready-google-sheets-oauth-token');
+      assert.equal(
+        requestedSubjectTokenAudience,
+        'https://vercel.com/anshkmrn-8908s-projects'
+      );
+      assert.equal(
+        stsAudiencePassed,
+        '//iam.googleapis.com/projects/973069107406/locations/global/workloadIdentityPools/vercel/providers/vercel'
+      );
+    });
+
+    test('verifies fix: Default Audience mode works when explicitly configured with provider in Default mode', async () => {
+      process.env.GCP_PROJECT_ID = PROD_PROJECT_ID;
+      process.env.GCP_PROJECT_NUMBER = PROD_PROJECT_NUMBER;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_ID = PROD_POOL_ID;
+      process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = PROD_PROVIDER_ID;
+      process.env.GCP_SERVICE_ACCOUNT_EMAIL = PROD_SA_EMAIL;
+      process.env.GCP_AUDIENCE_MODE = 'default';
+
+      const audienceConfig = resolveGcpAudienceConfig();
+      assert.equal(audienceConfig.mode, 'default');
+      assert.equal(audienceConfig.stsAudience, PROD_STS_RESOURCE);
+      assert.equal(audienceConfig.oidcAudience, PROD_DEFAULT_AUDIENCE);
+
+      let requestedSubjectTokenAudience: string | undefined;
+
+      const client = createGcpExternalAccountClient({
+        customSubjectTokenSupplier: async (ctx) => {
+          requestedSubjectTokenAudience = ctx.audience;
+          return `mock-jwt-with-aud:${ctx.audience}`;
+        },
+      });
+      assert.ok(client);
+
+      (
+        client as unknown as {
+          stsCredential: {
+            transporter: {
+              request: (opts: { data: URLSearchParams }) => Promise<unknown>;
+            };
+          };
+        }
+      ).stsCredential.transporter.request = async (opts) => {
+        const subjectToken = opts.data.get('subject_token') || '';
+        const tokenAudience = subjectToken.replace('mock-jwt-with-aud:', '');
+
+        // In Default Audience mode, provider expects its auto-generated URL
+        if (tokenAudience !== PROD_DEFAULT_AUDIENCE) {
+          throw new Error(
+            `invalid_grant: The audience in ID Token [${tokenAudience}] does not match the expected audience.`
+          );
+        }
+
+        return {
+          status: 200,
+          data: {
+            access_token: 'sts-federated-token-default-mode',
+            expires_in: 3600,
+          },
+        };
+      };
+
+      (
+        client as unknown as {
+          transporter: {
+            request: () => Promise<unknown>;
+          };
+        }
+      ).transporter.request = async () => ({
+        status: 200,
+        data: {
+          accessToken: 'ya29.default-mode-oauth-token',
+          expireTime: new Date(Date.now() + 3600000).toISOString(),
+        },
+      });
+
+      setCachedExternalClient(client);
+
+      const token = await getGoogleSheetsAccessToken();
+      assert.equal(token, 'ya29.default-mode-oauth-token');
+      assert.equal(requestedSubjectTokenAudience, PROD_DEFAULT_AUDIENCE);
     });
   });
 });

@@ -138,9 +138,45 @@ export function getGoogleCredentials(): GoogleServiceAccountCredentials {
   };
 }
 
+export interface GcpAudienceConfig {
+  /**
+   * Google STS provider resource name for external account routing.
+   * Format: //iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}
+   * Used as the `audience` attribute in ExternalAccountClient / token exchange request.
+   */
+  stsAudience: string | null;
+
+  /**
+   * Expected audience claim (aud) inside the Vercel OIDC subject token (JWT).
+   * In 'allowed' mode (official Vercel GCP guide): https://vercel.com/[TEAM_SLUG] or custom URL.
+   * In 'default' mode: https://iam.googleapis.com/projects/...
+   */
+  oidcAudience: string | null;
+
+  /**
+   * Provider audience mode:
+   * - 'allowed': Provider configured with Allowed Audiences (standard Vercel setup).
+   * - 'default': Provider configured with Google's auto-generated Default Audience URL.
+   */
+  mode: 'allowed' | 'default';
+}
+
+/**
+ * Returns the Vercel team slug for OIDC audience resolution.
+ * Prioritizes VERCEL_TEAM_SLUG, then VERCEL_PROJECT_OWNER, and defaults to 'anshkmrn-8908s-projects'.
+ */
+export function getVercelTeamSlug(): string {
+  return (
+    process.env.VERCEL_TEAM_SLUG?.trim() ||
+    process.env.VERCEL_PROJECT_OWNER?.trim() ||
+    'anshkmrn-8908s-projects'
+  );
+}
+
 /**
  * Returns the GCP Workload Identity Pool Provider resource URI.
  * Form: //iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}
+ * Always starts with //iam.googleapis.com/projects/. Never returns a non-GCP resource URI.
  */
 export function getGcpProviderResourceName(): string | null {
   const projectNumber = process.env.GCP_PROJECT_NUMBER?.trim();
@@ -151,20 +187,144 @@ export function getGcpProviderResourceName(): string | null {
     return `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
   }
 
-  const audience = process.env.GCP_AUDIENCE?.trim();
-  if (audience && audience.startsWith('//iam.googleapis.com/projects/')) {
-    return audience;
+  const customResource = process.env.GCP_PROVIDER_RESOURCE_NAME?.trim();
+  if (customResource) {
+    if (customResource.startsWith('//iam.googleapis.com/projects/')) {
+      return customResource;
+    }
+    if (customResource.startsWith('https://iam.googleapis.com/projects/')) {
+      return customResource.replace(/^https:/, '');
+    }
+  }
+
+  const rawAudience = process.env.GCP_AUDIENCE?.trim();
+  if (rawAudience) {
+    if (rawAudience.startsWith('//iam.googleapis.com/projects/')) {
+      return rawAudience;
+    }
+    if (rawAudience.startsWith('https://iam.googleapis.com/projects/')) {
+      return rawAudience.replace(/^https:/, '');
+    }
   }
 
   return null;
 }
 
 /**
+ * Returns Google Cloud's auto-generated default audience URL for the provider.
+ * Form: https://iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}
+ * Used when the GCP Workload Identity Provider is configured in "Default audience" mode.
+ */
+export function getGcpDefaultAudience(): string | null {
+  const resourceName = getGcpProviderResourceName();
+  if (!resourceName) return null;
+  return `https:${resourceName}`;
+}
+
+/**
+ * Resolves the separate audiences needed for Google Cloud Workload Identity Federation:
+ * 1. stsAudience: The provider resource identifier passed to Google ExternalAccountClient (always //iam.googleapis.com/...)
+ * 2. oidcAudience: The audience claim requested in the Vercel OIDC subject token (aud claim in JWT)
+ *
+ * Supports both Google Cloud provider modes:
+ * - 'allowed' (Recommended by official Vercel guide https://vercel.com/docs/oidc/gcp):
+ *    Provider is configured with Allowed Audiences (e.g. https://vercel.com/anshkmrn-8908s-projects).
+ * - 'default':
+ *    Provider is configured with Google's auto-generated Default Audience (https://iam.googleapis.com/projects/...).
+ */
+export function resolveGcpAudienceConfig(): GcpAudienceConfig {
+  const stsAudience = getGcpProviderResourceName();
+  const rawMode = process.env.GCP_AUDIENCE_MODE?.trim().toLowerCase();
+  const rawAudience = process.env.GCP_AUDIENCE?.trim();
+  const teamSlug = getVercelTeamSlug();
+  const standardAllowedAudience = `https://vercel.com/${teamSlug}`;
+
+  // If GCP WIF is not configured (no provider resource name and no explicit audience)
+  if (!stsAudience && !rawAudience) {
+    return {
+      stsAudience: null,
+      oidcAudience: null,
+      mode: 'allowed',
+    };
+  }
+
+  // 1. Explicit mode flag takes precedence
+  if (rawMode === 'default') {
+    return {
+      stsAudience,
+      oidcAudience:
+        getGcpDefaultAudience() ||
+        (rawAudience?.startsWith('https://') ? rawAudience : null),
+      mode: 'default',
+    };
+  }
+
+  if (rawMode === 'allowed') {
+    const oidcAudience =
+      rawAudience &&
+      !rawAudience.startsWith('https://iam.googleapis.com/') &&
+      !rawAudience.startsWith('//iam.googleapis.com/') &&
+      rawAudience.toLowerCase() !== 'default'
+        ? rawAudience
+        : standardAllowedAudience;
+
+    return {
+      stsAudience,
+      oidcAudience,
+      mode: 'allowed',
+    };
+  }
+
+  // 2. Infer mode from GCP_AUDIENCE value
+  if (
+    rawAudience?.toLowerCase() === 'default' ||
+    rawAudience?.toLowerCase() === 'default-audience'
+  ) {
+    return {
+      stsAudience,
+      oidcAudience: getGcpDefaultAudience(),
+      mode: 'default',
+    };
+  }
+
+  if (
+    rawAudience?.startsWith('https://iam.googleapis.com/') ||
+    rawAudience?.startsWith('//iam.googleapis.com/')
+  ) {
+    return {
+      stsAudience,
+      oidcAudience: rawAudience.startsWith('//')
+        ? `https:${rawAudience}`
+        : rawAudience,
+      mode: 'default',
+    };
+  }
+
+  if (rawAudience) {
+    return {
+      stsAudience,
+      oidcAudience: rawAudience,
+      mode: 'allowed',
+    };
+  }
+
+  // 3. Default when GCP_AUDIENCE is not set:
+  // Follows the official Vercel GCP guide (Allowed audiences: https://vercel.com/[TEAM_SLUG])
+  return {
+    stsAudience,
+    oidcAudience: standardAllowedAudience,
+    mode: 'allowed',
+  };
+}
+
+/**
  * Returns the expected OIDC audience claim for Vercel OIDC token requests.
- * Defaults to the GCP Workload Identity Pool Provider resource URI if GCP_AUDIENCE is not explicitly set.
+ * In 'allowed' mode (default), returns https://vercel.com/[TEAM_SLUG] or custom allowed audience.
+ * In 'default' mode, returns the GCP provider default audience URL (https://iam.googleapis.com/...).
  */
 export function getGcpAudience(): string | null {
-  return process.env.GCP_AUDIENCE?.trim() || getGcpProviderResourceName();
+  const config = resolveGcpAudienceConfig();
+  return config.oidcAudience || config.stsAudience;
 }
 
 /**
@@ -196,7 +356,10 @@ export function getGoogleAuthMode(): GoogleAuthMode {
   const projectNumber = process.env.GCP_PROJECT_NUMBER?.trim();
   const audience = process.env.GCP_AUDIENCE?.trim();
 
-  if (saEmail && poolId && providerId && (projectNumber || audience)) {
+  if (
+    saEmail &&
+    (getGcpProviderResourceName() || (poolId && providerId && (projectNumber || audience)))
+  ) {
     return 'keyless_oidc';
   }
 
@@ -228,8 +391,7 @@ export function createGcpExternalAccountClient(
   options?: CreateGcpExternalAccountClientOptions
 ): BaseExternalAccountClient | null {
   const serviceAccountEmail = getServiceAccountEmail();
-  const stsAudience = getGcpProviderResourceName() || getGcpAudience();
-  const oidcAudience = getGcpAudience();
+  const { stsAudience, oidcAudience } = resolveGcpAudienceConfig();
 
   if (!serviceAccountEmail || !stsAudience) {
     return null;

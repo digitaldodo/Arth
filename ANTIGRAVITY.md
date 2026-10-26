@@ -114,6 +114,7 @@ GCP_PROJECT_NUMBER=              # server only
 GCP_SERVICE_ACCOUNT_EMAIL=       # server only
 GCP_WORKLOAD_IDENTITY_POOL_ID=   # server only
 GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID= # server only
+GCP_AUDIENCE_MODE=               # server only (optional: 'allowed' | 'default')
 GCP_AUDIENCE=                    # server only (optional override)
 
 # Google Sheets (Fallback for Local Development Only)
