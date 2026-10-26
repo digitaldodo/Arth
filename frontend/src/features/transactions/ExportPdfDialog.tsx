@@ -579,7 +579,8 @@ export function ExportPdfDialog({
               type="button"
               onClick={handleDownload}
               disabled={!isRangeValid || isExporting || isLoadingScope || previewTransactions.length === 0}
-              className="w-2/3 py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              aria-busy={isExporting}
+              className="w-2/3 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isExporting ? (
                 <>

@@ -112,7 +112,8 @@ export function DeleteTransactionModal({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="flex-1 py-2.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+            aria-busy={isDeleting}
+            className="flex-1 min-h-[38px] py-2.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
           >
             {isDeleting ? (
               <>

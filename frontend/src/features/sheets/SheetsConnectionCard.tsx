@@ -359,25 +359,49 @@ export function SheetsConnectionCard() {
               type="button"
               onClick={handleSyncNow}
               disabled={syncing || reconciling || retrying || disconnecting}
-              className="px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={syncing}
+              className="min-w-[85px] px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              {syncing ? 'Syncing...' : 'Sync Now'}
+              {syncing ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Syncing…</span>
+                </>
+              ) : (
+                <span>Sync Now</span>
+              )}
             </button>
             <button
               type="button"
               onClick={handleRetryFailed}
               disabled={syncing || reconciling || retrying || disconnecting}
-              className="px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={retrying}
+              className="min-w-[125px] px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              {retrying ? 'Retrying...' : 'Retry Failed Syncs'}
+              {retrying ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Retrying…</span>
+                </>
+              ) : (
+                <span>Retry Failed Syncs</span>
+              )}
             </button>
             <button
               type="button"
               onClick={handleReconcile}
               disabled={syncing || reconciling || retrying || disconnecting}
-              className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={reconciling}
+              className="min-w-[100px] px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              {reconciling ? 'Full Reconcile' : 'Full Reconcile'}
+              {reconciling ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Reconciling…</span>
+                </>
+              ) : (
+                <span>Full Reconcile</span>
+              )}
             </button>
             <button
               type="button"
@@ -397,9 +421,17 @@ export function SheetsConnectionCard() {
               type="button"
               onClick={handleDisconnect}
               disabled={disconnecting}
-              className="px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-md transition-colors cursor-pointer ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={disconnecting}
+              className="min-w-[95px] px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-md transition-colors cursor-pointer ml-auto disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              {disconnecting ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Disconnecting…</span>
+                </>
+              ) : (
+                <span>Disconnect</span>
+              )}
             </button>
           </div>
         </div>

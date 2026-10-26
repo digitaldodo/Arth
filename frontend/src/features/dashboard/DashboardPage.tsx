@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   type DashboardDateRangePreset,
   type DashboardSummaryResponse,
@@ -8,7 +8,12 @@ import {
   resolveDateRangePreset,
 } from '@arth/contracts';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
-import { getCachedBalances, setCachedBalances, getCachedDashboardSummary, setCachedDashboardSummary } from '@/lib/offline-db';
+import {
+  getCachedBalances,
+  setCachedBalances,
+  getCachedDashboardSummary,
+  setCachedDashboardSummary,
+} from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
@@ -50,19 +55,25 @@ export function DashboardPage({
 
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<DashboardError | null>(null);
+
+  const summarySeqRef = useRef<number>(0);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch balances (cached + revalidated)
   useEffect(() => {
     let isMounted = true;
 
     if (!initialBalances) {
-      getCachedBalances().then((cached) => {
-        if (cached && isMounted) {
-          setBalances(cached);
-          setBalancesLoading(false);
-        }
-      }).catch(() => {});
+      getCachedBalances()
+        .then((cached) => {
+          if (cached && isMounted) {
+            setBalances(cached);
+            setBalancesLoading(false);
+          }
+        })
+        .catch(() => {});
     }
 
     fetchBalances()
@@ -82,14 +93,24 @@ export function DashboardPage({
     };
   }, [refreshTrigger, initialBalances, onBalancesLoaded]);
 
-  // Fetch dashboard summary (cached + revalidated)
+  // Fetch dashboard summary (cached + revalidated with sequence tracking & debounced refresh indicator)
   useEffect(() => {
     let isMounted = true;
+    summarySeqRef.current += 1;
+    const currentSeq = summarySeqRef.current;
+
+    // Trigger subtle refreshing indicator after 90ms if request is still pending
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      if (summarySeqRef.current === currentSeq) {
+        setIsRefreshing(true);
+      }
+    }, 90);
 
     // Check local cache first for instant render
     getCachedDashboardSummary(rangeKey)
       .then((cached) => {
-        if (cached && isMounted) {
+        if (cached && isMounted && summarySeqRef.current === currentSeq) {
           setSummary(cached);
           setLoading(false);
         }
@@ -98,15 +119,19 @@ export function DashboardPage({
 
     fetchDashboardSummary(dateRange)
       .then((data) => {
-        if (!isMounted) return;
+        if (!isMounted || summarySeqRef.current !== currentSeq) return;
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         setSummary(data);
         setError(null);
         setLoading(false);
+        setIsRefreshing(false);
         setCachedDashboardSummary(rangeKey, data).catch(() => {});
         onInitialReady?.();
       })
       .catch((err: unknown) => {
-        if (!isMounted) return;
+        if (!isMounted || summarySeqRef.current !== currentSeq) return;
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        setIsRefreshing(false);
         const message =
           err instanceof Error
             ? err.message
@@ -119,6 +144,9 @@ export function DashboardPage({
 
     return () => {
       isMounted = false;
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
     };
   }, [dateRange, refreshTrigger, onInitialReady, rangeKey]);
 
@@ -140,6 +168,7 @@ export function DashboardPage({
         setSummary(data);
         setError(null);
         setLoading(false);
+        setIsRefreshing(false);
         onInitialReady?.();
       })
       .catch((err: unknown) => {
@@ -150,6 +179,7 @@ export function DashboardPage({
         const statusCode = (err as { statusCode?: number })?.statusCode;
         setError({ message, statusCode });
         setLoading(false);
+        setIsRefreshing(false);
         onInitialReady?.(message);
       });
   };
@@ -158,14 +188,12 @@ export function DashboardPage({
     setPreset(newPreset);
     if (newPreset !== 'custom') {
       const resolved = resolveDateRangePreset(newPreset);
-      setLoading(true);
       setDateRange(resolved);
     }
   };
 
   const handleApplyCustomRange = (startDate: string, endDate: string) => {
     setPreset('custom');
-    setLoading(true);
     setDateRange({ start_date: startDate, end_date: endDate });
   };
 
@@ -216,6 +244,20 @@ export function DashboardPage({
         onSelectPreset={handleSelectPreset}
         onApplyCustomRange={handleApplyCustomRange}
       />
+
+      {/* Non-disruptive Indeterminate Progress Bar */}
+      <div className="h-0.5 w-full overflow-hidden rounded-full transition-opacity duration-150">
+        {isRefreshing ? (
+          <div
+            role="progressbar"
+            aria-label="Updating dashboard metrics"
+            aria-busy="true"
+            className="h-full w-full bg-[var(--action-primary-bg)] animate-indeterminate"
+          />
+        ) : (
+          <div className="h-full w-full bg-transparent" />
+        )}
+      </div>
 
       {/* Authentication / Session Expired State */}
       {isAuthError && (
@@ -318,12 +360,16 @@ export function DashboardPage({
         </div>
       )}
 
-      {/* Loading Skeleton */}
+      {/* Loading Skeleton (Only shown when no cached or existing summary data is available) */}
       {loading && !summary && <DashboardSkeleton />}
 
-      {/* Populated Content */}
+      {/* Populated Content with smooth transition */}
       {summary && (
-        <div className="space-y-6">
+        <div
+          className={`space-y-6 transition-opacity duration-150 ${
+            isRefreshing ? 'opacity-75' : 'opacity-100'
+          }`}
+        >
           {/* Entire Ledger Empty State (First-time user onboarding banner) */}
           {summary.total_active_transaction_count === 0 && (
             <div className="p-6 sm:p-8 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
@@ -362,7 +408,7 @@ export function DashboardPage({
             </div>
           )}
 
-          {/* Financial Summary Cards (Always visible: displays ₹0.00 for empty state or aggregated values) */}
+          {/* Financial Summary Cards */}
           <SummaryCards
             incomePaise={summary.income_paise}
             expensesPaise={summary.expenses_paise}
@@ -384,7 +430,7 @@ export function DashboardPage({
             </div>
           )}
 
-          {/* Spending Composition and Recent Activity in a balanced wide multi-column layout */}
+          {/* Spending Composition and Recent Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
             <div className="lg:col-span-5 space-y-6">
               <SpendingComposition
