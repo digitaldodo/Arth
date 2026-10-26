@@ -79,27 +79,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle HTML navigation: Network-first, fallback to cached App Shell '/' if offline
+  // Handle HTML navigation: Fast Network-first with 1800ms timeout, falling back instantly to cached App Shell
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      (async () => {
+        let timeoutId = null;
+        try {
+          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          if (controller) {
+            timeoutId = setTimeout(() => controller.abort(), 1800);
+          }
+          const response = await fetch(event.request, controller ? { signal: controller.signal } : {});
+          if (timeoutId) clearTimeout(timeoutId);
           if (response && response.status === 200) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return response;
-        })
-        .catch(async () => {
+        } catch {
+          if (timeoutId) clearTimeout(timeoutId);
           const cached = await caches.match(event.request);
           if (cached) return cached;
           const shell = await caches.match('/');
           if (shell) return shell;
           return new Response(
-            '<!DOCTYPE html><html><body style="background:#0D0D0F;color:#fff;font-family:sans-serif;padding:2rem;text-align:center;"><h2>Arth is currently offline</h2><p>Please check your internet connection.</p></body></html>',
-            { headers: { 'Content-Type': 'text/html' } }
+            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Arth — Offline</title><style>body{margin:0;background:#0D0D0F;color:#F5F5F4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:380px;background:#141416;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px 24px}h1{font-size:18px;margin:0 0 8px;font-weight:600}p{font-size:13px;color:#A1A1AA;line-height:1.5;margin:0 0 20px}button{background:#fff;color:#000;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer}</style></head><body><div class="card"><h1>Initial Setup Requires Internet</h1><p>Arth needs an active internet connection on your first launch to initialize your local ledger securely.</p><button onclick="location.reload()">Retry Connection</button></div></body></html>',
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           );
-        })
+        }
+      })()
     );
     return;
   }

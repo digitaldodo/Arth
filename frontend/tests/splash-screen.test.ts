@@ -198,21 +198,29 @@ describe('PWA Splash Screen & Initialization Experience', () => {
     });
   });
 
-  describe('3. Next.js App Router loading.tsx', () => {
-    test('src/app/loading.tsx exists and renders SplashScreen', () => {
+  describe('3. Next.js App Router loading.tsx Non-Blocking Skeleton', () => {
+    test('src/app/loading.tsx renders non-blocking App Shell skeleton without blocking splash screen', () => {
       const loadingPath = path.join(projectRoot, 'src', 'app', 'loading.tsx');
       assert.ok(fs.existsSync(loadingPath), 'src/app/loading.tsx must exist');
 
       const content = fs.readFileSync(loadingPath, 'utf8');
       assert.ok(
-        content.includes('SplashScreen'),
-        'src/app/loading.tsx must import and render SplashScreen'
+        content.includes('DashboardSkeleton'),
+        'src/app/loading.tsx must render DashboardSkeleton instead of blocking splash screen'
+      );
+      assert.ok(
+        content.includes('ArthLogo'),
+        'src/app/loading.tsx must render monochrome ArthLogo in header'
+      );
+      assert.ok(
+        !content.includes('SplashScreen'),
+        'src/app/loading.tsx must not render full-screen blocking SplashScreen'
       );
     });
   });
 
-  describe('4. TransactionAppShell Initial Startup Coordination', () => {
-    test('TransactionAppShell integrates SplashScreen with initial boot state and smooth transition', () => {
+  describe('4. TransactionAppShell Fast Startup & Non-Blocking App Shell', () => {
+    test('TransactionAppShell renders immediate navigation and shell without blocking overlays', () => {
       const shellPath = path.join(
         projectRoot,
         'src',
@@ -222,40 +230,24 @@ describe('PWA Splash Screen & Initialization Experience', () => {
       );
       const content = fs.readFileSync(shellPath, 'utf8');
 
-      // Verify imports and session boot tracker
+      // Verify blocking splash screen overlay is eliminated
       assert.ok(
-        content.includes("import { SplashScreen } from '@/components/brand/SplashScreen';"),
-        'TransactionAppShell must import SplashScreen'
+        !content.includes('{isInitialBoot &&'),
+        'TransactionAppShell must not render blocking full-screen splash overlay'
       );
       assert.ok(
-        content.includes('hasAppBootedSession'),
-        'TransactionAppShell must track session boot so splash only shows on initial launch'
-      );
-
-      // Verify state coordination
-      assert.ok(
-        content.includes('isInitialBoot'),
-        'TransactionAppShell must maintain isInitialBoot state'
-      );
-      assert.ok(
-        content.includes('isFadingOut'),
-        'TransactionAppShell must maintain isFadingOut state for smooth transition'
-      );
-      assert.ok(
-        content.includes('handleInitialReady'),
-        'TransactionAppShell must define handleInitialReady callback'
+        !content.includes("import { SplashScreen } from '@/components/brand/SplashScreen';"),
+        'TransactionAppShell must not depend on blocking SplashScreen'
       );
 
-      // Verify DashboardPage wiring
+      // Verify instant cached balances hydration
       assert.ok(
-        content.includes('onInitialReady='),
-        'TransactionAppShell must pass onInitialReady to DashboardPage'
+        content.includes('getCachedBalances'),
+        'TransactionAppShell must restore cached balances from IndexedDB on mount'
       );
-
-      // Verify splash screen overlay is rendered conditionally on isInitialBoot
       assert.ok(
-        content.includes('{isInitialBoot &&'),
-        'TransactionAppShell must conditionally render SplashScreen during isInitialBoot'
+        content.includes('initialBalances={shellBalances}'),
+        'TransactionAppShell must pass initialBalances to DashboardPage to eliminate duplicate calls'
       );
     });
 

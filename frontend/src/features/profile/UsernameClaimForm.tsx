@@ -39,33 +39,41 @@ export function UsernameClaimForm({
   useEffect(() => {
     if (!isEditing) return;
 
-    if (!clean) {
-      setAvailabilityStatus('idle');
-      setSuggestions([]);
-      return;
-    }
-
-    if (!isValidFormat) {
-      setAvailabilityStatus('invalid');
-      setSuggestions([]);
-      return;
-    }
-
-    if (isReserved) {
-      setAvailabilityStatus('reserved');
-      return;
-    }
-
-    if (isSameAsCurrent) {
-      setAvailabilityStatus('available');
-      setSuggestions([]);
-      return;
-    }
-
     let isMounted = true;
-    setIsCheckingAvailability(true);
 
     const timer = setTimeout(async () => {
+      if (!clean) {
+        if (isMounted) {
+          setAvailabilityStatus('idle');
+          setSuggestions([]);
+        }
+        return;
+      }
+
+      if (!isValidFormat) {
+        if (isMounted) {
+          setAvailabilityStatus('invalid');
+          setSuggestions([]);
+        }
+        return;
+      }
+
+      if (isReserved) {
+        if (isMounted) {
+          setAvailabilityStatus('reserved');
+        }
+        return;
+      }
+
+      if (isSameAsCurrent) {
+        if (isMounted) {
+          setAvailabilityStatus('available');
+          setSuggestions([]);
+        }
+        return;
+      }
+
+      if (isMounted) setIsCheckingAvailability(true);
       try {
         const res = await checkUsernameAvailabilityAction(clean);
         if (!isMounted) return;

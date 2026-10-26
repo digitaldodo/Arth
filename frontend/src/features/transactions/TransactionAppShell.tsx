@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
-import { SplashScreen } from '@/components/brand/SplashScreen';
 import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
@@ -27,11 +26,11 @@ import {
   createTransaction,
   createBalanceTransfer,
   createBalanceAdjustment,
-  fetchBalances,
 } from '@/lib/api-client';
 import {
   getPendingMutations,
   removePendingMutation,
+  getCachedBalances,
   setCachedBalances,
 } from '@/lib/offline-db';
 import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
@@ -49,13 +48,6 @@ interface TransactionAppShellProps {
 
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
-// In-memory session boot tracker so splash screen only executes once on app startup
-let hasAppBootedSession = false;
-
-export function __resetSessionBootForTesting() {
-  hasAppBootedSession = false;
-}
-
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
@@ -66,11 +58,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [isStartingBalancesModalOpen, setIsStartingBalancesModalOpen] = useState<boolean>(false);
   const [shellBalances, setShellBalances] = useState<AccountBalancesDTO | null>(null);
-
-  // App initialization splash screen states
-  const [isInitialBoot, setIsInitialBoot] = useState<boolean>(!hasAppBootedSession);
-  const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
-  const [bootError, setBootError] = useState<string | null>(null);
 
   // Offline mutation queue sync state
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
@@ -85,26 +72,27 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   );
 
   // Check pending mutations in IndexedDB
-  const checkPendingMutations = useCallback(async () => {
-    try {
-      const pending = await getPendingMutations();
-      setPendingSyncCount(pending.length);
-    } catch {
-      // IndexedDB unavailable in certain environments
-    }
+  const checkPendingMutations = useCallback(() => {
+    getPendingMutations()
+      .then((pending) => {
+        setPendingSyncCount(pending.length);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     checkPendingMutations();
   }, [refreshTrigger, checkPendingMutations]);
 
-  // Load balances for Settings card
+  // Load initial cached balances for Settings card and Dashboard instant render
   useEffect(() => {
     if (!user) return;
-    fetchBalances()
-      .then((b) => setShellBalances(b))
+    getCachedBalances()
+      .then((b) => {
+        if (b) setShellBalances(b);
+      })
       .catch(() => {});
-  }, [user, refreshTrigger]);
+  }, [user]);
 
   // Synchronize pending outbox mutations with backend
   const handleSyncNow = async () => {
@@ -148,24 +136,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, []);
-
-  const handleInitialReady = (errorMsg?: string) => {
-    if (errorMsg) {
-      setBootError(errorMsg);
-    } else {
-      setBootError(null);
-      hasAppBootedSession = true;
-      setIsFadingOut(true);
-      setTimeout(() => {
-        setIsInitialBoot(false);
-      }, 280);
-    }
-  };
-
-  const handleRetryBoot = () => {
-    setBootError(null);
-    setRefreshTrigger((prev) => prev + 1);
-  };
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
@@ -352,7 +322,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
                 refreshTrigger={refreshTrigger}
-                onInitialReady={isInitialBoot ? handleInitialReady : undefined}
+                initialBalances={shellBalances}
+                onBalancesLoaded={(b) => setShellBalances(b)}
               />
             </div>
 
@@ -660,14 +631,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
         />
       )}
 
-      {/* Initial Application Startup Splash Screen (smoothly transitions out on dashboard ready) */}
-      {isInitialBoot && (
-        <SplashScreen
-          errorMessage={bootError}
-          onRetry={handleRetryBoot}
-          isFadingOut={isFadingOut}
-        />
-      )}
     </div>
   );
 }

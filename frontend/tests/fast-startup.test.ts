@@ -1,0 +1,232 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
+
+describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
+  const loadingPath = path.join(projectRoot, 'src', 'app', 'loading.tsx');
+  const shellPath = path.join(
+    projectRoot,
+    'src',
+    'features',
+    'transactions',
+    'TransactionAppShell.tsx'
+  );
+  const dashboardPath = path.join(
+    projectRoot,
+    'src',
+    'features',
+    'dashboard',
+    'DashboardPage.tsx'
+  );
+  const splashPath = path.join(
+    projectRoot,
+    'src',
+    'components',
+    'brand',
+    'SplashScreen.tsx'
+  );
+  const offlineDbPath = path.join(projectRoot, 'src', 'lib', 'offline-db.ts');
+  const swTemplatePath = path.join(projectRoot, 'src', 'sw', 'sw.template.js');
+  const swScriptPath = path.join(projectRoot, 'public', 'sw.js');
+
+  // ─── 1. Non-Blocking Loading Skeleton Verification ────────────────────────
+  describe('1. Non-blocking App Shell Streaming Skeleton', () => {
+    test('src/app/loading.tsx renders AppShell skeleton with DashboardSkeleton and ArthLogo', () => {
+      assert.ok(fs.existsSync(loadingPath), 'loading.tsx must exist');
+      const content = fs.readFileSync(loadingPath, 'utf8');
+
+      assert.ok(
+        content.includes('DashboardSkeleton'),
+        'loading.tsx must render DashboardSkeleton'
+      );
+      assert.ok(
+        content.includes('ArthLogo'),
+        'loading.tsx must render monochrome ArthLogo in header'
+      );
+      assert.ok(
+        !content.includes('SplashScreen'),
+        'loading.tsx must NOT render full-screen blocking SplashScreen'
+      );
+      assert.ok(
+        content.includes('bg-[var(--bg-canvas)]'),
+        'loading.tsx must use canvas background token'
+      );
+    });
+  });
+
+  // ─── 2. TransactionAppShell Immediate Mount Verification ──────────────────
+  describe('2. TransactionAppShell Immediate Mounting', () => {
+    test('TransactionAppShell removes blocking splash screen overlay and artificial delays', () => {
+      assert.ok(fs.existsSync(shellPath), 'TransactionAppShell.tsx must exist');
+      const content = fs.readFileSync(shellPath, 'utf8');
+
+      assert.ok(
+        !content.includes('{isInitialBoot &&'),
+        'TransactionAppShell must not gate UI behind isInitialBoot overlay'
+      );
+      assert.ok(
+        !content.includes("import { SplashScreen } from '@/components/brand/SplashScreen';"),
+        'TransactionAppShell must not import SplashScreen'
+      );
+      assert.ok(
+        !content.includes('hasAppBootedSession'),
+        'TransactionAppShell must not have session boot blocker'
+      );
+    });
+
+    test('TransactionAppShell loads cached balances on mount and shares with DashboardPage', () => {
+      const content = fs.readFileSync(shellPath, 'utf8');
+
+      assert.ok(
+        content.includes('getCachedBalances'),
+        'TransactionAppShell must read cached balances from IndexedDB on mount'
+      );
+      assert.ok(
+        content.includes('initialBalances={shellBalances}'),
+        'TransactionAppShell must forward cached balances to DashboardPage'
+      );
+      assert.ok(
+        content.includes('onBalancesLoaded='),
+        'TransactionAppShell must receive updated balances from DashboardPage'
+      );
+    });
+  });
+
+  // ─── 3. Stale-While-Revalidate Dashboard Architecture ─────────────────────
+  describe('3. Dashboard Stale-While-Revalidate Architecture', () => {
+    test('DashboardPage retrieves cached summary before initiating background fetch', () => {
+      assert.ok(fs.existsSync(dashboardPath), 'DashboardPage.tsx must exist');
+      const content = fs.readFileSync(dashboardPath, 'utf8');
+
+      assert.ok(
+        content.includes('getCachedDashboardSummary'),
+        'DashboardPage must invoke getCachedDashboardSummary'
+      );
+      assert.ok(
+        content.includes('setCachedDashboardSummary'),
+        'DashboardPage must persist fresh summary to getCachedDashboardSummary'
+      );
+    });
+
+    test('DashboardPage renders non-blocking notification when cached data is shown during failure', () => {
+      const content = fs.readFileSync(dashboardPath, 'utf8');
+
+      assert.ok(
+        content.includes('error && !isAuthError && summary'),
+        'DashboardPage must distinguish cached failure from unpopulated failure'
+      );
+      assert.ok(
+        content.includes('Showing cached ledger data'),
+        'DashboardPage must show clear notification when displaying cached financial data'
+      );
+      assert.ok(
+        content.includes('error && !isAuthError && !summary'),
+        'DashboardPage must show full error card only when NO summary is available'
+      );
+    });
+  });
+
+  // ─── 4. IndexedDB Financial Data Safety & Version Upgrade ─────────────────
+  describe('4. IndexedDB Upgrade & Financial Data Safety', () => {
+    test('offline-db.ts upgrades DB_VERSION to 2 with dashboard_cache store while preserving transactions', () => {
+      assert.ok(fs.existsSync(offlineDbPath), 'offline-db.ts must exist');
+      const content = fs.readFileSync(offlineDbPath, 'utf8');
+
+      assert.ok(
+        content.includes('const DB_VERSION = 2;'),
+        'offline-db must upgrade to version 2'
+      );
+      assert.ok(
+        content.includes("db.createObjectStore('dashboard_cache'"),
+        'offline-db must create dashboard_cache object store'
+      );
+      assert.ok(
+        content.includes("db.createObjectStore('transactions'"),
+        'offline-db must maintain transactions store'
+      );
+      assert.ok(
+        content.includes("db.createObjectStore('pending_mutations'"),
+        'offline-db must maintain pending_mutations outbox store'
+      );
+      assert.ok(
+        content.includes("db.createObjectStore('balances'"),
+        'offline-db must maintain balances store'
+      );
+    });
+
+    test('offline-db.ts exports getCachedDashboardSummary and setCachedDashboardSummary', () => {
+      const content = fs.readFileSync(offlineDbPath, 'utf8');
+
+      assert.ok(
+        content.includes('export async function getCachedDashboardSummary'),
+        'Must export getCachedDashboardSummary'
+      );
+      assert.ok(
+        content.includes('export async function setCachedDashboardSummary'),
+        'Must export setCachedDashboardSummary'
+      );
+    });
+  });
+
+  // ─── 5. Service Worker Navigation Timeout & Fast Fallback ─────────────────
+  describe('5. Service Worker Fast Navigation Strategy', () => {
+    test('sw.template.js enforces fast network timeout with instant App Shell cache fallback', () => {
+      assert.ok(fs.existsSync(swTemplatePath), 'sw.template.js must exist');
+      const content = fs.readFileSync(swTemplatePath, 'utf8');
+
+      assert.ok(
+        content.includes("event.request.mode === 'navigate'"),
+        'Service worker must handle navigation requests'
+      );
+      assert.ok(
+        content.includes('setTimeout(') && content.includes('.abort()'),
+        'Service worker must apply timeout to navigation requests'
+      );
+      assert.ok(
+        content.includes("caches.match('/')"),
+        'Service worker must fall back to cached App Shell'
+      );
+      assert.ok(
+        content.includes('Initial Setup Requires Internet'),
+        'Service worker must display informative screen if offline on first launch'
+      );
+    });
+
+    test('generated public/sw.js matches fast navigation strategy', () => {
+      assert.ok(fs.existsSync(swScriptPath), 'public/sw.js must exist');
+      const content = fs.readFileSync(swScriptPath, 'utf8');
+
+      assert.ok(
+        content.includes("event.request.mode === 'navigate'"),
+        'Generated sw.js must handle navigation requests'
+      );
+      assert.ok(
+        content.includes("caches.match('/')"),
+        'Generated sw.js must fall back to cached App Shell'
+      );
+    });
+  });
+
+  // ─── 6. Splash Screen Component Safety ────────────────────────────────────
+  describe('6. SplashScreen Component Refinements', () => {
+    test('SplashScreen removes 8-second slow connection warning message', () => {
+      assert.ok(fs.existsSync(splashPath), 'SplashScreen.tsx must exist');
+      const content = fs.readFileSync(splashPath, 'utf8');
+
+      assert.ok(
+        !content.includes('Taking longer than usual. Please check your connection.'),
+        'SplashScreen must not show artificial "Taking longer than usual" message'
+      );
+      assert.ok(
+        content.includes('#0D0D0F'),
+        'SplashScreen must preserve #0D0D0F background'
+      );
+    });
+  });
+});

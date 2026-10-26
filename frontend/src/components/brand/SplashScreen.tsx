@@ -20,7 +20,7 @@ export function SplashScreen({
   onRetry,
   isFadingOut = false,
 }: SplashScreenProps) {
-  const [internalMessage, setInternalMessage] = useState<string | null>(null);
+  const internalMessage: string | null = null;
   const [isOffline, setIsOffline] = useState<boolean>(() => {
     if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
       return !navigator.onLine;
@@ -52,26 +52,6 @@ export function SplashScreen({
       window.removeEventListener('offline', handleOffline);
     };
   }, [errorMessage, onRetry]);
-
-  // Stage functional status messages if loading takes longer than expected
-  useEffect(() => {
-    if (errorMessage || isOffline) return;
-
-    // After 2.5s: "Preparing your ledger…"
-    const timer1 = setTimeout(() => {
-      setInternalMessage('Preparing your ledger…');
-    }, 2500);
-
-    // After 8s: "Taking longer than usual. Please check your connection."
-    const timer2 = setTimeout(() => {
-      setInternalMessage('Taking longer than usual. Please check your connection.');
-    }, 8000);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-    };
-  }, [errorMessage, isOffline]);
 
   // Determine current effective message
   const activeMessage =

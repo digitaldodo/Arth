@@ -1,13 +1,14 @@
 import type {
   TransactionDTO,
   AccountBalancesDTO,
+  DashboardSummaryResponse,
   CreateTransactionRequest,
   CreateTransferRequest,
   CreateAdjustmentRequest,
 } from '@arth/contracts';
 
 const DB_NAME = 'arth_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface PendingMutation {
   id: string; // Transaction or Movement UUID
@@ -39,6 +40,10 @@ function openDB(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains('balances')) {
         db.createObjectStore('balances', { keyPath: 'key' });
+      }
+
+      if (!db.objectStoreNames.contains('dashboard_cache')) {
+        db.createObjectStore('dashboard_cache', { keyPath: 'key' });
       }
     };
 
@@ -179,6 +184,45 @@ export async function removePendingMutation(id: string): Promise<void> {
       const tx = db.transaction('pending_mutations', 'readwrite');
       const store = tx.objectStore('pending_mutations');
       store.delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    // Gracefully ignore local caching errors
+  }
+}
+
+// -------------------------------------------------------------
+// Dashboard Summary Cache
+// -------------------------------------------------------------
+
+export async function getCachedDashboardSummary(
+  key: string
+): Promise<DashboardSummaryResponse | null> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('dashboard_cache', 'readonly');
+      const store = tx.objectStore('dashboard_cache');
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.data : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedDashboardSummary(
+  key: string,
+  summary: DashboardSummaryResponse
+): Promise<void> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction('dashboard_cache', 'readwrite');
+      const store = tx.objectStore('dashboard_cache');
+      store.put({ key, data: summary, updatedAt: Date.now() });
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });

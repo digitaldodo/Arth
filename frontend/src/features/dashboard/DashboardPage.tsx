@@ -8,7 +8,7 @@ import {
   resolveDateRangePreset,
 } from '@arth/contracts';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
-import { getCachedBalances, setCachedBalances } from '@/lib/offline-db';
+import { getCachedBalances, setCachedBalances, getCachedDashboardSummary, setCachedDashboardSummary } from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
@@ -21,6 +21,8 @@ interface DashboardPageProps {
   onNavigateToLedger: () => void;
   refreshTrigger?: number;
   onInitialReady?: (error?: string) => void;
+  initialBalances?: AccountBalancesDTO | null;
+  onBalancesLoaded?: (balances: AccountBalancesDTO) => void;
 }
 
 interface DashboardError {
@@ -33,14 +35,17 @@ export function DashboardPage({
   onNavigateToLedger,
   refreshTrigger = 0,
   onInitialReady,
+  initialBalances = null,
+  onBalancesLoaded,
 }: DashboardPageProps) {
   const [preset, setPreset] = useState<DashboardDateRangePreset>('this_month');
   const [dateRange, setDateRange] = useState(() =>
     resolveDateRangePreset('this_month')
   );
 
-  const [balances, setBalances] = useState<AccountBalancesDTO | null>(null);
-  const [balancesLoading, setBalancesLoading] = useState(true);
+  const [balances, setBalances] = useState<AccountBalancesDTO | null>(initialBalances);
+  const [balancesLoading, setBalancesLoading] = useState(!initialBalances);
+  const rangeKey = `${dateRange.start_date}_${dateRange.end_date}`;
 
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,11 +55,14 @@ export function DashboardPage({
   useEffect(() => {
     let isMounted = true;
 
-    getCachedBalances().then((cached) => {
-      if (cached && isMounted) {
-        setBalances(cached);
-      }
-    });
+    if (!initialBalances) {
+      getCachedBalances().then((cached) => {
+        if (cached && isMounted) {
+          setBalances(cached);
+          setBalancesLoading(false);
+        }
+      }).catch(() => {});
+    }
 
     fetchBalances()
       .then((data) => {
@@ -62,6 +70,7 @@ export function DashboardPage({
         setBalances(data);
         setBalancesLoading(false);
         setCachedBalances(data);
+        onBalancesLoaded?.(data);
       })
       .catch(() => {
         if (isMounted) setBalancesLoading(false);
@@ -70,11 +79,21 @@ export function DashboardPage({
     return () => {
       isMounted = false;
     };
-  }, [refreshTrigger]);
+  }, [refreshTrigger, initialBalances, onBalancesLoaded]);
 
-  // Fetch dashboard summary
+  // Fetch dashboard summary (cached + revalidated)
   useEffect(() => {
     let isMounted = true;
+
+    // Check local cache first for instant render
+    getCachedDashboardSummary(rangeKey)
+      .then((cached) => {
+        if (cached && isMounted) {
+          setSummary(cached);
+          setLoading(false);
+        }
+      })
+      .catch(() => {});
 
     fetchDashboardSummary(dateRange)
       .then((data) => {
@@ -82,6 +101,7 @@ export function DashboardPage({
         setSummary(data);
         setError(null);
         setLoading(false);
+        setCachedDashboardSummary(rangeKey, data).catch(() => {});
         onInitialReady?.();
       })
       .catch((err: unknown) => {
@@ -99,7 +119,7 @@ export function DashboardPage({
     return () => {
       isMounted = false;
     };
-  }, [dateRange, refreshTrigger, onInitialReady]);
+  }, [dateRange, refreshTrigger, onInitialReady, rangeKey]);
 
   const handleRetry = () => {
     setLoading(true);
@@ -240,8 +260,27 @@ export function DashboardPage({
         </div>
       )}
 
-      {/* Backend / Gateway Error State */}
-      {error && !isAuthError && (
+      {/* Non-blocking Offline Banner when cached data is displayed */}
+      {error && !isAuthError && summary && (
+        <div className="flex items-center justify-between p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="font-medium">
+              Showing cached ledger data. Unable to refresh from server ({error.message}).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="text-xs font-semibold text-amber-300 hover:text-white underline ml-3 shrink-0 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Backend / Gateway Error State (when NO summary is available) */}
+      {error && !isAuthError && !summary && (
         <div className="p-5 sm:p-6 bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-xl space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
