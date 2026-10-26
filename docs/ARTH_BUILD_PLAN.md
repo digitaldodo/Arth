@@ -375,7 +375,7 @@
 
 | Task | Module | Status |
 |---|---|---|
-| Google Service Account OAuth client | `frontend/src/lib/server/google-auth.ts` — native RS256 JWT assertion per RFC 7523 | Complete ✅ |
+| Google Service Account OAuth client | `frontend/src/lib/server/google-auth.ts` — keyless GCP Workload Identity Federation (Vercel OIDC + Google STS) with local RSA fallback | Complete ✅ |
 | Google Sheets API client | `frontend/src/lib/server/google-sheets-client.ts` — URL parser, access verification, header init, idempotent row sync | Complete ✅ |
 | Outbox worker daemon & claiming | `frontend/src/lib/server/sheets-worker.ts` & `fn_claim_outbox_events` — `FOR UPDATE SKIP LOCKED` atomic claiming, lease expiry recovery, exponential backoff | Complete ✅ |
 | Outbox drain Route Handler | `frontend/src/app/api/sync/sheets/route.ts` — authenticated by `CRON_SECRET` | Complete ✅ |

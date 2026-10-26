@@ -14,6 +14,8 @@
     "@arth/contracts": "workspace:*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/oidc": "^4.0.3",
+    "google-auth-library": "^11.3.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
     "next": "16.4.3",

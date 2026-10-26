@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Google Sheets integration is not configured on the server. Please check environment variables (GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY).',
+            'Google Sheets integration is not configured on the server. Please check environment variables (GCP_PROJECT_NUMBER, GCP_WORKLOAD_IDENTITY_POOL_ID, GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID, GCP_SERVICE_ACCOUNT_EMAIL for Vercel OIDC, or GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY for local development).',
         },
         { status: 503 }
       );

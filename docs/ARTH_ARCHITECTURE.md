@@ -557,7 +557,12 @@ db.version(1).stores({
   - Triggered every 5 minutes by Vercel Cron at `/api/sync/sheets`.
   - Authenticated via `Authorization: Bearer <CRON_SECRET>`.
   - Manual sync available on-demand in Settings via `/api/backend/sheets/sync`.
-  - Google Service Account RSA keys signed natively using Node.js `crypto` (`RS256` per RFC 7523) without heavy third-party packages.
+  - **Keyless Production Authentication (Workload Identity Federation)**:
+    - Eliminates static RSA private keys in compliance with GCP organization policy `iam.disableServiceAccountKeyCreation`.
+    - Next.js serverless functions obtain short-lived OIDC tokens via `@vercel/oidc`.
+    - Exchanged securely through Google Security Token Service (STS) and IAM service account impersonation (`google-auth-library` `ExternalAccountClient`).
+    - Configured via `GCP_PROJECT_NUMBER`, `GCP_WORKLOAD_IDENTITY_POOL_ID`, `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID`, and `GCP_SERVICE_ACCOUNT_EMAIL`.
+    - Local development fallback: RSA private keys via `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` / `google-auth-library` `JWT`.
 
 ### 7.3 Database backup
 

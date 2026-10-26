@@ -311,7 +311,7 @@ export function SheetsConnectionCard() {
             Service Account Configuration Required
           </div>
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Google Sheets synchronization requires <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> in server environment variables.
+            Google Sheets synchronization requires Workload Identity Federation (WIF) or Service Account credentials in server environment variables.
           </p>
         </div>
       ) : connected && connection && !isChangingSheet ? (

@@ -108,9 +108,17 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=       # server only
 
-# Google Sheets
-GOOGLE_SERVICE_ACCOUNT_EMAIL=    # server only
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=  # server only
+# Google Sheets (Keyless Workload Identity Federation via Vercel OIDC - Production)
+GCP_PROJECT_ID=                  # server only
+GCP_PROJECT_NUMBER=              # server only
+GCP_SERVICE_ACCOUNT_EMAIL=       # server only
+GCP_WORKLOAD_IDENTITY_POOL_ID=   # server only
+GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID= # server only
+GCP_AUDIENCE=                    # server only (optional override)
+
+# Google Sheets (Fallback for Local Development Only)
+GOOGLE_SERVICE_ACCOUNT_EMAIL=    # server only (optional fallback)
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY= # server only (optional fallback)
 GOOGLE_SHEETS_SPREADSHEET_ID=    # server only
 
 # App
@@ -125,7 +133,7 @@ Browser (client)
 
 Next.js Server (Route Handlers / Server Actions)
   └── supabase-js service-role key  → admin writes, migrations
-  └── Google service account         → Sheets API
+  └── Vercel OIDC + Google STS      → keyless service account impersonation → Sheets API
 
 Supabase
   └── RLS policies enforce user isolation

@@ -1,17 +1,24 @@
-import crypto from 'node:crypto';
+import { getVercelOidcToken } from '@vercel/oidc';
+import {
+  BaseExternalAccountClient,
+  ExternalAccountClient,
+  JWT,
+} from 'google-auth-library';
 
-/**
- * In-memory token cache to prevent excessive token requests to Google OAuth.
- */
-let cachedToken: {
-  accessToken: string;
-  expiresAt: number;
-} | null = null;
+export type GoogleAuthMode = 'keyless_oidc' | 'service_account_key' | 'unconfigured';
 
 export interface GoogleServiceAccountCredentials {
   email: string | null;
   privateKey: string | null;
 }
+
+export interface CreateGcpExternalAccountClientOptions {
+  customSubjectTokenSupplier?: (context: { audience?: string }) => Promise<string>;
+}
+
+export const GOOGLE_SHEETS_SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+];
 
 /**
  * Normalizes a Google service account PEM private key from various environment variable formats.
@@ -132,156 +139,231 @@ export function getGoogleCredentials(): GoogleServiceAccountCredentials {
 }
 
 /**
- * Returns whether Google service account credentials are fully configured.
+ * Returns the GCP Workload Identity Pool Provider resource URI.
+ * Form: //iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}
  */
-export function isGoogleServiceAccountConfigured(): boolean {
-  const { email, privateKey } = getGoogleCredentials();
-  return Boolean(
-    email &&
-      privateKey &&
-      privateKey.includes('BEGIN') &&
-      privateKey.includes('PRIVATE KEY')
-  );
+export function getGcpProviderResourceName(): string | null {
+  const projectNumber = process.env.GCP_PROJECT_NUMBER?.trim();
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID?.trim();
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID?.trim();
+
+  if (projectNumber && poolId && providerId) {
+    return `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  }
+
+  const audience = process.env.GCP_AUDIENCE?.trim();
+  if (audience && audience.startsWith('//iam.googleapis.com/projects/')) {
+    return audience;
+  }
+
+  return null;
 }
 
 /**
- * Returns the public service account email address for UI display.
+ * Returns the expected OIDC audience claim for Vercel OIDC token requests.
+ * Defaults to the GCP Workload Identity Pool Provider resource URI if GCP_AUDIENCE is not explicitly set.
+ */
+export function getGcpAudience(): string | null {
+  return process.env.GCP_AUDIENCE?.trim() || getGcpProviderResourceName();
+}
+
+/**
+ * Returns the public service account email address for UI display and impersonation.
+ * Prioritizes GCP_SERVICE_ACCOUNT_EMAIL, then GOOGLE_SERVICE_ACCOUNT_EMAIL,
+ * then credentials parsed from JSON strings.
  */
 export function getServiceAccountEmail(): string | null {
+  const gcpEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL?.trim();
+  if (gcpEmail) return gcpEmail;
+
+  const googleEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  if (googleEmail) return googleEmail;
+
   const { email } = getGoogleCredentials();
   return email;
 }
 
 /**
- * Generates an OAuth2 access token for Google Sheets API using the service account credentials.
- * Uses Node.js native crypto to sign RS256 JWT assertion per RFC 7523.
+ * Determines the active authentication mode for Google Sheets integration.
+ * - 'keyless_oidc': Workload Identity Federation via Vercel OIDC (recommended production setup)
+ * - 'service_account_key': Direct RSA private key credentials (local development fallback)
+ * - 'unconfigured': Missing required configuration
  */
-export async function getGoogleSheetsAccessToken(): Promise<string> {
+export function getGoogleAuthMode(): GoogleAuthMode {
+  const saEmail = getServiceAccountEmail();
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID?.trim();
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID?.trim();
+  const projectNumber = process.env.GCP_PROJECT_NUMBER?.trim();
+  const audience = process.env.GCP_AUDIENCE?.trim();
+
+  if (saEmail && poolId && providerId && (projectNumber || audience)) {
+    return 'keyless_oidc';
+  }
+
   const { email, privateKey } = getGoogleCredentials();
-
-  if (!email || !privateKey) {
-    throw new Error(
-      'Google Service Account credentials not configured. Please set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.'
-    );
-  }
-
   if (
-    !privateKey.includes('BEGIN') ||
-    !privateKey.includes('PRIVATE KEY')
+    email &&
+    privateKey &&
+    privateKey.includes('BEGIN') &&
+    privateKey.includes('PRIVATE KEY')
   ) {
-    console.error(
-      '[GoogleAuth] Configured private key is missing PEM BEGIN/END markers.'
-    );
-    throw new Error(
-      'Google Sheets authentication failed. Please verify the server configuration and try again.'
-    );
+    return 'service_account_key';
   }
 
-  // Check cached token (with 5-minute safety buffer)
-  const now = Math.floor(Date.now() / 1000);
-  if (cachedToken && cachedToken.expiresAt > now + 300) {
-    return cachedToken.accessToken;
-  }
-
-  // Build JWT Header & Payload
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT',
-  };
-
-  const claimSet = {
-    iss: email,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-
-  const base64UrlEncode = (obj: object | string): string => {
-    const str = typeof obj === 'string' ? obj : JSON.stringify(obj);
-    return Buffer.from(str)
-      .toString('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-  };
-
-  const encodedHeader = base64UrlEncode(header);
-  const encodedClaimSet = base64UrlEncode(claimSet);
-  const signInput = `${encodedHeader}.${encodedClaimSet}`;
-
-  // Sign using RSA-SHA256 with safe error interception
-  let signature: string;
-  try {
-    const signer = crypto.createSign('RSA-SHA256');
-    signer.update(signInput);
-    signer.end();
-    signature = signer
-      .sign(privateKey)
-      .toString('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-  } catch (err: unknown) {
-    const errMessage = err instanceof Error ? err.message : String(err);
-    console.error(
-      '[GoogleAuth] Failed to sign JWT with private key:',
-      errMessage.includes('DECODER') ? 'PEM DECODER error (invalid key format)' : errMessage
-    );
-    throw new Error(
-      'Google Sheets authentication failed. Please verify the server configuration and try again.'
-    );
-  }
-
-  const assertion = `${signInput}.${signature}`;
-
-  // Exchange assertion for Google OAuth2 access token
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    console.error(
-      `[GoogleAuth] Google OAuth2 token exchange rejected (${res.status}):`,
-      errorBody
-    );
-    if (res.status === 400 || res.status === 401) {
-      if (errorBody.includes('invalid_grant')) {
-        throw new Error(
-          'Google Sheets authentication failed (invalid grant). Please verify the service account credentials in server configuration.'
-        );
-      }
-    }
-    throw new Error(
-      'Google Sheets authentication failed. Please verify the server configuration and try again.'
-    );
-  }
-
-  const tokenData = (await res.json()) as {
-    access_token: string;
-    expires_in: number;
-    token_type: string;
-  };
-
-  cachedToken = {
-    accessToken: tokenData.access_token,
-    expiresAt: now + tokenData.expires_in,
-  };
-
-  return tokenData.access_token;
+  return 'unconfigured';
 }
 
 /**
- * Resets token cache (useful in tests).
+ * Returns whether Google service account authentication is configured.
+ * True if either keyless WIF (Vercel OIDC) or RSA service-account key credentials are provided.
+ */
+export function isGoogleServiceAccountConfigured(): boolean {
+  return getGoogleAuthMode() !== 'unconfigured';
+}
+
+/**
+ * Constructs an ExternalAccountClient for Google Cloud Workload Identity Federation using Vercel OIDC.
+ */
+export function createGcpExternalAccountClient(
+  options?: CreateGcpExternalAccountClientOptions
+): BaseExternalAccountClient | null {
+  const serviceAccountEmail = getServiceAccountEmail();
+  const stsAudience = getGcpProviderResourceName() || getGcpAudience();
+  const oidcAudience = getGcpAudience();
+
+  if (!serviceAccountEmail || !stsAudience) {
+    return null;
+  }
+
+  const client = ExternalAccountClient.fromJSON({
+    type: 'external_account',
+    audience: stsAudience,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:jwt',
+    token_url: 'https://sts.googleapis.com/v1/token',
+    service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    scopes: GOOGLE_SHEETS_SCOPES,
+    subject_token_supplier: {
+      getSubjectToken: async () => {
+        if (options?.customSubjectTokenSupplier) {
+          return await options.customSubjectTokenSupplier({
+            audience: oidcAudience || undefined,
+          });
+        }
+        return await getVercelOidcToken(
+          oidcAudience ? { audience: oidcAudience } : undefined
+        );
+      },
+    },
+  });
+
+  return client;
+}
+
+// In-memory client caches (managed by google-auth-library with internal token reuse & expiration checks)
+let cachedExternalClient: BaseExternalAccountClient | null = null;
+let cachedJwtClient: JWT | null = null;
+
+export function setCachedExternalClient(client: BaseExternalAccountClient | null): void {
+  cachedExternalClient = client;
+}
+
+export function setCachedJwtClient(client: JWT | null): void {
+  cachedJwtClient = client;
+}
+
+/**
+ * Resets cached clients and access tokens (useful for testing or configuration changes).
  */
 export function clearGoogleTokenCache(): void {
-  cachedToken = null;
+  cachedExternalClient = null;
+  cachedJwtClient = null;
+}
+
+/**
+ * Generates an OAuth2 access token for Google Sheets API operations.
+ * - In keyless mode (Vercel production): exchanges short-lived Vercel OIDC token through
+ *   Google STS and impersonates the target Google Service Account.
+ * - In service-account-key mode (local development fallback): signs RS256 JWT using
+ *   the configured private key.
+ */
+export async function getGoogleSheetsAccessToken(): Promise<string> {
+  const mode = getGoogleAuthMode();
+
+  if (mode === 'unconfigured') {
+    throw new Error(
+      'Google Sheets integration is not configured. For keyless production (Vercel OIDC), configure GCP_PROJECT_NUMBER, GCP_WORKLOAD_IDENTITY_POOL_ID, GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID, and GCP_SERVICE_ACCOUNT_EMAIL. For local development, configure GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.'
+    );
+  }
+
+  if (mode === 'keyless_oidc') {
+    try {
+      if (!cachedExternalClient) {
+        cachedExternalClient = createGcpExternalAccountClient();
+      }
+      if (!cachedExternalClient) {
+        throw new Error(
+          'Failed to initialize Google Cloud ExternalAccountClient. Please verify GCP environment variables.'
+        );
+      }
+
+      const tokenResponse = await cachedExternalClient.getAccessToken();
+      const token =
+        typeof tokenResponse === 'string'
+          ? tokenResponse
+          : tokenResponse?.token;
+
+      if (!token) {
+        throw new Error(
+          'Google Cloud STS / IAM impersonation did not return an access token.'
+        );
+      }
+
+      return token;
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      console.error(
+        '[GoogleAuth:Keyless] Failed to obtain Google Sheets access token via Vercel OIDC:',
+        errMessage
+      );
+      throw new Error(`Google Sheets authentication failed: ${errMessage}`);
+    }
+  }
+
+  // mode === 'service_account_key'
+  try {
+    if (!cachedJwtClient) {
+      const { email, privateKey } = getGoogleCredentials();
+      if (!email || !privateKey) {
+        throw new Error(
+          'Google Service Account credentials not configured. Please set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.'
+        );
+      }
+      cachedJwtClient = new JWT({
+        email,
+        key: privateKey,
+        scopes: GOOGLE_SHEETS_SCOPES,
+      });
+    }
+
+    const tokenResponse = await cachedJwtClient.getAccessToken();
+    const token =
+      typeof tokenResponse === 'string'
+        ? tokenResponse
+        : tokenResponse?.token;
+
+    if (!token) {
+      throw new Error('Google OAuth2 JWT signing did not return an access token.');
+    }
+
+    return token;
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      '[GoogleAuth:ServiceAccountKey] Failed to obtain Google Sheets access token:',
+      errMessage.includes('DECODER')
+        ? 'PEM DECODER error (invalid key format)'
+        : errMessage
+    );
+    throw new Error(`Google Sheets authentication failed: ${errMessage}`);
+  }
 }
