@@ -30,6 +30,8 @@ export function SheetsConnectionCard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [hasConnectionError, setHasConnectionError] = useState(false);
+  const [isChangingSheet, setIsChangingSheet] = useState(false);
 
   const fetchConnection = async () => {
     try {
@@ -76,10 +78,19 @@ export function SheetsConnectionCard() {
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSheetUrlInput(e.target.value);
+    if (hasConnectionError) {
+      setHasConnectionError(false);
+      setErrorMessage(null);
+    }
+  };
+
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+    setHasConnectionError(false);
 
     if (!sheetUrlInput.trim()) {
       setErrorMessage('Please enter a Google Sheet URL or Spreadsheet ID.');
@@ -97,14 +108,18 @@ export function SheetsConnectionCard() {
       const data = await res.json();
       if (!res.ok) {
         setErrorMessage(data.error || 'Failed to connect Google Sheet.');
+        setHasConnectionError(true);
       } else {
         setConnected(true);
         setConnection(data.connection);
         setSuccessMessage('Google Sheet connected and initialized successfully!');
         setSheetUrlInput('');
+        setHasConnectionError(false);
+        setIsChangingSheet(false);
       }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Network error');
+      setHasConnectionError(true);
     } finally {
       setConnecting(false);
     }
@@ -185,6 +200,8 @@ export function SheetsConnectionCard() {
       if (res.ok) {
         setConnected(false);
         setConnection(null);
+        setIsChangingSheet(false);
+        setHasConnectionError(false);
         setSuccessMessage('Google Sheet disconnected.');
       } else {
         const data = await res.json();
@@ -266,7 +283,7 @@ export function SheetsConnectionCard() {
             Google Sheets synchronization requires <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> in server environment variables.
           </p>
         </div>
-      ) : connected && connection ? (
+      ) : connected && connection && !isChangingSheet ? (
         /* Connected View */
         <div className="space-y-4 pt-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-[var(--bg-surface-subtle)] p-3 rounded-lg border border-[var(--border-hairline)]">
@@ -310,40 +327,77 @@ export function SheetsConnectionCard() {
             <button
               type="button"
               onClick={handleSyncNow}
-              disabled={syncing || reconciling || retrying}
-              className="px-3 py-1.5 text-xs font-medium bg-[var(--text-primary)] text-[var(--bg-app)] hover:opacity-90 rounded-md transition-opacity cursor-pointer disabled:opacity-50"
+              disabled={syncing || reconciling || retrying || disconnecting}
+              className="px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {syncing ? 'Syncing...' : 'Sync Now'}
             </button>
             <button
               type="button"
               onClick={handleRetryFailed}
-              disabled={syncing || reconciling || retrying}
-              className="px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+              disabled={syncing || reconciling || retrying || disconnecting}
+              className="px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retrying ? 'Retrying...' : 'Retry Failed Syncs'}
             </button>
             <button
               type="button"
               onClick={handleReconcile}
-              disabled={syncing || reconciling || retrying}
+              disabled={syncing || reconciling || retrying || disconnecting}
+              className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {reconciling ? 'Full Reconcile' : 'Full Reconcile'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsChangingSheet(true);
+                setSheetUrlInput(connection.spreadsheet_url || '');
+                setErrorMessage(null);
+                setSuccessMessage(null);
+                setHasConnectionError(false);
+              }}
+              disabled={syncing || reconciling || retrying || disconnecting}
               className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer disabled:opacity-50"
             >
-              {reconciling ? 'Reconciling...' : 'Full Reconcile'}
+              Change Sheet
             </button>
             <button
               type="button"
               onClick={handleDisconnect}
               disabled={disconnecting}
-              className="px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-md transition-colors cursor-pointer ml-auto disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-md transition-colors cursor-pointer ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {disconnecting ? 'Disconnecting...' : 'Disconnect'}
             </button>
           </div>
         </div>
       ) : (
-        /* Not Connected: Setup Form */
+        /* Not Connected or Changing Sheet: Setup Form */
         <form onSubmit={handleConnect} className="space-y-4 pt-1">
+          {connected && connection && (
+            <div className="p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-[var(--text-primary)]">Change or Reconnect Google Sheet</span>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Enter a new Google Sheet URL below to pair another spreadsheet.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangingSheet(false);
+                  setSheetUrlInput('');
+                  setErrorMessage(null);
+                  setHasConnectionError(false);
+                }}
+                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline cursor-pointer"
+              >
+                Back to current sheet
+              </button>
+            </div>
+          )}
+
           {serviceAccountEmail && (
             <div className="p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs space-y-1.5">
               <div className="font-semibold text-[var(--text-primary)]">
@@ -369,24 +423,69 @@ export function SheetsConnectionCard() {
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-[var(--text-primary)]">
-              Step 2: Paste Google Sheet URL or Spreadsheet ID
+              {connected ? 'Paste New Google Sheet URL or ID' : 'Step 2: Paste Google Sheet URL or Spreadsheet ID'}
             </label>
             <input
               type="text"
               value={sheetUrlInput}
-              onChange={(e) => setSheetUrlInput(e.target.value)}
+              onChange={handleInputChange}
               placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs.../edit"
-              className="w-full px-3 py-2 text-xs bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:border-[var(--text-primary)] text-[var(--text-primary)] font-mono"
+              className="w-full px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)] text-[var(--text-primary)] font-mono transition-colors"
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={connecting || !sheetUrlInput.trim()}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-medium bg-[var(--text-primary)] text-[var(--bg-app)] hover:opacity-90 rounded-lg transition-opacity cursor-pointer disabled:opacity-50"
-          >
-            {connecting ? 'Validating & Connecting...' : 'Connect Spreadsheet'}
-          </button>
+          <div className="flex items-center gap-2.5 pt-1">
+            <button
+              type="submit"
+              disabled={connecting || !sheetUrlInput.trim()}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+            >
+              {connecting && (
+                <svg
+                  className="w-3.5 h-3.5 animate-spin text-[var(--action-primary-fg)]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              )}
+              <span>
+                {connecting
+                  ? 'Connecting…'
+                  : hasConnectionError
+                  ? 'Retry Connection'
+                  : 'Connect Google Sheet'}
+              </span>
+            </button>
+
+            {isChangingSheet && connected && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangingSheet(false);
+                  setSheetUrlInput('');
+                  setErrorMessage(null);
+                  setHasConnectionError(false);
+                }}
+                className="px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       )}
     </div>
