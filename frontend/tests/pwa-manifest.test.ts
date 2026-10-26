@@ -40,8 +40,8 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
     assert.equal(m.scope, '/');
     assert.equal(m.id, '/');
     assert.equal(m.display, 'standalone');
-    assert.equal(m.background_color, '#FBFBF9');
-    assert.equal(m.theme_color, '#1C1917');
+    assert.equal(m.background_color, '#0D0D0F');
+    assert.equal(m.theme_color, '#0D0D0F');
     assert.equal(m.lang, 'en-IN');
     assert.equal(m.dir, 'ltr');
     assert.equal(m.prefer_related_applications, false);

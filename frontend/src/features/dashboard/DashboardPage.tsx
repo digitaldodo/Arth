@@ -17,6 +17,7 @@ interface DashboardPageProps {
   onOpenQuickAdd: () => void;
   onNavigateToLedger: () => void;
   refreshTrigger?: number;
+  onInitialReady?: (error?: string) => void;
 }
 
 interface DashboardError {
@@ -28,6 +29,7 @@ export function DashboardPage({
   onOpenQuickAdd,
   onNavigateToLedger,
   refreshTrigger = 0,
+  onInitialReady,
 }: DashboardPageProps) {
   const [preset, setPreset] = useState<DashboardDateRangePreset>('this_month');
   const [dateRange, setDateRange] = useState(() =>
@@ -47,6 +49,7 @@ export function DashboardPage({
         setSummary(data);
         setError(null);
         setLoading(false);
+        onInitialReady?.();
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
@@ -57,12 +60,13 @@ export function DashboardPage({
         const statusCode = (err as { statusCode?: number })?.statusCode;
         setError({ message, statusCode });
         setLoading(false);
+        onInitialReady?.(message);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [dateRange, refreshTrigger]);
+  }, [dateRange, refreshTrigger, onInitialReady]);
 
   const handleRetry = () => {
     setLoading(true);
@@ -72,6 +76,7 @@ export function DashboardPage({
         setSummary(data);
         setError(null);
         setLoading(false);
+        onInitialReady?.();
       })
       .catch((err: unknown) => {
         const message =
@@ -81,6 +86,7 @@ export function DashboardPage({
         const statusCode = (err as { statusCode?: number })?.statusCode;
         setError({ message, statusCode });
         setLoading(false);
+        onInitialReady?.(message);
       });
   };
 

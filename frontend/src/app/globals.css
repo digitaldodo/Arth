@@ -197,6 +197,14 @@
   box-sizing: border-box;
 }
 
+html {
+  background-color: #0D0D0F;
+}
+
+html.light, [data-theme="light"] {
+  background-color: #FBFBF9;
+}
+
 body {
   background-color: var(--bg-canvas);
   color: var(--text-primary);

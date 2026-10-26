@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
+import { SplashScreen } from '@/components/brand/SplashScreen';
 import { QuickAddModal } from './QuickAddModal';
 import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
@@ -28,6 +29,13 @@ interface TransactionAppShellProps {
 
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
+// In-memory session boot tracker so splash screen only executes once on app startup
+let hasAppBootedSession = false;
+
+export function __resetSessionBootForTesting() {
+  hasAppBootedSession = false;
+}
+
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
@@ -36,6 +44,29 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>(user?.username);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+
+  // App initialization splash screen states
+  const [isInitialBoot, setIsInitialBoot] = useState<boolean>(!hasAppBootedSession);
+  const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
+  const [bootError, setBootError] = useState<string | null>(null);
+
+  const handleInitialReady = (errorMsg?: string) => {
+    if (errorMsg) {
+      setBootError(errorMsg);
+    } else {
+      setBootError(null);
+      hasAppBootedSession = true;
+      setIsFadingOut(true);
+      setTimeout(() => {
+        setIsInitialBoot(false);
+      }, 280);
+    }
+  };
+
+  const handleRetryBoot = () => {
+    setBootError(null);
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
@@ -200,6 +231,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
                 refreshTrigger={refreshTrigger}
+                onInitialReady={isInitialBoot ? handleInitialReady : undefined}
               />
             )}
 
@@ -451,6 +483,15 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           isOpen={true}
           onClose={() => setIsDeleteModalOpen(false)}
           userEmail={user?.email}
+        />
+      )}
+
+      {/* Initial Application Startup Splash Screen (smoothly transitions out on dashboard ready) */}
+      {isInitialBoot && (
+        <SplashScreen
+          errorMessage={bootError}
+          onRetry={handleRetryBoot}
+          isFadingOut={isFadingOut}
         />
       )}
     </div>
