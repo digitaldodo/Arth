@@ -1,11 +1,11 @@
 /**
  * Arth Progressive Web App Service Worker
- * Version: v1-tniz9r
+ * Version: v1-tnizq4
  * Precaches core application shell, styles, and branding assets for instant startup.
  * Authenticated API endpoints and auth routes are strictly excluded from Service Worker Cache API.
  */
 
-const SW_VERSION = 'v1-tniz9r';
+const SW_VERSION = 'v1-tnizq4';
 const CACHE_NAME = 'arth-shell-v1-' + SW_VERSION;
 
 const PRECACHE_ASSETS = [

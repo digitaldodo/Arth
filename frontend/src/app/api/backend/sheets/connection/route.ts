@@ -129,8 +129,21 @@ export async function POST(req: NextRequest) {
       connection: savedConnection,
     });
   } catch (err: unknown) {
-    const message =
+    const rawMessage =
       err instanceof Error ? err.message : 'Failed to connect Google Sheet';
+    console.error('[SheetsConnection] Error connecting Google Sheet:', rawMessage);
+
+    let message = rawMessage;
+    if (
+      rawMessage.includes('DECODER') ||
+      rawMessage.includes('unsupported') ||
+      rawMessage.includes('1E08010C') ||
+      rawMessage.includes('routines')
+    ) {
+      message =
+        'Google Sheets authentication failed. Please verify the server configuration and try again.';
+    }
+
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

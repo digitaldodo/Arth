@@ -8,20 +8,148 @@ let cachedToken: {
   expiresAt: number;
 } | null = null;
 
+export interface GoogleServiceAccountCredentials {
+  email: string | null;
+  privateKey: string | null;
+}
+
+/**
+ * Normalizes a Google service account PEM private key from various environment variable formats.
+ * Handles:
+ * - Literal \n and \\n unescaping
+ * - Surrounding quotes (double quotes, single quotes, escaped quotes)
+ * - Complete JSON credentials parsing if user pasted JSON into private key or key env
+ * - Windows CRLF line endings
+ * - Preserves existing valid newlines without corrupting
+ */
+export function normalizeGooglePrivateKey(rawInput?: string | null): string | null {
+  if (!rawInput || typeof rawInput !== 'string') return null;
+
+  let key = rawInput.trim();
+  if (!key) return null;
+
+  // 1. If the input is wrapped in JSON (e.g. user pasted the whole service account key file)
+  if (key.startsWith('{') && key.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(key);
+      if (parsed.private_key && typeof parsed.private_key === 'string') {
+        key = parsed.private_key.trim();
+      }
+    } catch {
+      // Continue parsing as raw string
+    }
+  }
+
+  // 2. Strip surrounding escaped quotes: \"...\"
+  if (key.startsWith('\\"') && key.endsWith('\\"') && key.length > 4) {
+    key = key.slice(2, -2).trim();
+  }
+
+  // 3. Strip surrounding quotes: "..." or '...'
+  if (
+    (key.startsWith('"') && key.endsWith('"') && key.length > 2) ||
+    (key.startsWith("'") && key.endsWith("'") && key.length > 2)
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+
+  // 4. Handle escaped newlines
+  if (key.includes('\\\\n')) {
+    key = key.replace(/\\\\n/g, '\n');
+  }
+  if (key.includes('\\n')) {
+    key = key.replace(/\\n/g, '\n');
+  }
+
+  // 5. Standardize carriage returns
+  key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // 6. Strip any trailing/leading whitespace or stray quotes after unescaping
+  key = key.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"') && key.length > 2) ||
+    (key.startsWith("'") && key.endsWith("'") && key.length > 2)
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+
+  return key;
+}
+
+/**
+ * Derives Google service account credentials from supported environment variables.
+ * Prioritizes GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+ * with fallbacks for complete JSON credential strings in GOOGLE_SERVICE_ACCOUNT_KEY,
+ * GOOGLE_CREDENTIALS, or GOOGLE_APPLICATION_CREDENTIALS.
+ */
+export function getGoogleCredentials(): GoogleServiceAccountCredentials {
+  let email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() || null;
+  let rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim() || null;
+
+  // Fallback 1: Check if full JSON credential was placed in GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_CREDENTIALS
+  if (!email || !rawKey) {
+    const jsonEnv =
+      process.env.GOOGLE_SERVICE_ACCOUNT_KEY?.trim() ||
+      process.env.GOOGLE_CREDENTIALS?.trim() ||
+      process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+
+    if (jsonEnv && jsonEnv.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(jsonEnv);
+        if (!email && parsed.client_email) {
+          email = String(parsed.client_email).trim();
+        }
+        if (!rawKey && parsed.private_key) {
+          rawKey = String(parsed.private_key).trim();
+        }
+      } catch {
+        // Not valid JSON
+      }
+    }
+  }
+
+  // Fallback 2: Check if user pasted full JSON into GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  if (rawKey && rawKey.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawKey);
+      if (!email && parsed.client_email) {
+        email = String(parsed.client_email).trim();
+      }
+      if (parsed.private_key) {
+        rawKey = String(parsed.private_key).trim();
+      }
+    } catch {
+      // Not valid JSON
+    }
+  }
+
+  const privateKey = normalizeGooglePrivateKey(rawKey);
+
+  return {
+    email: email || null,
+    privateKey: privateKey || null,
+  };
+}
+
 /**
  * Returns whether Google service account credentials are fully configured.
  */
 export function isGoogleServiceAccountConfigured(): boolean {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-  const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim();
-  return Boolean(email && key);
+  const { email, privateKey } = getGoogleCredentials();
+  return Boolean(
+    email &&
+      privateKey &&
+      privateKey.includes('BEGIN') &&
+      privateKey.includes('PRIVATE KEY')
+  );
 }
 
 /**
  * Returns the public service account email address for UI display.
  */
 export function getServiceAccountEmail(): string | null {
-  return process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() || null;
+  const { email } = getGoogleCredentials();
+  return email;
 }
 
 /**
@@ -29,8 +157,7 @@ export function getServiceAccountEmail(): string | null {
  * Uses Node.js native crypto to sign RS256 JWT assertion per RFC 7523.
  */
 export async function getGoogleSheetsAccessToken(): Promise<string> {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-  let privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim();
+  const { email, privateKey } = getGoogleCredentials();
 
   if (!email || !privateKey) {
     throw new Error(
@@ -38,9 +165,16 @@ export async function getGoogleSheetsAccessToken(): Promise<string> {
     );
   }
 
-  // Handle environment variables where newlines were escaped as literal `\n`
-  if (privateKey.includes('\\n')) {
-    privateKey = privateKey.replace(/\\n/g, '\n');
+  if (
+    !privateKey.includes('BEGIN') ||
+    !privateKey.includes('PRIVATE KEY')
+  ) {
+    console.error(
+      '[GoogleAuth] Configured private key is missing PEM BEGIN/END markers.'
+    );
+    throw new Error(
+      'Google Sheets authentication failed. Please verify the server configuration and try again.'
+    );
   }
 
   // Check cached token (with 5-minute safety buffer)
@@ -76,16 +210,28 @@ export async function getGoogleSheetsAccessToken(): Promise<string> {
   const encodedClaimSet = base64UrlEncode(claimSet);
   const signInput = `${encodedHeader}.${encodedClaimSet}`;
 
-  // Sign using RSA-SHA256
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(signInput);
-  signer.end();
-  const signature = signer
-    .sign(privateKey)
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+  // Sign using RSA-SHA256 with safe error interception
+  let signature: string;
+  try {
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(signInput);
+    signer.end();
+    signature = signer
+      .sign(privateKey)
+      .toString('base64')
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      '[GoogleAuth] Failed to sign JWT with private key:',
+      errMessage.includes('DECODER') ? 'PEM DECODER error (invalid key format)' : errMessage
+    );
+    throw new Error(
+      'Google Sheets authentication failed. Please verify the server configuration and try again.'
+    );
+  }
 
   const assertion = `${signInput}.${signature}`;
 
@@ -103,8 +249,19 @@ export async function getGoogleSheetsAccessToken(): Promise<string> {
 
   if (!res.ok) {
     const errorBody = await res.text();
+    console.error(
+      `[GoogleAuth] Google OAuth2 token exchange rejected (${res.status}):`,
+      errorBody
+    );
+    if (res.status === 400 || res.status === 401) {
+      if (errorBody.includes('invalid_grant')) {
+        throw new Error(
+          'Google Sheets authentication failed (invalid grant). Please verify the service account credentials in server configuration.'
+        );
+      }
+    }
     throw new Error(
-      `Failed to obtain Google OAuth access token (${res.status}): ${errorBody}`
+      'Google Sheets authentication failed. Please verify the server configuration and try again.'
     );
   }
 
