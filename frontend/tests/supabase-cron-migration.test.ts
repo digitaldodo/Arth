@@ -46,10 +46,12 @@ describe('Supabase Cron Migration & Scheduled Job Architecture Suite', () => {
       undefined,
       'vercel.json must not define crons key to prevent Vercel Hobby plan 24h frequency failure'
     );
+    // outputDirectory override must be cleared so Vercel uses framework default (.next)
+    // without appending frontend/.next to produce frontend/frontend/.next
     assert.strictEqual(
       content.outputDirectory,
-      'frontend/.next',
-      'vercel.json must retain correct output directory'
+      undefined,
+      'vercel.json must clear custom outputDirectory override to prevent duplicate nested path'
     );
   });
 
