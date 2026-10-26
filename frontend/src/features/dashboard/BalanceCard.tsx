@@ -5,6 +5,7 @@ import type { AccountBalancesDTO } from '@arth/contracts';
 import { ConfigureStartingBalancesModal } from './ConfigureStartingBalancesModal';
 import { TransferModal } from './TransferModal';
 import { AdjustBalanceModal } from './AdjustBalanceModal';
+import { useCriticalOperation } from '@/features/pwa/critical-operation';
 
 interface BalanceCardProps {
   balances: AccountBalancesDTO | null;
@@ -22,6 +23,7 @@ export function BalanceCard({
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
 
   const isConfigured = balances?.balances_configured ?? false;
+  useCriticalOperation(isConfigureOpen || isTransferOpen || isAdjustOpen);
 
   return (
     <>

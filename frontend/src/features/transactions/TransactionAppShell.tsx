@@ -34,6 +34,8 @@ import {
   removePendingMutation,
   setCachedBalances,
 } from '@/lib/offline-db';
+import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
+import { useCriticalOperation } from '@/features/pwa/critical-operation';
 
 interface TransactionAppShellProps {
   user: {
@@ -74,19 +76,13 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Register service worker for instant PWA precache
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => {
-          console.log('[PWA] Service Worker registered with scope:', reg.scope);
-        })
-        .catch((err) => {
-          console.warn('[PWA] Service Worker registration failed:', err);
-        });
-    }
-  }, []);
+  // Automatic PWA update detection, background download, and safe activation
+  usePwaUpdate({ checkIntervalMs: 5 * 60 * 1000 });
+
+  // Guard critical operations: defer PWA updates while user is entering/saving transactions or syncing
+  useCriticalOperation(
+    isQuickAddOpen || isDeleteModalOpen || isStartingBalancesModalOpen || isSyncing
+  );
 
   // Check pending mutations in IndexedDB
   const checkPendingMutations = useCallback(async () => {

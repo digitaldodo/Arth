@@ -1,11 +1,12 @@
 /**
  * Arth Progressive Web App Service Worker
- * Version: arth-shell-v1
+ * Version: v1-tniwi9
  * Precaches core application shell, styles, and branding assets for instant startup.
- * Authenticated API endpoints are strictly excluded from Service Worker Cache API.
+ * Authenticated API endpoints and auth routes are strictly excluded from Service Worker Cache API.
  */
 
-const CACHE_NAME = 'arth-shell-v1';
+const SW_VERSION = 'v1-tniwi9';
+const CACHE_NAME = 'arth-shell-v1-' + SW_VERSION;
 
 const PRECACHE_ASSETS = [
   '/',
@@ -18,20 +19,35 @@ const PRECACHE_ASSETS = [
   '/icons/apple-touch-icon.png',
 ];
 
-// Install: precache app shell essentials
+// Install: precache app shell essentials into versioned cache
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())
       .catch((err) => {
-        console.warn('[ServiceWorker] Precaching failed:', err);
+        console.warn('[ServiceWorker] Precaching failed during install:', err);
       })
   );
+  // Important: We do NOT call self.skipWaiting() here directly.
+  // The service worker remains in the 'waiting' state until the application client
+  // confirms that the user is not actively typing or saving a financial transaction.
 });
 
-// Activate: clean up older caches
+// Message listener: coordinates safe activation and diagnostics
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'GET_VERSION') {
+    event.ports[0]?.postMessage({
+      version: SW_VERSION,
+      cacheName: CACHE_NAME,
+    });
+  }
+});
+
+// Activate: clean up older caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
@@ -39,8 +55,11 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) =>
         Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME)
-            .map((name) => caches.delete(name))
+            .filter((name) => name.startsWith('arth-shell-') && name !== CACHE_NAME)
+            .map((name) => {
+              console.log('[ServiceWorker] Deleting obsolete cache:', name);
+              return caches.delete(name);
+            })
         )
       )
       .then(() => self.clients.claim())
@@ -51,7 +70,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Strictly skip caching for authenticated API routes and Supabase Auth
+  // Strictly skip caching for authenticated API routes, Supabase Auth, and version endpoint
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/auth/') ||
