@@ -308,6 +308,9 @@ export class SupabaseTransactionService implements ITransactionService {
     if (query.category_id) {
       qb = qb.eq('category_id', query.category_id);
     }
+    if (query.necessity) {
+      qb = qb.eq('necessity', query.necessity);
+    }
     if (query.start_date) {
       qb = qb.gte('transaction_date', query.start_date);
     }
@@ -694,6 +697,9 @@ export class InMemoryTransactionService implements ITransactionService {
     }
     if (query.category_id) {
       filtered = filtered.filter((t) => t.category_id === query.category_id);
+    }
+    if (query.necessity) {
+      filtered = filtered.filter((t) => t.necessity === query.necessity);
     }
     if (query.start_date) {
       filtered = filtered.filter((t) => t.transaction_date >= query.start_date!);

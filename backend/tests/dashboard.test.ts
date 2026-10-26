@@ -424,6 +424,81 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
     assert.equal(body.recent_transactions[9].transaction_date, '2026-08-03');
   });
 
+  // 13. Spending by necessity breakdown in summary response
+  test('calculates correct spending_by_necessity totals and share percentages', async () => {
+    const catsA = await catService.listCategories(userA.userId, {});
+    const foodCat = catsA.categories.find((c) => c.name === 'Food & Dining')!;
+    const shoppingCat = catsA.categories.find((c) => c.name === 'Shopping')!;
+    const enterCat = catsA.categories.find((c) => c.name === 'Entertainment')!;
+
+    // Create expenses in a dedicated test period (November 2026)
+    // Essential: ₹5,000.00 (500,000 paise)
+    await txService.createTransaction(userA.userId, {
+      id: uuidv7(),
+      amount_paise: 500000n,
+      type: 'expense',
+      category_id: foodCat.id,
+      transaction_date: '2026-11-05',
+      payment_method: 'online',
+      necessity: 'essential',
+      description: 'Monthly Groceries',
+      notes: null,
+    });
+
+    // Optional: ₹3,000.00 (300,000 paise)
+    await txService.createTransaction(userA.userId, {
+      id: uuidv7(),
+      amount_paise: 300000n,
+      type: 'expense',
+      category_id: shoppingCat.id,
+      transaction_date: '2026-11-10',
+      payment_method: 'online',
+      necessity: 'optional',
+      description: 'Books & Games',
+      notes: null,
+    });
+
+    // Luxury: ₹2,000.00 (200,000 paise)
+    await txService.createTransaction(userA.userId, {
+      id: uuidv7(),
+      amount_paise: 200000n,
+      type: 'expense',
+      category_id: enterCat.id,
+      transaction_date: '2026-11-15',
+      payment_method: 'online',
+      necessity: 'luxury',
+      description: 'Fine Dining Splurge',
+      notes: null,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/dashboard/summary?start_date=2026-11-01&end_date=2026-11-30',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body: DashboardSummaryResponse = res.json();
+    assert.equal(body.expenses_paise, 1000000);
+    assert.ok(body.spending_by_necessity);
+    assert.equal(body.spending_by_necessity.length, 3);
+
+    const essential = body.spending_by_necessity.find((n) => n.necessity === 'essential')!;
+    assert.equal(essential.amount_paise, 500000);
+    assert.equal(essential.formatted_inr, '₹5,000.00');
+    assert.equal(essential.share_percentage, 50.0);
+
+    const optional = body.spending_by_necessity.find((n) => n.necessity === 'optional')!;
+    assert.equal(optional.amount_paise, 300000);
+    assert.equal(optional.formatted_inr, '₹3,000.00');
+    assert.equal(optional.share_percentage, 30.0);
+
+    const luxury = body.spending_by_necessity.find((n) => n.necessity === 'luxury')!;
+    assert.equal(luxury.amount_paise, 200000);
+    assert.equal(luxury.formatted_inr, '₹2,000.00');
+    assert.equal(luxury.share_percentage, 20.0);
+  });
+
   describe('SupabaseDashboardService Error Propagation & Fallback Elimination', () => {
     test('throws cleanly when fn_dashboard_summary RPC returns an error without attempting raw queries', async () => {
       let fromCallCount = 0;

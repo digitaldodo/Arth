@@ -67,6 +67,7 @@ export interface TransactionListQuery {
   page_size?: number;
   type?: TransactionType;
   category_id?: string;
+  necessity?: NecessityClass;
   start_date?: string; // YYYY-MM-DD
   end_date?: string; // YYYY-MM-DD
 }

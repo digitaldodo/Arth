@@ -13,6 +13,7 @@ import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
 import { SpendingComposition } from './SpendingComposition';
+import { SpendingByNecessity } from './SpendingByNecessity';
 import { RecentActivity } from './RecentActivity';
 import { DashboardSkeleton } from './DashboardSkeleton';
 
@@ -388,6 +389,10 @@ export function DashboardPage({
             <div className="lg:col-span-5 space-y-6">
               <SpendingComposition
                 categories={summary.spending_composition}
+                totalExpensesPaise={summary.expenses_paise}
+              />
+              <SpendingByNecessity
+                items={summary.spending_by_necessity}
                 totalExpensesPaise={summary.expenses_paise}
               />
             </div>

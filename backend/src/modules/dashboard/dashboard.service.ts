@@ -4,6 +4,8 @@ import {
   paiseToDecimal,
   type DashboardSummaryResponse,
   type CategorySpendingDTO,
+  type NecessitySpendingDTO,
+  type NecessityClass,
   type TransactionDTO,
 } from '@arth/contracts';
 import type { AppConfig } from '../../config/index.js';
@@ -111,6 +113,20 @@ export class SupabaseDashboardService implements IDashboardService {
       })
     );
 
+    const spendingByNecessity: NecessitySpendingDTO[] = Array.isArray(rpcData.spending_by_necessity)
+      ? (rpcData.spending_by_necessity as Record<string, unknown>[]).map((item) => ({
+          necessity: item.necessity as NecessityClass,
+          label: String(item.label || (item.necessity ? String(item.necessity).charAt(0).toUpperCase() + String(item.necessity).slice(1) : 'Unknown')),
+          amount_paise: Number(item.amount_paise || 0),
+          formatted_inr: formatPaiseToINR(Number(item.amount_paise || 0)),
+          share_percentage: Number(item.share_percentage || 0),
+        }))
+      : [
+          { necessity: 'essential', label: 'Essential', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+          { necessity: 'optional', label: 'Optional', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+          { necessity: 'luxury', label: 'Luxury', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+        ];
+
     return {
       start_date: query.start_date,
       end_date: query.end_date,
@@ -121,6 +137,7 @@ export class SupabaseDashboardService implements IDashboardService {
       formatted_expenses: formatPaiseToINR(expensesPaise),
       formatted_net_cash_flow: formatPaiseToINR(netCashFlowPaise),
       spending_composition: spendingComposition,
+      spending_by_necessity: spendingByNecessity,
       recent_transactions: recentTransactions,
       has_activity_in_range: Boolean(rpcData.has_activity_in_range),
       total_active_transaction_count: Number(rpcData.total_active_transaction_count || 0),
@@ -161,6 +178,9 @@ export class InMemoryDashboardService implements IDashboardService {
 
     let incomePaise = 0n;
     let expensesPaise = 0n;
+    let essentialPaise = 0n;
+    let optionalPaise = 0n;
+    let luxuryPaise = 0n;
     const categoryTotalsMap = new Map<
       string,
       {
@@ -177,6 +197,13 @@ export class InMemoryDashboardService implements IDashboardService {
         incomePaise += amount;
       } else if (t.type === 'expense') {
         expensesPaise += amount;
+        if (t.necessity === 'essential') {
+          essentialPaise += amount;
+        } else if (t.necessity === 'optional') {
+          optionalPaise += amount;
+        } else if (t.necessity === 'luxury') {
+          luxuryPaise += amount;
+        }
         const cat = allCategories.find((c) => c.id === t.category_id);
         const existing = categoryTotalsMap.get(t.category_id) || {
           name: cat?.name || t.category_name || 'Uncategorized',
@@ -244,6 +271,39 @@ export class InMemoryDashboardService implements IDashboardService {
         };
       });
 
+    const spendingByNecessity: NecessitySpendingDTO[] = [
+      {
+        necessity: 'essential',
+        label: 'Essential',
+        amount_paise: Number(essentialPaise),
+        formatted_inr: formatPaiseToINR(Number(essentialPaise)),
+        share_percentage:
+          totalExpenses > 0
+            ? Math.round((Number(essentialPaise) / totalExpenses) * 1000) / 10
+            : 0,
+      },
+      {
+        necessity: 'optional',
+        label: 'Optional',
+        amount_paise: Number(optionalPaise),
+        formatted_inr: formatPaiseToINR(Number(optionalPaise)),
+        share_percentage:
+          totalExpenses > 0
+            ? Math.round((Number(optionalPaise) / totalExpenses) * 1000) / 10
+            : 0,
+      },
+      {
+        necessity: 'luxury',
+        label: 'Luxury',
+        amount_paise: Number(luxuryPaise),
+        formatted_inr: formatPaiseToINR(Number(luxuryPaise)),
+        share_percentage:
+          totalExpenses > 0
+            ? Math.round((Number(luxuryPaise) / totalExpenses) * 1000) / 10
+            : 0,
+      },
+    ];
+
     return {
       start_date: query.start_date,
       end_date: query.end_date,
@@ -254,6 +314,7 @@ export class InMemoryDashboardService implements IDashboardService {
       formatted_expenses: formatPaiseToINR(totalExpenses),
       formatted_net_cash_flow: formatPaiseToINR(netCashFlow),
       spending_composition: spendingComposition,
+      spending_by_necessity: spendingByNecessity,
       recent_transactions: recentTransactions,
       has_activity_in_range: recentTransactions.length > 0,
       total_active_transaction_count: totalActiveCount,

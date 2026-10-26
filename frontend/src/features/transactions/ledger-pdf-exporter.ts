@@ -4,6 +4,7 @@ import type {
   TransactionDTO,
   CategoryDTO,
   TransactionType,
+  NecessityClass,
 } from '@arth/contracts';
 import { formatPaiseToINR, formatDateHuman, getTodayIST } from '@/lib/format';
 import { fetchTransactions } from '@/lib/api-client';
@@ -11,6 +12,7 @@ import { fetchTransactions } from '@/lib/api-client';
 export interface ExportPdfOptions {
   selectedType: TransactionType | 'all';
   selectedCategory: string; // 'all' or category ID
+  selectedNecessity?: NecessityClass | 'all';
   categories: CategoryDTO[];
   startDate?: string;
   endDate?: string;
@@ -88,7 +90,8 @@ export async function fetchAllMatchingTransactions(
   selectedCategory: string,
   startDate?: string,
   endDate?: string,
-  onProgress?: (status: string) => void
+  onProgress?: (status: string) => void,
+  selectedNecessity?: NecessityClass | 'all'
 ): Promise<TransactionDTO[]> {
   const allTransactions: TransactionDTO[] = [];
   const seenIds = new Set<string>();
@@ -102,6 +105,7 @@ export async function fetchAllMatchingTransactions(
     const response = await fetchTransactions({
       type: selectedType === 'all' ? undefined : selectedType,
       category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+      necessity: selectedNecessity && selectedNecessity !== 'all' ? selectedNecessity : undefined,
       start_date: startDate,
       end_date: endDate,
       page: currentPage,
@@ -140,6 +144,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
   const {
     selectedType,
     selectedCategory,
+    selectedNecessity,
     categories,
     startDate,
     endDate,
@@ -157,7 +162,8 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
           selectedCategory,
           startDate,
           endDate,
-          onProgress
+          onProgress,
+          selectedNecessity
         );
 
   if (transactions.length === 0) {
@@ -247,11 +253,29 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<void
     }
   }
 
+  const necessityLabel =
+    !selectedNecessity || selectedNecessity === 'all'
+      ? 'All Necessities'
+      : selectedNecessity === 'essential'
+      ? 'Essential'
+      : selectedNecessity === 'optional'
+      ? 'Optional'
+      : 'Luxury';
+
+  const filterSegments = [
+    `Period: ${effectivePeriod}`,
+    `Type: ${typeLabel}`,
+    `Category: ${categoryLabel}`,
+  ];
+  if (selectedNecessity && selectedNecessity !== 'all') {
+    filterSegments.push(`Necessity: ${necessityLabel}`);
+  }
+
   doc.setFont('NotoSans', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(87, 83, 78);
   doc.text(
-    `Period: ${effectivePeriod}   |   Type: ${typeLabel}   |   Category: ${categoryLabel}`,
+    filterSegments.join('   |   '),
     margin,
     34
   );

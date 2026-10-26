@@ -56,6 +56,7 @@ export interface ValidatedTransactionListQuery {
   page_size: number;
   type?: TransactionType;
   category_id?: string;
+  necessity?: NecessityClass;
   start_date?: string;
   end_date?: string;
 }
@@ -216,6 +217,18 @@ export function validateTransactionListQuery(
     category_id = query.category_id.toLowerCase();
   }
 
+  let necessity: NecessityClass | undefined = undefined;
+  if (query.necessity !== undefined) {
+    if (
+      query.necessity !== 'essential' &&
+      query.necessity !== 'optional' &&
+      query.necessity !== 'luxury'
+    ) {
+      throw new ValidationError("Query necessity must be 'essential', 'optional', or 'luxury'");
+    }
+    necessity = query.necessity as NecessityClass;
+  }
+
   let start_date: string | undefined = undefined;
   if (query.start_date !== undefined) {
     if (typeof query.start_date !== 'string' || !DATE_REGEX.test(query.start_date)) {
@@ -237,6 +250,7 @@ export function validateTransactionListQuery(
     page_size,
     type,
     category_id,
+    necessity,
     start_date,
     end_date,
   };

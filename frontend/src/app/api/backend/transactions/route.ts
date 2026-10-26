@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     // Safely forward only permitted query parameters
     const searchParams = req.nextUrl.searchParams;
     const permittedParams = new URLSearchParams();
-    const allowedKeys = ['page', 'page_size', 'type', 'category_id', 'start_date', 'end_date'];
+    const allowedKeys = ['page', 'page_size', 'type', 'category_id', 'necessity', 'start_date', 'end_date'];
 
     for (const key of allowedKeys) {
       const val = searchParams.get(key);

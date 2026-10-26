@@ -1,4 +1,4 @@
-import type { TransactionDTO } from './transactions.js';
+import type { TransactionDTO, NecessityClass } from './transactions.js';
 
 export type DashboardDateRangePreset =
   | 'today'
@@ -18,6 +18,14 @@ export interface CategorySpendingDTO {
   share_percentage: number; // e.g. 42.5 for 42.5%, or 0 if zero total expenses
 }
 
+export interface NecessitySpendingDTO {
+  necessity: NecessityClass;
+  label: string;
+  amount_paise: number;
+  formatted_inr: string;
+  share_percentage: number;
+}
+
 export interface DashboardSummaryResponse {
   start_date: string; // YYYY-MM-DD
   end_date: string; // YYYY-MM-DD
@@ -28,6 +36,7 @@ export interface DashboardSummaryResponse {
   formatted_expenses: string;
   formatted_net_cash_flow: string;
   spending_composition: CategorySpendingDTO[];
+  spending_by_necessity?: NecessitySpendingDTO[];
   recent_transactions: TransactionDTO[];
   has_activity_in_range: boolean;
   total_active_transaction_count: number;

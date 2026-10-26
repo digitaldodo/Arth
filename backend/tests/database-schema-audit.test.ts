@@ -30,7 +30,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0017_google_sheets_sync.sql',
       '0018_account_balances_and_transfers.sql',
       '0019_username_system_enhancements.sql',
-      '0020_supabase_cron_schedules.sql'
+      '0020_supabase_cron_schedules.sql',
+      '0021_dashboard_necessity_spending.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -243,5 +244,18 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_handle_new_user'), 'Must update fn_handle_new_user trigger function');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_generate_unique_username() TO authenticated'), 'Must grant execute to authenticated');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_set_own_username(TEXT) TO authenticated'), 'Must grant execute to authenticated');
+  });
+
+  test('0021_dashboard_necessity_spending.sql computes spending by necessity with SECURITY INVOKER', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0021_dashboard_necessity_spending.sql'), 'utf-8');
+    assert.ok(sql.includes('fn_dashboard_summary'), 'Dashboard summary function must exist');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Function must execute with caller permissions for RLS compliance');
+    assert.ok(sql.includes('spending_by_necessity'), 'Function must aggregate spending by necessity');
+    assert.ok(sql.includes("'essential'::necessity_class"), 'Must aggregate essential tier');
+    assert.ok(sql.includes("'optional'::necessity_class"), 'Must aggregate optional tier');
+    assert.ok(sql.includes("'luxury'::necessity_class"), 'Must aggregate luxury tier');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM PUBLIC;'), 'Revoke from PUBLIC');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM anon;'), 'Revoke from anon');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_dashboard_summary(DATE, DATE) TO authenticated;'), 'Grant to authenticated');
   });
 });

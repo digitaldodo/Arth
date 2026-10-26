@@ -5,6 +5,7 @@ import {
   type TransactionDTO,
   type CategoryDTO,
   type TransactionType,
+  type NecessityClass,
 } from '@arth/contracts';
 import {
   fetchTransactions,
@@ -37,6 +38,7 @@ export function TransactionLedger({
   // Filters
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedNecessity, setSelectedNecessity] = useState<NecessityClass | 'all'>('all');
 
   // Interactive transaction details & mutations state
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
@@ -61,6 +63,7 @@ export function TransactionLedger({
       fetchTransactions({
         type: selectedType === 'all' ? undefined : selectedType,
         category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+        necessity: selectedType !== 'income' && selectedNecessity !== 'all' ? selectedNecessity : undefined,
         page_size: 50,
       }),
       fetchCategories(),
@@ -81,7 +84,7 @@ export function TransactionLedger({
     return () => {
       isMounted = false;
     };
-  }, [selectedType, selectedCategory, refreshTrigger]);
+  }, [selectedType, selectedCategory, selectedNecessity, refreshTrigger]);
 
   // Clean up undo timer on unmount
   useEffect(() => {
@@ -278,9 +281,9 @@ export function TransactionLedger({
 
       {/* 2. Filter Bar & Action Triggers */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-[var(--border-hairline)]">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Type Segmented Filter */}
-          <div className="flex p-0.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs font-medium">
+          <div className="flex p-0.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs font-medium shrink-0">
             {(['all', 'expense', 'income'] as const).map((t) => (
               <button
                 key={t}
@@ -303,15 +306,31 @@ export function TransactionLedger({
             className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
           >
             <option value="all">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.type})
-              </option>
-            ))}
+            {categories
+              .filter((c) => selectedType === 'all' || c.type === selectedType)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {selectedType === 'all' ? `(${c.type})` : ''}
+                </option>
+              ))}
+          </select>
+
+          {/* Necessity Dropdown */}
+          <select
+            value={selectedNecessity}
+            onChange={(e) => setSelectedNecessity(e.target.value as NecessityClass | 'all')}
+            disabled={selectedType === 'income'}
+            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title={selectedType === 'income' ? 'Necessity applies to expenses only' : 'Filter by necessity tier'}
+          >
+            <option value="all">All Necessities</option>
+            <option value="essential">Essential</option>
+            <option value="optional">Optional</option>
+            <option value="luxury">Luxury</option>
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Download PDF Trigger Button - Opens Export Dialog */}
           <button
             type="button"
@@ -353,18 +372,24 @@ export function TransactionLedger({
         <div className="text-center py-12 px-4 border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)]">
           <div className="text-2xl mb-2">📋</div>
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-            No transactions recorded yet
+            {selectedType !== 'all' || selectedCategory !== 'all' || selectedNecessity !== 'all'
+              ? 'No matching transactions found'
+              : 'No transactions recorded yet'}
           </h3>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
-            Start logging your daily income and expense transactions with instant categorization.
+            {selectedType !== 'all' || selectedCategory !== 'all' || selectedNecessity !== 'all'
+              ? 'Try adjusting your type, category, or necessity filters to view other transactions.'
+              : 'Start logging your daily income and expense transactions with instant categorization.'}
           </p>
-          <button
-            type="button"
-            onClick={onOpenQuickAdd}
-            className="px-4 py-2 text-xs font-medium bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
-          >
-            + Record First Transaction
-          </button>
+          {selectedType === 'all' && selectedCategory === 'all' && selectedNecessity === 'all' && (
+            <button
+              type="button"
+              onClick={onOpenQuickAdd}
+              className="px-4 py-2 text-xs font-medium bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
+            >
+              + Record First Transaction
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -482,6 +507,7 @@ export function TransactionLedger({
         categories={categories}
         initialType={selectedType}
         initialCategoryId={selectedCategory}
+        initialNecessity={selectedNecessity}
       />
     </div>
   );

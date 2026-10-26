@@ -203,6 +203,7 @@ export async function fetchTransactions(
   if (query.page_size) params.set('page_size', String(query.page_size));
   if (query.type) params.set('type', query.type);
   if (query.category_id) params.set('category_id', query.category_id);
+  if (query.necessity) params.set('necessity', query.necessity);
   if (query.start_date) params.set('start_date', query.start_date);
   if (query.end_date) params.set('end_date', query.end_date);
 

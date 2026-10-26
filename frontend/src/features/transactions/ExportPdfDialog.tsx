@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { CategoryDTO, TransactionType, TransactionDTO } from '@arth/contracts';
+import type { CategoryDTO, TransactionType, TransactionDTO, NecessityClass } from '@arth/contracts';
 import { formatPaiseToINR } from '@/lib/format';
 import {
   type DateRangePreset,
@@ -25,6 +25,7 @@ interface ExportPdfDialogProps {
   categories: CategoryDTO[];
   initialType?: TransactionType | 'all';
   initialCategoryId?: string; // 'all' or category ID
+  initialNecessity?: NecessityClass | 'all';
 }
 
 export function ExportPdfDialog({
@@ -33,6 +34,7 @@ export function ExportPdfDialog({
   categories,
   initialType = 'all',
   initialCategoryId = 'all',
+  initialNecessity = 'all',
 }: ExportPdfDialogProps) {
   // Preset & Dates
   const [preset, setPreset] = useState<DateRangePreset>('this_month');
@@ -46,6 +48,7 @@ export function ExportPdfDialog({
   // Filters
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>(initialType);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategoryId);
+  const [selectedNecessity, setSelectedNecessity] = useState<NecessityClass | 'all'>(initialNecessity);
 
   // Complete matching transactions for active period & type (used to evaluate category eligibility)
   const [scopeTransactions, setScopeTransactions] = useState<TransactionDTO[]>([]);
@@ -76,6 +79,7 @@ export function ExportPdfDialog({
     const timer = setTimeout(() => {
       setSelectedType(initialType);
       setSelectedCategory(initialCategoryId);
+      setSelectedNecessity(initialNecessity);
       setPreset('this_month');
       const defaultRange = computePresetDateRange('this_month');
       setCustomStartDate(defaultRange.startDate);
@@ -84,7 +88,7 @@ export function ExportPdfDialog({
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [isOpen, initialType, initialCategoryId]);
+  }, [isOpen, initialType, initialCategoryId, initialNecessity]);
 
   // Fetch complete matching transaction set across all pages for the current date range and type
   useEffect(() => {
@@ -142,13 +146,17 @@ export function ExportPdfDialog({
   // Preserve explicitly selected category only while it remains eligible; fallback to 'all'
   const activeCategory = resolveEligibleCategory(selectedCategory, eligibleCategories);
 
-  // Filter preview transactions according to active category selection
+  // Filter preview transactions according to active category and necessity selection
   const previewTransactions = useMemo(() => {
-    if (activeCategory === 'all') {
-      return scopeTransactions;
+    let list = scopeTransactions;
+    if (activeCategory !== 'all') {
+      list = list.filter((tx) => tx.category_id === activeCategory);
     }
-    return scopeTransactions.filter((tx) => tx.category_id === activeCategory);
-  }, [scopeTransactions, activeCategory]);
+    if (selectedNecessity !== 'all' && selectedType !== 'income') {
+      list = list.filter((tx) => tx.necessity === selectedNecessity);
+    }
+    return list;
+  }, [scopeTransactions, activeCategory, selectedNecessity, selectedType]);
 
   // Calculate summary metrics strictly from preview transactions
   const summaryMetrics = useMemo(() => {
@@ -212,6 +220,7 @@ export function ExportPdfDialog({
       await exportLedgerToPdf({
         selectedType,
         selectedCategory: activeCategory,
+        selectedNecessity: selectedType === 'income' ? 'all' : selectedNecessity,
         categories,
         startDate: effectiveRange.startDate,
         endDate: effectiveRange.endDate,
@@ -444,6 +453,32 @@ export function ExportPdfDialog({
                 No categories contain transactions for the selected period and type.
               </p>
             )}
+          </div>
+
+          {/* 3b. Necessity Filter */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="export-necessity-select" className="text-xs font-semibold text-[var(--text-secondary)]">
+                Necessity Scope
+              </label>
+              {selectedType === 'income' && (
+                <span className="text-[11px] text-[var(--text-muted)] italic">
+                  (Expenses only)
+                </span>
+              )}
+            </div>
+            <select
+              id="export-necessity-select"
+              value={selectedNecessity}
+              onChange={(e) => setSelectedNecessity(e.target.value as NecessityClass | 'all')}
+              disabled={isExporting || selectedType === 'income'}
+              className="w-full text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-hidden cursor-pointer disabled:opacity-50"
+            >
+              <option value="all">All Necessities</option>
+              <option value="essential">Essential</option>
+              <option value="optional">Optional</option>
+              <option value="luxury">Luxury</option>
+            </select>
           </div>
 
           {/* 4. Export Configuration Summary */}
