@@ -10,7 +10,7 @@ import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { AndroidDownloadCard } from '@/features/android/AndroidDownloadCard';
+import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
@@ -264,7 +264,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   </p>
                 </div>
 
-                <AndroidDownloadCard />
+                <InstallPromptCard />
 
                 <SheetsConnectionCard />
 

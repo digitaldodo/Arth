@@ -5,6 +5,7 @@ import {
   type DashboardDateRangePreset,
 } from '@arth/contracts';
 import { formatDateHuman } from '@/lib/format';
+import { isValidDateRange } from '@/features/transactions/date-range-utils';
 
 interface DateRangeSelectorProps {
   currentPreset: DashboardDateRangePreset;
@@ -15,8 +16,6 @@ interface DateRangeSelectorProps {
 }
 
 const PRESETS: Array<{ id: DashboardDateRangePreset; label: string }> = [
-  { id: 'today', label: 'Today' },
-  { id: 'this_week', label: 'This Week' },
   { id: 'this_month', label: 'This Month' },
   { id: 'last_month', label: 'Last Month' },
   { id: 'this_year', label: 'This Year' },
@@ -35,6 +34,9 @@ export function DateRangeSelector({
   const [customEnd, setCustomEnd] = useState(endDate);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Active state is reactively derived: 'custom' while dialog is open or if applied; otherwise currentPreset
+  const effectiveActivePreset = isCustomOpen ? 'custom' : currentPreset;
+
   const handlePresetClick = (presetId: DashboardDateRangePreset) => {
     if (presetId === 'custom') {
       setIsCustomOpen(true);
@@ -43,8 +45,16 @@ export function DateRangeSelector({
       setValidationError(null);
     } else {
       setIsCustomOpen(false);
+      setValidationError(null);
       onSelectPreset(presetId);
     }
+  };
+
+  const handleCancelCustom = () => {
+    setIsCustomOpen(false);
+    setCustomStart(startDate);
+    setCustomEnd(endDate);
+    setValidationError(null);
   };
 
   const handleCustomSubmit = (e: React.FormEvent) => {
@@ -53,7 +63,7 @@ export function DateRangeSelector({
       setValidationError('Both start and end dates are required.');
       return;
     }
-    if (customStart > customEnd) {
+    if (!isValidDateRange(customStart, customEnd)) {
       setValidationError('Start date cannot be after end date.');
       return;
     }
@@ -71,13 +81,13 @@ export function DateRangeSelector({
         className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none"
       >
         {PRESETS.map((p) => {
-          const isActive = currentPreset === p.id;
+          const isActive = effectiveActivePreset === p.id;
           return (
             <button
               key={p.id}
               type="button"
               onClick={() => handlePresetClick(p.id)}
-              className={`shrink-0 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`shrink-0 px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                 isActive
                   ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-xs'
                   : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-hairline)]'
@@ -111,8 +121,8 @@ export function DateRangeSelector({
             </span>
             <button
               type="button"
-              onClick={() => setIsCustomOpen(false)}
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              onClick={handleCancelCustom}
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
             >
               ✕ Cancel
             </button>
@@ -163,14 +173,14 @@ export function DateRangeSelector({
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setIsCustomOpen(false)}
-              className="px-3 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              onClick={handleCancelCustom}
+              className="px-3 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-3.5 py-1 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors"
+              className="px-3.5 py-1 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
             >
               Apply Range
             </button>

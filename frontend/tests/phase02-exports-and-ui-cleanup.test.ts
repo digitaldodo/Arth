@@ -232,7 +232,7 @@ describe('Phase 02: UI Cleanup & Brand Consistency Verifications', () => {
     );
   });
 
-  test('TransactionAppShell removes Set Account Password card and PWA card while keeping APK download', () => {
+  test('TransactionAppShell removes Set Account Password card and APK download while rendering Offline Support', () => {
     const appShellPath = path.join(
       rootDir,
       'src/features/transactions/TransactionAppShell.tsx'
@@ -249,16 +249,16 @@ describe('Phase 02: UI Cleanup & Brand Consistency Verifications', () => {
       'TransactionAppShell must not render visible Timezone label in settings'
     );
 
-    // PWA informational prompt must be removed
+    // Install APK option must be removed
     assert.ok(
-      !content.includes('<InstallPromptCard'),
-      'TransactionAppShell must not render InstallPromptCard in settings'
+      !content.includes('<AndroidDownloadCard'),
+      'TransactionAppShell must not render AndroidDownloadCard'
     );
 
-    // APK download card must be retained
+    // Offline Support (PWA) card must be rendered in settings
     assert.ok(
-      content.includes('<AndroidDownloadCard'),
-      'TransactionAppShell must retain AndroidDownloadCard'
+      content.includes('<InstallPromptCard'),
+      'TransactionAppShell must render InstallPromptCard as Offline Support in settings'
     );
 
     // Google Sheets and Data Export cards must be present

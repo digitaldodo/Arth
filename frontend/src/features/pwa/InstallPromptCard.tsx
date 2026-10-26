@@ -31,15 +31,15 @@ export const InstallPromptCard: React.FC = () => {
           </div>
           <div>
             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-              Application Installed
+              Offline Support
             </h3>
             <p className="text-[11px] text-[var(--text-muted)]">
-              Arth is running in standalone mode with native frame integration
+              Installed in standalone mode. Use Arth offline and synchronize your changes when you&apos;re back online.
             </p>
           </div>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/40">
-          Standalone
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/40 shrink-0">
+          Installed
         </span>
       </div>
     );
@@ -59,10 +59,10 @@ export const InstallPromptCard: React.FC = () => {
             </div>
             <div>
               <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                Install Arth App
+                Offline Support
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Install to home screen or dock for quick access and full-screen focus
+                Use Arth offline and synchronize your changes when you&apos;re back online. Install on your device for standalone access.
               </p>
             </div>
           </div>
@@ -74,7 +74,7 @@ export const InstallPromptCard: React.FC = () => {
             data-testid="pwa-install-button"
             onClick={handleInstallClick}
             disabled={isInstalling}
-            className="px-4 py-2 text-xs font-medium rounded-lg bg-[var(--text-primary)] text-[var(--bg-surface)] hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50"
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
           >
             {isInstalling ? 'Installing…' : 'Install on this Device'}
           </button>
@@ -101,10 +101,10 @@ export const InstallPromptCard: React.FC = () => {
           </div>
           <div>
             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-              Install Arth on iOS / iPadOS
+              Offline Support
             </h3>
             <p className="text-[11px] text-[var(--text-muted)]">
-              Safari supports manual home screen installation
+              Use Arth offline and synchronize your changes when you&apos;re back online. Add to Home Screen in Safari.
             </p>
           </div>
         </div>
@@ -139,15 +139,15 @@ export const InstallPromptCard: React.FC = () => {
         </div>
         <div>
           <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-            Progressive Web App
+            Offline Support
           </h3>
           <p className="text-[11px] text-[var(--text-muted)]">
-            Installable on mobile and desktop via your browser address bar or menu
+            Use Arth offline and synchronize your changes when you&apos;re back online. Install via your browser address bar or menu.
           </p>
         </div>
       </div>
-      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
-        PWA Ready
+      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] shrink-0">
+        Offline Ready
       </span>
     </div>
   );
