@@ -32,6 +32,12 @@ import type {
   RecordSettlementResponse,
   DashboardSummaryQuery,
   DashboardSummaryResponse,
+  AccountBalancesDTO,
+  ConfigureStartingBalancesRequest,
+  CreateTransferRequest,
+  CreateAdjustmentRequest,
+  BalanceMovementDTO,
+  BalanceMovementListResponse,
 } from '@arth/contracts';
 
 const API_BASE_URL =
@@ -574,6 +580,134 @@ export async function fetchDashboardSummary(
   if (!response.ok) {
     const error = new Error(
       data.message || `Failed to fetch dashboard summary (${response.status})`
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+
+/**
+ * Fetches current account balances (Cash, Online, Total Available, and Starting balances).
+ */
+export async function fetchBalances(): Promise<AccountBalancesDTO> {
+  const response = await fetch('/api/backend/balances', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || ('Failed to fetch account balances (' + response.status + ')')
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Sets or updates starting balances.
+ */
+export async function configureStartingBalances(
+  req: ConfigureStartingBalancesRequest
+): Promise<AccountBalancesDTO> {
+  const response = await fetch('/api/backend/balances/starting', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || ('Failed to configure starting balances (' + response.status + ')')
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Records an internal Cash <-> Online transfer.
+ */
+export async function createBalanceTransfer(
+  req: CreateTransferRequest
+): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+  const response = await fetch('/api/backend/balances/transfers', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || ('Failed to record transfer (' + response.status + ')')
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Records an auditable balance adjustment with required reason.
+ */
+export async function createBalanceAdjustment(
+  req: CreateAdjustmentRequest
+): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+  const response = await fetch('/api/backend/balances/adjustments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(req),
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || ('Failed to record balance adjustment (' + response.status + ')')
+    ) as Error & { statusCode?: number };
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Fetches recent balance movements (transfers and adjustments).
+ */
+export async function fetchBalanceMovements(): Promise<BalanceMovementListResponse> {
+  const response = await fetch('/api/backend/balances/movements', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(
+      data.message || ('Failed to fetch balance movements (' + response.status + ')')
     ) as Error & { statusCode?: number };
     error.statusCode = response.status;
     throw error;

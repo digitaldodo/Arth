@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
@@ -15,7 +15,25 @@ import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
-import type { CreateTransactionResponse } from '@arth/contracts';
+import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
+import {
+  type CreateTransactionResponse,
+  type CreateTransactionRequest,
+  type CreateTransferRequest,
+  type CreateAdjustmentRequest,
+  type AccountBalancesDTO,
+} from '@arth/contracts';
+import {
+  createTransaction,
+  createBalanceTransfer,
+  createBalanceAdjustment,
+  fetchBalances,
+} from '@/lib/api-client';
+import {
+  getPendingMutations,
+  removePendingMutation,
+  setCachedBalances,
+} from '@/lib/offline-db';
 
 interface TransactionAppShellProps {
   user: {
@@ -44,11 +62,96 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>(user?.username);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isStartingBalancesModalOpen, setIsStartingBalancesModalOpen] = useState<boolean>(false);
+  const [shellBalances, setShellBalances] = useState<AccountBalancesDTO | null>(null);
 
   // App initialization splash screen states
   const [isInitialBoot, setIsInitialBoot] = useState<boolean>(!hasAppBootedSession);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
   const [bootError, setBootError] = useState<string | null>(null);
+
+  // Offline mutation queue sync state
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Register service worker for instant PWA precache
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          console.log('[PWA] Service Worker registered with scope:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[PWA] Service Worker registration failed:', err);
+        });
+    }
+  }, []);
+
+  // Check pending mutations in IndexedDB
+  const checkPendingMutations = useCallback(async () => {
+    try {
+      const pending = await getPendingMutations();
+      setPendingSyncCount(pending.length);
+    } catch {
+      // IndexedDB unavailable in certain environments
+    }
+  }, []);
+
+  useEffect(() => {
+    checkPendingMutations();
+  }, [refreshTrigger, checkPendingMutations]);
+
+  // Load balances for Settings card
+  useEffect(() => {
+    if (!user) return;
+    fetchBalances()
+      .then((b) => setShellBalances(b))
+      .catch(() => {});
+  }, [user, refreshTrigger]);
+
+  // Synchronize pending outbox mutations with backend
+  const handleSyncNow = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const pending = await getPendingMutations();
+      for (const m of pending) {
+        try {
+          if (m.type === 'create_transaction') {
+            await createTransaction(m.payload as CreateTransactionRequest);
+            await removePendingMutation(m.id);
+          } else if (m.type === 'create_transfer') {
+            await createBalanceTransfer(m.payload as CreateTransferRequest);
+            await removePendingMutation(m.id);
+          } else if (m.type === 'create_adjustment') {
+            await createBalanceAdjustment(m.payload as CreateAdjustmentRequest);
+            await removePendingMutation(m.id);
+          }
+        } catch (itemErr) {
+          console.error('[Sync] Failed to process mutation:', m.id, itemErr);
+        }
+      }
+      await checkPendingMutations();
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err) {
+      console.error('[Sync] Error during background synchronization:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Auto-sync when coming back online
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleOnline = () => {
+      handleSyncNow();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   const handleInitialReady = (errorMsg?: string) => {
     if (errorMsg) {
@@ -70,6 +173,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
+    checkPendingMutations();
     const txn = res.transaction;
     const msg = res.idempotent_replay
       ? `Transaction ${txn.formatted_inr} confirmed (idempotent replay)`
@@ -192,13 +296,33 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
       {/* Main Content Area */}
       <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Offline Pending Synchronization Banner */}
+        {pendingSyncCount > 0 && (
+          <div className="mb-4 p-3 text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>
+                {pendingSyncCount} {pendingSyncCount === 1 ? 'change' : 'changes'} saved locally (pending sync)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleSyncNow}
+              disabled={isSyncing}
+              className="px-2.5 py-1 text-xs font-semibold bg-amber-700 text-white rounded-md hover:bg-amber-800 transition-colors disabled:opacity-60 cursor-pointer"
+            >
+              {isSyncing ? 'Syncing...' : 'Sync now'}
+            </button>
+          </div>
+        )}
+
         {/* Success Confirmation Banner */}
         {saveSuccessBanner && (
           <div className="mb-4 p-3 text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200 rounded-lg flex items-center justify-between transition-all">
             <span>✓ {saveSuccessBanner}</span>
             <button
               onClick={() => setSaveSuccessBanner(null)}
-              className="text-emerald-600 dark:text-emerald-400 font-bold ml-2"
+              className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 cursor-pointer"
             >
               ✕
             </button>
@@ -226,34 +350,35 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
         {user ? (
           <>
-            {activeView === 'home' && (
+            {/* Persistent Tab Container: All views stay mounted in the DOM to eliminate reload delay */}
+            <div className={activeView === 'home' ? 'block' : 'hidden'}>
               <DashboardPage
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
                 refreshTrigger={refreshTrigger}
                 onInitialReady={isInitialBoot ? handleInitialReady : undefined}
               />
-            )}
+            </div>
 
-            {activeView === 'ledger' && (
+            <div className={activeView === 'ledger' ? 'block' : 'hidden'}>
               <TransactionLedger
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
               />
-            )}
+            </div>
 
-            {activeView === 'people' && (
+            <div className={activeView === 'people' ? 'block' : 'hidden'}>
               <PeoplePage
                 onRefreshShell={() => setRefreshTrigger((prev) => prev + 1)}
               />
-            )}
+            </div>
 
-            {activeView === 'categories' && (
+            <div className={activeView === 'categories' ? 'block' : 'hidden'}>
               <CategoryManager onCategoryChange={handleCategoryChanged} />
-            )}
+            </div>
 
-            {activeView === 'more' && (
+            <div className={activeView === 'more' ? 'block' : 'hidden'}>
               <div className="space-y-5">
                 <div>
                   <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
@@ -262,6 +387,45 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     Application settings, category customization, and account details
                   </p>
+                </div>
+
+                {/* Account Balances Card in Settings */}
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">💰</span>
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Account Starting Balances
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Initial cash and bank balances when you began using Arth
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsStartingBalancesModalOpen(true)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
+                    >
+                      {shellBalances?.balances_configured ? 'Edit Balances' : 'Set Up Balances'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 text-xs font-mono border-t border-[var(--border-hairline)]">
+                    <div className="p-2.5 bg-[var(--bg-canvas)] rounded-md border border-[var(--border-hairline)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block">Starting Cash</span>
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">
+                        {shellBalances?.formatted_starting_cash || '₹0.00'}
+                      </span>
+                    </div>
+                    <div className="p-2.5 bg-[var(--bg-canvas)] rounded-md border border-[var(--border-hairline)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block">Starting Online</span>
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">
+                        {shellBalances?.formatted_starting_online || '₹0.00'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <InstallPromptCard />
@@ -368,7 +532,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   </button>
                 </form>
               </div>
-            )}
+            </div>
           </>
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
@@ -483,6 +647,20 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           isOpen={true}
           onClose={() => setIsDeleteModalOpen(false)}
           userEmail={user?.email}
+        />
+      )}
+
+      {/* Configure Starting Balances Modal */}
+      {isStartingBalancesModalOpen && (
+        <ConfigureStartingBalancesModal
+          isOpen={true}
+          onClose={() => setIsStartingBalancesModalOpen(false)}
+          onConfigured={(updated) => {
+            setShellBalances(updated);
+            setCachedBalances(updated);
+            setRefreshTrigger((prev) => prev + 1);
+          }}
+          currentBalances={shellBalances}
         />
       )}
 

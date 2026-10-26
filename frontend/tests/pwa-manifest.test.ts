@@ -106,44 +106,25 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
     assert.ok(fs.statSync(faviconPath).size > 100, 'favicon.ico must be non-empty');
   });
 
-  test('no service worker registration or offline caching frameworks are present in Phase 01N', () => {
-    // Phase 01N strictly proscribes service workers and offline transactions
-    const srcDir = path.join(projectRoot, 'src');
-    const publicDir = path.join(projectRoot, 'public');
+  test('PWA service worker precaches shell assets and avoids third-party wrapper dependencies', () => {
+    const swPath = path.join(projectRoot, 'public', 'sw.js');
+    assert.ok(fs.existsSync(swPath), 'public/sw.js must exist for PWA offline shell precaching');
+    const swContent = fs.readFileSync(swPath, 'utf8');
+    assert.ok(swContent.includes('arth-shell-v1'), 'sw.js must define versioned cache');
+    assert.ok(swContent.includes('/manifest.webmanifest'), 'sw.js must precache manifest');
+    assert.ok(swContent.includes('/favicon.ico'), 'sw.js must precache favicon');
+    // Ensure no indiscriminate caching of authenticated APIs
+    assert.ok(
+      swContent.includes("url.pathname.startsWith('/api/')"),
+      'sw.js must strictly exclude authenticated API routes from Cache API'
+    );
 
-    // 1. Check no service-worker files exist in public/
-    const publicFiles = fs.readdirSync(publicDir);
-    const swFiles = publicFiles.filter((f) => /service-worker|sw\.js|worker\.js/i.test(f));
-    assert.deepEqual(swFiles, [], 'Service worker script must not exist in public/');
-
-    // 2. Scan all files in src/ for serviceWorker.register
-    function scanDir(dir: string): string[] {
-      let results: string[] = [];
-      const list = fs.readdirSync(dir);
-      for (const file of list) {
-        const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
-        if (stat && stat.isDirectory()) {
-          results = results.concat(scanDir(fullPath));
-        } else if (file.endsWith('.ts') || file.endsWith('.tsx') || file.endsWith('.js')) {
-          results.push(fullPath);
-        }
-      }
-      return results;
-    }
-
-    const sourceFiles = scanDir(srcDir);
-    for (const filePath of sourceFiles) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      assert.ok(
-        !content.includes('serviceWorker.register'),
-        `Service worker registration detected in ${path.relative(projectRoot, filePath)}`
-      );
-      assert.ok(
-        !content.includes('dexie') && !content.includes('idb-keyval'),
-        `IndexedDB wrapper library detected in ${path.relative(projectRoot, filePath)}`
-      );
-    }
+    // Verify native IndexedDB is used without heavy third-party wrapper libraries
+    const offlineDbPath = path.join(projectRoot, 'src', 'lib', 'offline-db.ts');
+    assert.ok(fs.existsSync(offlineDbPath), 'src/lib/offline-db.ts must exist');
+    const offlineDbContent = fs.readFileSync(offlineDbPath, 'utf8');
+    assert.ok(!offlineDbContent.includes('dexie'), 'Must use native IndexedDB without dexie dependency');
+    assert.ok(!offlineDbContent.includes('idb-keyval'), 'Must use native IndexedDB without idb-keyval dependency');
   });
 
   test('root layout defines viewport theme colors and Apple web app metadata', () => {

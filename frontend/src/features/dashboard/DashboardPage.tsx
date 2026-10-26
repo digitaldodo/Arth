@@ -4,10 +4,13 @@ import React, { useState, useEffect } from 'react';
 import {
   type DashboardDateRangePreset,
   type DashboardSummaryResponse,
+  type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
-import { fetchDashboardSummary } from '@/lib/api-client';
+import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
+import { getCachedBalances, setCachedBalances } from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
+import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
 import { SpendingComposition } from './SpendingComposition';
 import { RecentActivity } from './RecentActivity';
@@ -36,10 +39,40 @@ export function DashboardPage({
     resolveDateRangePreset('this_month')
   );
 
+  const [balances, setBalances] = useState<AccountBalancesDTO | null>(null);
+  const [balancesLoading, setBalancesLoading] = useState(true);
+
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DashboardError | null>(null);
 
+  // Fetch balances (cached + revalidated)
+  useEffect(() => {
+    let isMounted = true;
+
+    getCachedBalances().then((cached) => {
+      if (cached && isMounted) {
+        setBalances(cached);
+      }
+    });
+
+    fetchBalances()
+      .then((data) => {
+        if (!isMounted) return;
+        setBalances(data);
+        setBalancesLoading(false);
+        setCachedBalances(data);
+      })
+      .catch(() => {
+        if (isMounted) setBalancesLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshTrigger]);
+
+  // Fetch dashboard summary
   useEffect(() => {
     let isMounted = true;
 
@@ -71,6 +104,16 @@ export function DashboardPage({
   const handleRetry = () => {
     setLoading(true);
     setError(null);
+    setBalancesLoading(true);
+
+    fetchBalances()
+      .then((b) => {
+        setBalances(b);
+        setBalancesLoading(false);
+        setCachedBalances(b);
+      })
+      .catch(() => setBalancesLoading(false));
+
     fetchDashboardSummary(dateRange)
       .then((data) => {
         setSummary(data);
@@ -120,7 +163,7 @@ export function DashboardPage({
             Dashboard
           </h1>
           <p className="text-sm sm:text-base text-[var(--text-secondary)] mt-1">
-            Cash flow overview and category composition
+            Account balances and cash flow overview
           </p>
         </div>
 
@@ -133,6 +176,16 @@ export function DashboardPage({
           <span>Quick Add</span>
         </button>
       </div>
+
+      {/* Account Balances Card (Live Available, Cash, and Online Balances) */}
+      <BalanceCard
+        balances={balances}
+        loading={balancesLoading}
+        onBalancesUpdated={(updated) => {
+          setBalances(updated);
+          setCachedBalances(updated);
+        }}
+      />
 
       {/* Date Range Controls */}
       <DateRangeSelector

@@ -57,6 +57,45 @@ export function parseINRToPaise(amountStr: string): bigint {
 }
 
 /**
+ * Parses an INR decimal string (e.g. "0", "0.00", "250", "250.50")
+ * into exact integer paise (bigint), permitting zero for starting balances.
+ */
+export function parseNonNegativeINRToPaise(amountStr: string): bigint {
+  if (typeof amountStr !== 'string') {
+    throw new Error('Amount must be a string');
+  }
+
+  const trimmed = amountStr.trim();
+  if (!trimmed) {
+    throw new Error('Amount string cannot be empty');
+  }
+
+  const regex = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/;
+  if (!regex.test(trimmed)) {
+    throw new Error(
+      `Invalid amount format: "${amountStr}". Must be a positive decimal with at most 2 decimal places.`
+    );
+  }
+
+  const [wholePart, fracPart = ''] = trimmed.split('.');
+  const paddedFrac = fracPart.padEnd(2, '0');
+
+  const whole = BigInt(wholePart);
+  const frac = BigInt(paddedFrac);
+  const paise = whole * BigInt(100) + frac;
+
+  if (paise < BigInt(0)) {
+    throw new Error('Amount in paise must be non-negative');
+  }
+
+  if (paise > MAX_SAFE_PAISE) {
+    throw new Error('Amount exceeds maximum allowable financial limit');
+  }
+
+  return paise;
+}
+
+/**
  * Converts integer paise into an exact 2-decimal string (e.g. 25050 -> "250.50").
  */
 export function paiseToDecimal(paise: number | bigint): string {

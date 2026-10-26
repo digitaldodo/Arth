@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { v7 as uuidv7 } from 'uuid';
 import {
   type CategoryDTO,
@@ -10,9 +10,12 @@ import {
   type NecessityClass,
   type CreateTransactionResponse,
   type UpdateTransactionResponse,
+  parseINRToPaise,
+  formatPaiseToINR,
 } from '@arth/contracts';
 import { createTransaction, updateTransaction, fetchCategories } from '@/lib/api-client';
 import { getTodayIST } from '@/lib/format';
+import { enqueuePendingMutation, saveCachedTransaction } from '@/lib/offline-db';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -31,6 +34,8 @@ export function QuickAddModal({
 }: QuickAddModalProps) {
   const isEditMode = Boolean(editingTransaction);
 
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
+
   // Stable UUID v7 for creation sessions (retained on retry)
   const [txnId, setTxnId] = useState<string>(() => uuidv7());
   const [type, setType] = useState<TransactionType>(() => editingTransaction?.type ?? 'expense');
@@ -47,8 +52,10 @@ export function QuickAddModal({
     }
     return 'online';
   });
-  const [necessity, setNecessity] = useState<NecessityClass>(
-    () => editingTransaction?.necessity ?? 'essential'
+
+  // Explicit necessity tier: in new expense mode, do NOT auto-default; user must explicitly choose
+  const [necessity, setNecessity] = useState<NecessityClass | null>(
+    () => editingTransaction?.necessity ?? null
   );
   const [description, setDescription] = useState<string>(
     () => editingTransaction?.description ?? ''
@@ -64,6 +71,17 @@ export function QuickAddModal({
   // Status & error states
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [consecutiveSuccessToast, setConsecutiveSuccessToast] = useState<string | null>(null);
+
+  // Focus amount input when modal opens or after consecutive entry reset
+  useEffect(() => {
+    if (isOpen) {
+      const t = setTimeout(() => {
+        amountInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [isOpen, txnId]);
 
   // Populate or reset form whenever modal opens or editingTransaction changes
   useEffect(() => {
@@ -76,25 +94,34 @@ export function QuickAddModal({
         setCategoryId(editingTransaction.category_id);
         setTransactionDate(editingTransaction.transaction_date);
         setPaymentMethod(editingTransaction.payment_method);
-        setNecessity(editingTransaction.necessity || 'essential');
+        setNecessity(editingTransaction.necessity || null);
         setDescription(editingTransaction.description || '');
         setNotes(editingTransaction.notes || '');
         setShowNotes(Boolean(editingTransaction.notes));
         setErrorMessage(null);
+        setConsecutiveSuccessToast(null);
       } else {
         setTxnId(uuidv7());
         setType('expense');
         setAmount('');
-        setCategoryId('');
-        setTransactionDate(getTodayIST());
-        setNecessity('essential');
+        // Necessity must NOT be preselected for new expenses
+        setNecessity(null);
         setDescription('');
         setNotes('');
         setShowNotes(false);
         setErrorMessage(null);
+        setConsecutiveSuccessToast(null);
+        setTransactionDate(getTodayIST());
+
         if (typeof window !== 'undefined') {
-          const saved = localStorage.getItem('arth_last_payment_method');
-          if (saved === 'online' || saved === 'cash') setPaymentMethod(saved);
+          const savedMethod = localStorage.getItem('arth_last_payment_method');
+          if (savedMethod === 'online' || savedMethod === 'cash') {
+            setPaymentMethod(savedMethod);
+          }
+          const savedCat = localStorage.getItem('arth_last_category_expense');
+          if (savedCat) {
+            setCategoryId(savedCat);
+          }
         }
       }
     }, 0);
@@ -127,6 +154,12 @@ export function QuickAddModal({
             cats.some((c) => c.id === editingTransaction.category_id)
           ) {
             return editingTransaction.category_id;
+          }
+          if (typeof window !== 'undefined') {
+            const savedCat = localStorage.getItem(`arth_last_category_${type}`);
+            if (savedCat && cats.some((c) => c.id === savedCat)) {
+              return savedCat;
+            }
           }
           return cats.length > 0 ? cats[0].id : '';
         });
@@ -162,6 +195,9 @@ export function QuickAddModal({
     if (newType === type) return;
     setType(newType);
     setErrorMessage(null);
+    if (newType === 'expense') {
+      setNecessity(null);
+    }
   };
 
   const handlePaymentMethodChange = (method: PaymentMethod) => {
@@ -173,17 +209,41 @@ export function QuickAddModal({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCategorySelect = (id: string) => {
+    setCategoryId(id);
+    try {
+      localStorage.setItem(`arth_last_category_${type}`, id);
+    } catch {
+      // LocalStorage unavailable in private mode
+    }
+  };
+
+  const executeSave = async (keepOpenForNext: boolean) => {
     setErrorMessage(null);
 
     // Basic client preflight
     if (!amount.trim()) {
-      setErrorMessage('Please enter a monetary amount');
+      setErrorMessage('Please enter an amount');
+      amountInputRef.current?.focus();
       return;
     }
+
+    try {
+      parseINRToPaise(amount.trim());
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Invalid amount format');
+      amountInputRef.current?.focus();
+      return;
+    }
+
     if (!categoryId) {
       setErrorMessage('Please select a category');
+      return;
+    }
+
+    // Explicit necessity validation for expenses
+    if (type === 'expense' && !necessity) {
+      setErrorMessage('Please verify necessity: choose Essential, Optional, or Luxury');
       return;
     }
 
@@ -204,7 +264,7 @@ export function QuickAddModal({
         onSuccess(response);
         onClose();
       } else {
-        const response = await createTransaction({
+        const payload = {
           id: txnId, // Idempotent UUID v7
           amount: amount.trim(),
           type,
@@ -214,10 +274,80 @@ export function QuickAddModal({
           necessity: type === 'expense' ? necessity : null,
           description: description.trim() || null,
           notes: notes.trim() || null,
-        });
+        };
+
+        let response: CreateTransactionResponse;
+
+        try {
+          response = await createTransaction(payload);
+          // Cache successful transaction into offline db
+          saveCachedTransaction(response.transaction);
+        } catch (netErr: unknown) {
+          // If offline or network failure, queue to offline db and respond optimistically
+          const isOffline =
+            typeof navigator !== 'undefined' && !navigator.onLine;
+          const isNetError =
+            netErr instanceof TypeError ||
+            /failed to fetch|network|offline/i.test(String(netErr));
+
+          if (isOffline || isNetError) {
+            const paise = parseINRToPaise(payload.amount);
+            const optimisticTxn: TransactionDTO = {
+              id: payload.id,
+              amount_paise: Number(paise),
+              amount_decimal: payload.amount,
+              formatted_inr: formatPaiseToINR(paise),
+              type: payload.type,
+              category_id: payload.category_id,
+              category_name:
+                categories.find((c) => c.id === payload.category_id)?.name ||
+                'Uncategorized',
+              transaction_date: payload.transaction_date,
+              payment_method: payload.payment_method,
+              necessity: payload.necessity ?? null,
+              description: payload.description || null,
+              notes: payload.notes || null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            await enqueuePendingMutation({
+              id: payload.id,
+              type: 'create_transaction',
+              payload,
+            });
+            await saveCachedTransaction(optimisticTxn);
+
+            response = {
+              transaction: optimisticTxn,
+              idempotent_replay: false,
+            };
+          } else {
+            throw netErr;
+          }
+        }
 
         onSuccess(response);
-        onClose();
+
+        if (keepOpenForNext) {
+          // Fast consecutive entry: clear amount, reset necessity, generate new UUID v7, refocus amount
+          const savedAmt = amount.trim();
+          setAmount('');
+          setNecessity(null);
+          setDescription('');
+          setNotes('');
+          setShowNotes(false);
+          setTxnId(uuidv7());
+          setConsecutiveSuccessToast(
+            `Recorded ₹${savedAmt} — enter next transaction`
+          );
+          setTimeout(() => {
+            setConsecutiveSuccessToast(null);
+          }, 3000);
+          amountInputRef.current?.focus();
+        } else {
+          onClose();
+        }
       }
     } catch (err: unknown) {
       const msg =
@@ -230,6 +360,11 @@ export function QuickAddModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    executeSave(false);
   };
 
   const topCategories = categories.slice(0, 6);
@@ -261,9 +396,16 @@ export function QuickAddModal({
 
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border-hairline)]">
-          <h2 id="transaction-modal-title" className="text-base font-semibold text-[var(--text-primary)]">
-            {isEditMode ? 'Edit Transaction' : 'Record Transaction'}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 id="transaction-modal-title" className="text-base font-semibold text-[var(--text-primary)]">
+              {isEditMode ? 'Edit Transaction' : 'Record Transaction'}
+            </h2>
+            {consecutiveSuccessToast && (
+              <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-sm">
+                ✓ {consecutiveSuccessToast}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -317,6 +459,7 @@ export function QuickAddModal({
             <div className="relative flex items-center border border-[var(--border-subtle)] focus-within:border-[var(--focus-ring)] rounded-lg bg-[var(--bg-canvas)] px-3 py-2">
               <span className="text-xl font-mono text-[var(--text-muted)] mr-2 select-none">₹</span>
               <input
+                ref={amountInputRef}
                 id="amount-input"
                 type="text"
                 inputMode="decimal"
@@ -331,46 +474,13 @@ export function QuickAddModal({
                 }}
                 disabled={isSubmitting}
                 required
-                autoFocus={!isEditMode}
+                autoFocus
                 className="w-full bg-transparent font-mono text-2xl md:text-3xl text-[var(--text-primary)] tracking-tight focus:outline-hidden"
               />
             </div>
           </div>
 
-          {/* 2b. Transaction Name (Optional) */}
-          <div>
-            <label htmlFor="transaction-name-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-              Transaction Name <span className="text-[10px] text-[var(--text-muted)] font-normal">(optional)</span>
-            </label>
-            <input
-              id="transaction-name-input"
-              type="text"
-              maxLength={255}
-              placeholder="e.g. Lunch with friends, College bus fee"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isSubmitting}
-              className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-hidden"
-            />
-          </div>
-
-          {/* 3. Transaction Date */}
-          <div>
-            <label htmlFor="date-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-              Date (IST)
-            </label>
-            <input
-              id="date-input"
-              type="date"
-              value={transactionDate}
-              onChange={(e) => setTransactionDate(e.target.value)}
-              disabled={isSubmitting}
-              required
-              className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:outline-hidden"
-            />
-          </div>
-
-          {/* 4. Category Selector (Top 6 chips + More) */}
+          {/* 3. Category Selector (Top 6 chips + More) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-[var(--text-secondary)]">Category</span>
@@ -387,7 +497,7 @@ export function QuickAddModal({
                     key={cat.id}
                     type="button"
                     onClick={() => {
-                      setCategoryId(cat.id);
+                      handleCategorySelect(cat.id);
                       setShowMoreCategories(false);
                     }}
                     disabled={isSubmitting}
@@ -430,7 +540,7 @@ export function QuickAddModal({
                     key={cat.id}
                     type="button"
                     onClick={() => {
-                      setCategoryId(cat.id);
+                      handleCategorySelect(cat.id);
                       setShowMoreCategories(false);
                     }}
                     className={`p-1.5 text-xs text-left rounded-md truncate cursor-pointer ${
@@ -446,10 +556,10 @@ export function QuickAddModal({
             )}
           </div>
 
-          {/* 5. Payment Method (Online vs Cash) */}
+          {/* 4. Payment Method: Paid using (Expense) vs Received as (Income) */}
           <div>
             <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Payment Method
+              {type === 'expense' ? 'Paid using' : 'Received as'}
             </span>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
@@ -479,31 +589,78 @@ export function QuickAddModal({
             </div>
           </div>
 
-          {/* 6. Necessity (Expense Only - strictly removed for Income) */}
+          {/* 5. Necessity (Expense Only - strictly verified each time, not auto-defaulted) */}
           {type === 'expense' && (
             <div>
-              <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                Necessity
-              </span>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-[var(--text-secondary)]">
+                  Necessity <span className="text-red-500">*</span>
+                </span>
+                {!necessity && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                    Please select tier
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-3 gap-1.5 text-xs font-medium">
-                {(['essential', 'optional', 'luxury'] as NecessityClass[]).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setNecessity(n)}
-                    disabled={isSubmitting}
-                    className={`py-1.5 px-2 rounded-md border capitalize transition-all cursor-pointer ${
-                      necessity === n
-                        ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
-                        : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
+                {(['essential', 'optional', 'luxury'] as NecessityClass[]).map((n) => {
+                  const isSelected = necessity === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setNecessity(n);
+                        setErrorMessage(null);
+                      }}
+                      disabled={isSubmitting}
+                      className={`py-2 px-2 rounded-md border capitalize transition-all cursor-pointer text-center ${
+                        isSelected
+                          ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)] font-semibold shadow-xs'
+                          : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
+
+          {/* 6. Optional Name & IST Date */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="transaction-name-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                Name <span className="text-[10px] text-[var(--text-muted)] font-normal">(optional)</span>
+              </label>
+              <input
+                id="transaction-name-input"
+                type="text"
+                maxLength={255}
+                placeholder="e.g. Lunch, Grocery"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                disabled={isSubmitting}
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-hidden"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="date-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                Date (IST)
+              </label>
+              <input
+                id="date-input"
+                type="date"
+                value={transactionDate}
+                onChange={(e) => setTransactionDate(e.target.value)}
+                disabled={isSubmitting}
+                required
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs font-mono text-[var(--text-primary)] focus:outline-hidden"
+              />
+            </div>
+          </div>
 
           {/* 7. Collapsed Private Notes */}
           <div>
@@ -542,19 +699,22 @@ export function QuickAddModal({
           </div>
 
           {/* 8. Action Buttons */}
-          <div className="pt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="w-1/3 py-2.5 text-xs font-medium border border-[var(--border-subtle)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
+          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => executeSave(true)}
+                disabled={isSubmitting}
+                className="w-full sm:w-1/2 py-2.5 text-xs font-semibold border border-[var(--border-subtle)] rounded-lg text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-60"
+              >
+                Save &amp; Add Another
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-2/3 py-2.5 text-xs font-semibold rounded-lg text-white transition-all shadow-xs cursor-pointer ${
+              className={`w-full ${!isEditMode ? 'sm:w-1/2' : 'w-full'} py-2.5 text-xs font-semibold rounded-lg text-white transition-all shadow-xs cursor-pointer ${
                 type === 'expense'
                   ? 'bg-red-700 hover:bg-red-800'
                   : 'bg-emerald-700 hover:bg-emerald-800'

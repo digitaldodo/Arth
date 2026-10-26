@@ -27,7 +27,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0014_username_authentication_and_lookup.sql',
       '0015_category_reorder_hardening.sql',
       '0016_account_deletion_support.sql',
-      '0017_google_sheets_sync.sql'
+      '0017_google_sheets_sync.sql',
+      '0018_account_balances_and_transfers.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -207,5 +208,15 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_claim_outbox_events'), 'Must define fn_claim_outbox_events');
     assert.ok(sql.includes('FOR UPDATE SKIP LOCKED'), 'Must use SKIP LOCKED for concurrent-safe outbox claiming');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_claim_outbox_events(INT, TEXT, INT) TO service_role'), 'Must grant claiming to service_role');
+  });
+
+  test('0018_account_balances_and_transfers.sql defines starting balances, balance_movements, and fn_account_balances', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0018_account_balances_and_transfers.sql'), 'utf-8');
+    assert.ok(sql.includes('starting_cash_paise BIGINT NOT NULL DEFAULT 0'), 'Must add starting_cash_paise to profiles');
+    assert.ok(sql.includes('starting_online_paise BIGINT NOT NULL DEFAULT 0'), 'Must add starting_online_paise to profiles');
+    assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.balance_movements'), 'Must create balance_movements table');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Must enable RLS on balance_movements');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_account_balances'), 'Must define fn_account_balances function');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Must execute with SECURITY INVOKER for caller security');
   });
 });
