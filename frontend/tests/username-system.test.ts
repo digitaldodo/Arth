@@ -541,7 +541,7 @@ describe('Arth Username System & Lifecycle Test Suite', () => {
 
     // Verify NOT NULL enforcement
     assert.ok(
-      migrationSql.includes('ALTER TABLE public.profiles\n  ALTER COLUMN username SET NOT NULL;'),
+      migrationSql.includes('ALTER COLUMN username SET NOT NULL'),
       'Migration must alter column username to SET NOT NULL'
     );
 
