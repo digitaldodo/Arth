@@ -4,13 +4,14 @@ import {
   safeBackendErrorResponse,
   getAuthenticatedSession,
 } from '@/lib/server-config';
+import { drainUserOutbox } from '@/lib/server/sheets-worker';
 
 /**
  * BFF proxy POST /api/backend/transactions -> Fastify POST /api/v1/transactions
  */
 export async function POST(req: NextRequest) {
   try {
-    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    const { accessToken, userId, errorResponse } = await getAuthenticatedSession();
     if (errorResponse || !accessToken) {
       return errorResponse || NextResponse.json(
         {
@@ -37,6 +38,15 @@ export async function POST(req: NextRequest) {
     });
 
     const data = await backendRes.json();
+
+    // Event-driven near-real-time synchronization:
+    // If transaction write was committed to PostgreSQL, asynchronously trigger outbox drain
+    if (backendRes.ok && userId) {
+      drainUserOutbox(userId).catch((syncErr) => {
+        console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+      });
+    }
+
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
     return safeBackendErrorResponse(err, 'POST /api/backend/transactions');

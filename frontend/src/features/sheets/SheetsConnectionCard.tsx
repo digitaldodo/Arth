@@ -18,6 +18,7 @@ export function SheetsConnectionCard() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
   const [connected, setConnected] = useState(false);
@@ -126,6 +127,26 @@ export function SheetsConnectionCard() {
       setErrorMessage(err instanceof Error ? err.message : 'Sync network error');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      setRetrying(true);
+      const res = await fetch('/api/backend/sheets/retry', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMessage(data.error || 'Retry failed');
+      } else {
+        setSuccessMessage(data.message || 'Failed syncs retried successfully!');
+        await fetchConnection();
+      }
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Retry network error');
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -289,15 +310,23 @@ export function SheetsConnectionCard() {
             <button
               type="button"
               onClick={handleSyncNow}
-              disabled={syncing || reconciling}
+              disabled={syncing || reconciling || retrying}
               className="px-3 py-1.5 text-xs font-medium bg-[var(--text-primary)] text-[var(--bg-app)] hover:opacity-90 rounded-md transition-opacity cursor-pointer disabled:opacity-50"
             >
               {syncing ? 'Syncing...' : 'Sync Now'}
             </button>
             <button
               type="button"
+              onClick={handleRetryFailed}
+              disabled={syncing || reconciling || retrying}
+              className="px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {retrying ? 'Retrying...' : 'Retry Failed Syncs'}
+            </button>
+            <button
+              type="button"
               onClick={handleReconcile}
-              disabled={syncing || reconciling}
+              disabled={syncing || reconciling || retrying}
               className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer disabled:opacity-50"
             >
               {reconciling ? 'Reconciling...' : 'Full Reconcile'}

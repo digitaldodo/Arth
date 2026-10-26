@@ -2,15 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "pnpm --filter @arth/contracts build && pnpm --filter @arth/frontend build",
-  "outputDirectory": "frontend/.next",
-  "crons": [
-    {
-      "path": "/api/sync/sheets",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/sync/reconcile",
-      "schedule": "0 0 * * 0"
-    }
-  ]
+  "outputDirectory": "frontend/.next"
 }
+

@@ -4,6 +4,7 @@ import {
   safeBackendErrorResponse,
   getAuthenticatedSession,
 } from '@/lib/server-config';
+import { drainUserOutbox } from '@/lib/server/sheets-worker';
 
 /**
  * BFF proxy PATCH /api/backend/transactions/[id] -> Fastify PATCH /api/v1/transactions/:id
@@ -13,7 +14,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    const { accessToken, userId, errorResponse } = await getAuthenticatedSession();
     if (errorResponse || !accessToken) {
       return (
         errorResponse ||
@@ -44,6 +45,13 @@ export async function PATCH(
     });
 
     const data = await backendRes.json();
+
+    if (backendRes.ok && userId) {
+      drainUserOutbox(userId).catch((syncErr) => {
+        console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+      });
+    }
+
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
     return safeBackendErrorResponse(err, 'PATCH /api/backend/transactions/[id]');
@@ -58,7 +66,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { accessToken, errorResponse } = await getAuthenticatedSession();
+    const { accessToken, userId, errorResponse } = await getAuthenticatedSession();
     if (errorResponse || !accessToken) {
       return (
         errorResponse ||
@@ -86,6 +94,13 @@ export async function DELETE(
     });
 
     const data = await backendRes.json();
+
+    if (backendRes.ok && userId) {
+      drainUserOutbox(userId).catch((syncErr) => {
+        console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+      });
+    }
+
     return NextResponse.json(data, { status: backendRes.status });
   } catch (err: unknown) {
     return safeBackendErrorResponse(err, 'DELETE /api/backend/transactions/[id]');

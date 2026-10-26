@@ -271,6 +271,52 @@ export async function processOutboxBatch(batchSize = 50): Promise<{
 }
 
 /**
+ * Retries all failed outbox events for a single user (called from "Retry Failed Syncs" in Settings).
+ * Resets failed events (status = 'failed') back to 'pending' with retry_count = 0,
+ * then triggers an immediate outbox drain.
+ */
+export async function retryFailedUserOutbox(userId: string): Promise<{
+  synced: number;
+  failed: number;
+  resetCount: number;
+  message: string;
+}> {
+  const admin = getSupabaseAdmin();
+
+  // 1. Reset failed events for this user
+  const { data: resetEvents, error: resetErr } = await admin
+    .from('outbox_events')
+    .update({
+      status: 'pending',
+      retry_count: 0,
+      error_message: null,
+      locked_at: null,
+      claim_id: null,
+    })
+    .eq('user_id', userId)
+    .eq('status', 'failed')
+    .select('id');
+
+  if (resetErr) {
+    throw new Error(`Failed to reset failed outbox events: ${resetErr.message}`);
+  }
+
+  const resetCount = resetEvents?.length || 0;
+
+  // 2. Execute outbox drain
+  const drainResult = await drainUserOutbox(userId);
+
+  return {
+    ...drainResult,
+    resetCount,
+    message:
+      resetCount > 0
+        ? `Retried ${resetCount} failed event(s). ${drainResult.message}`
+        : drainResult.message,
+  };
+}
+
+/**
  * Triggers an immediate outbox drain for a single user (called from "Sync Now" in Settings).
  */
 export async function drainUserOutbox(userId: string): Promise<{

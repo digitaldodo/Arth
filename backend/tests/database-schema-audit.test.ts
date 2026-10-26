@@ -29,10 +29,21 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0016_account_deletion_support.sql',
       '0017_google_sheets_sync.sql',
       '0018_account_balances_and_transfers.sql',
-      '0019_username_system_enhancements.sql'
+      '0019_username_system_enhancements.sql',
+      '0020_supabase_cron_schedules.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  test('0020_supabase_cron_schedules.sql configures pg_cron, outbox recovery and idempotent schedules', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0020_supabase_cron_schedules.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE EXTENSION IF NOT EXISTS pg_cron'), 'Must safely create pg_cron extension');
+    assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.cron_job_runs'), 'Must create cron_job_runs audit table');
+    assert.ok(sql.includes('fn_recover_stale_outbox_events'), 'Must define outbox lease recovery function');
+    assert.ok(sql.includes('cron.unschedule'), 'Must unschedule existing jobs before scheduling to prevent duplicates');
+    assert.ok(sql.includes('*/5 * * * *'), 'Must register 5-minute recovery cron');
+    assert.ok(sql.includes('30 21 * * *'), 'Must register daily reconciliation cron');
   });
 
   test('0001_create_profiles.sql enforces user relation and timezone defaults', () => {

@@ -22,7 +22,7 @@ function isAuthorizedCron(req: NextRequest): boolean {
 
 /**
  * GET/POST /api/sync/sheets
- * Scheduled outbox worker endpoint triggered by Vercel Cron or external schedulers.
+ * Scheduled outbox worker endpoint triggered by Supabase Cron (pg_cron), Edge Functions, or external schedulers.
  */
 export async function GET(req: NextRequest) {
   return handleSync(req);
@@ -44,24 +44,40 @@ async function handleSync(req: NextRequest) {
     );
   }
 
+  const cronSource = req.headers.get('x-cron-source') || 'manual_trigger';
+  const startTime = Date.now();
+
   try {
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get('limit')) || 50;
+    const rawLimit = Number(url.searchParams.get('limit')) || 50;
+    // Bounded execution: enforce safe limit range between 1 and 100
+    const limit = Math.min(Math.max(rawLimit, 1), 100);
 
-    const result = await processOutboxBatch(limit);
+    // Timeout guard: 25-second limit for serverless execution
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Outbox batch processing exceeded 25-second limit')), 25000)
+    );
+
+    const result = await Promise.race([processOutboxBatch(limit), timeoutPromise]);
+    const durationMs = Date.now() - startTime;
+
     return NextResponse.json({
       success: true,
+      source: cronSource,
       timestamp: new Date().toISOString(),
+      duration_ms: durationMs,
       ...result,
     });
   } catch (err: unknown) {
+    const durationMs = Date.now() - startTime;
     const message = err instanceof Error ? err.message : 'Unknown sync failure';
-    console.error('[CronSheetsSync] Error processing outbox batch:', err);
+    console.error(`[CronSheetsSync][source=${cronSource}] Error:`, err);
     return NextResponse.json(
       {
         statusCode: 500,
         error: 'InternalServerError',
         message,
+        duration_ms: durationMs,
       },
       { status: 500 }
     );
