@@ -201,12 +201,14 @@ export function TransactionLedger({
         const cat = (t.category_name || '').toLowerCase();
         const notes = (t.notes || '').toLowerCase();
         const date = t.transaction_date.toLowerCase();
+        const humanDate = formatDateHuman(t.transaction_date).toLowerCase();
         const inr = t.formatted_inr.toLowerCase();
         return (
           desc.includes(q) ||
           cat.includes(q) ||
           notes.includes(q) ||
           date.includes(q) ||
+          humanDate.includes(q) ||
           inr.includes(q)
         );
       });

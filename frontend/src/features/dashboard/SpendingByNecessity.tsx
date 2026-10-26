@@ -37,7 +37,7 @@ const NECESSITY_TIERS: TierConfig[] = [
     label: 'Luxury',
     color: '#a855f7', // Tailwind purple-500
     dotClass: 'bg-purple-500',
-    description: 'Upgrades & premium splurges',
+    description: 'Upgrades & splurges',
   },
 ];
 
@@ -45,10 +45,12 @@ export function SpendingByNecessity({
   items = [],
   totalExpensesPaise,
 }: SpendingByNecessityProps) {
-  // Normalize items to ensure all three tiers exist deterministically
+  // Normalize items to ensure all three tiers exist deterministically and match case-insensitively
   const tierData = NECESSITY_TIERS.map((tier) => {
-    const found = items.find((i) => i.necessity === tier.necessity);
-    const amountPaise = found ? found.amount_paise : 0;
+    const found = items.find(
+      (i) => String(i.necessity || '').toLowerCase().trim() === tier.necessity
+    );
+    const amountPaise = found ? Number(found.amount_paise || 0) : 0;
     const sharePercentage =
       totalExpensesPaise > 0
         ? Math.round((amountPaise / totalExpensesPaise) * 1000) / 10
@@ -93,14 +95,14 @@ export function SpendingByNecessity({
         </span>
       </div>
 
-      {/* Proportional Segmented Distribution Bar */}
+      {/* Subtle Segmented Horizontal Contribution Bar */}
       <div
         role="progressbar"
         aria-label="Expense distribution across necessity classifications"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={100}
-        className="w-full h-3 rounded-md overflow-hidden flex bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]"
+        className="w-full h-2.5 rounded-full overflow-hidden flex bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]"
       >
         {tierData.map((tier) => {
           if (tier.amountPaise <= 0) return null;
@@ -112,14 +114,14 @@ export function SpendingByNecessity({
                 backgroundColor: tier.color,
               }}
               title={`${tier.label}: ${tier.sharePercentage}% (${tier.formattedInr})`}
-              className="h-full transition-all duration-300 first:rounded-l-sm last:rounded-r-sm"
+              className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
             />
           );
         })}
       </div>
 
-      {/* Tier Breakdown List */}
-      <div className="divide-y divide-[var(--border-hairline)] pt-1">
+      {/* Compact Category Rows with Progress Indicator */}
+      <div className="divide-y divide-[var(--border-hairline)] pt-0.5">
         {tierData.map((tier) => (
           <div
             key={tier.necessity}
@@ -131,22 +133,39 @@ export function SpendingByNecessity({
                 className="w-2.5 h-2.5 rounded-full shrink-0"
               />
               <div className="min-w-0">
-                <span className="font-medium text-[var(--text-primary)]">
+                <span className="font-semibold text-[var(--text-primary)]">
                   {tier.label}
                 </span>
                 <span className="hidden sm:inline text-[10px] text-[var(--text-muted)] ml-2 truncate">
                   {tier.description}
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-[var(--text-muted)] shrink-0">
-                {tier.sharePercentage}%
-              </span>
             </div>
 
-            <div className="text-right shrink-0">
-              <span className="font-mono font-semibold text-[var(--text-primary)]">
-                {tier.formattedInr}
-              </span>
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Mini row progress bar */}
+              <div className="w-12 sm:w-16 h-1.5 rounded-full bg-[var(--bg-surface-subtle)] overflow-hidden shrink-0 hidden xs:block">
+                <div
+                  style={{
+                    width: `${tier.sharePercentage}%`,
+                    backgroundColor: tier.color,
+                  }}
+                  className="h-full rounded-full transition-all duration-300"
+                />
+              </div>
+
+              {/* Amount and percentage right-aligned */}
+              <div className="text-right flex items-center gap-1.5 shrink-0 font-mono">
+                <span className="font-semibold text-[var(--text-primary)]">
+                  {tier.formattedInr}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  ·
+                </span>
+                <span className="text-[11px] text-[var(--text-secondary)] w-10 text-right">
+                  {tier.sharePercentage}%
+                </span>
+              </div>
             </div>
           </div>
         ))}

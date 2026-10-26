@@ -113,19 +113,109 @@ export class SupabaseDashboardService implements IDashboardService {
       })
     );
 
-    const spendingByNecessity: NecessitySpendingDTO[] = Array.isArray(rpcData.spending_by_necessity)
-      ? (rpcData.spending_by_necessity as Record<string, unknown>[]).map((item) => ({
-          necessity: item.necessity as NecessityClass,
-          label: String(item.label || (item.necessity ? String(item.necessity).charAt(0).toUpperCase() + String(item.necessity).slice(1) : 'Unknown')),
-          amount_paise: Number(item.amount_paise || 0),
-          formatted_inr: formatPaiseToINR(Number(item.amount_paise || 0)),
-          share_percentage: Number(item.share_percentage || 0),
-        }))
-      : [
-          { necessity: 'essential', label: 'Essential', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
-          { necessity: 'optional', label: 'Optional', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
-          { necessity: 'luxury', label: 'Luxury', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+    let spendingByNecessity: NecessitySpendingDTO[] = [];
+
+    if (Array.isArray(rpcData.spending_by_necessity) && rpcData.spending_by_necessity.length > 0) {
+      spendingByNecessity = (rpcData.spending_by_necessity as Record<string, unknown>[]).map((item) => {
+        const nec = String(item.necessity || '').toLowerCase().trim() as NecessityClass;
+        const amount = Number(item.amount_paise || 0);
+        const label =
+          item.label && typeof item.label === 'string'
+            ? item.label
+            : nec
+            ? nec.charAt(0).toUpperCase() + nec.slice(1)
+            : 'Unknown';
+
+        return {
+          necessity: nec,
+          label,
+          amount_paise: amount,
+          formatted_inr: formatPaiseToINR(amount),
+          share_percentage:
+            expensesPaise > 0
+              ? Math.round((amount / expensesPaise) * 1000) / 10
+              : 0,
+        };
+      });
+    }
+
+    const totalNecessityPaise = spendingByNecessity.reduce(
+      (sum, item) => sum + (item.amount_paise || 0),
+      0
+    );
+
+    // Fallback & Authoritative Reconciliation:
+    // If the database RPC function did not return spending_by_necessity, or returned 0s while expenses exist
+    if (expensesPaise > 0 && totalNecessityPaise === 0) {
+      const { data: necRows, error: necErr } = await client
+        .from('transactions')
+        .select('amount_paise, necessity')
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .eq('type', 'expense')
+        .gte('transaction_date', query.start_date)
+        .lte('transaction_date', query.end_date);
+
+      if (!necErr && Array.isArray(necRows)) {
+        let essentialPaise = 0;
+        let optionalPaise = 0;
+        let luxuryPaise = 0;
+
+        for (const row of necRows) {
+          const amt = Number(row.amount_paise || 0);
+          const nec = String(row.necessity || '').toLowerCase().trim();
+          if (nec === 'essential') {
+            essentialPaise += amt;
+          } else if (nec === 'optional') {
+            optionalPaise += amt;
+          } else if (nec === 'luxury') {
+            luxuryPaise += amt;
+          }
+        }
+
+        spendingByNecessity = [
+          {
+            necessity: 'essential',
+            label: 'Essential',
+            amount_paise: essentialPaise,
+            formatted_inr: formatPaiseToINR(essentialPaise),
+            share_percentage:
+              expensesPaise > 0
+                ? Math.round((essentialPaise / expensesPaise) * 1000) / 10
+                : 0,
+          },
+          {
+            necessity: 'optional',
+            label: 'Optional',
+            amount_paise: optionalPaise,
+            formatted_inr: formatPaiseToINR(optionalPaise),
+            share_percentage:
+              expensesPaise > 0
+                ? Math.round((optionalPaise / expensesPaise) * 1000) / 10
+                : 0,
+          },
+          {
+            necessity: 'luxury',
+            label: 'Luxury',
+            amount_paise: luxuryPaise,
+            formatted_inr: formatPaiseToINR(luxuryPaise),
+            share_percentage:
+              expensesPaise > 0
+                ? Math.round((luxuryPaise / expensesPaise) * 1000) / 10
+                : 0,
+          },
         ];
+      }
+    }
+
+    // If still empty (e.g. no expenses recorded at all in this range), provide deterministic 3 zero tiers
+    if (spendingByNecessity.length === 0) {
+      spendingByNecessity = [
+        { necessity: 'essential', label: 'Essential', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+        { necessity: 'optional', label: 'Optional', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+        { necessity: 'luxury', label: 'Luxury', amount_paise: 0, formatted_inr: formatPaiseToINR(0), share_percentage: 0 },
+      ];
+    }
 
     return {
       start_date: query.start_date,
@@ -197,11 +287,12 @@ export class InMemoryDashboardService implements IDashboardService {
         incomePaise += amount;
       } else if (t.type === 'expense') {
         expensesPaise += amount;
-        if (t.necessity === 'essential') {
+        const nec = String(t.necessity || '').toLowerCase().trim();
+        if (nec === 'essential') {
           essentialPaise += amount;
-        } else if (t.necessity === 'optional') {
+        } else if (nec === 'optional') {
           optionalPaise += amount;
-        } else if (t.necessity === 'luxury') {
+        } else if (nec === 'luxury') {
           luxuryPaise += amount;
         }
         const cat = allCategories.find((c) => c.id === t.category_id);

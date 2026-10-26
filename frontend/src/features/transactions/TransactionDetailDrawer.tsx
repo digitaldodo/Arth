@@ -146,8 +146,7 @@ export function TransactionDetailDrawer({
             <div className="flex items-center justify-between p-3 gap-3">
               <span className="text-[var(--text-muted)] font-medium shrink-0">Date</span>
               <span className="text-[var(--text-primary)] font-mono text-right">
-                {formatDateHuman(transaction.transaction_date)}{' '}
-                <span className="text-[var(--text-muted)] text-[10px]">({transaction.transaction_date})</span>
+                {formatDateHuman(transaction.transaction_date)}
               </span>
             </div>
 

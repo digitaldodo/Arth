@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import type { CategoryDTO, TransactionType, TransactionDTO, NecessityClass } from '@arth/contracts';
-import { formatPaiseToINR } from '@/lib/format';
+import { formatPaiseToINR, formatDateHuman } from '@/lib/format';
 import {
   type DateRangePreset,
   computePresetDateRange,
@@ -346,9 +346,16 @@ export function ExportPdfDialog({
             {preset === 'custom' && (
               <div className="mt-3 p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="custom-start-date" className="block text-[11px] font-medium text-[var(--text-muted)] mb-1">
-                    Start Date
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="custom-start-date" className="block text-[11px] font-medium text-[var(--text-muted)]">
+                      Start Date
+                    </label>
+                    {customStartDate && (
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        {formatDateHuman(customStartDate)}
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="custom-start-date"
                     type="date"
@@ -359,9 +366,16 @@ export function ExportPdfDialog({
                   />
                 </div>
                 <div>
-                  <label htmlFor="custom-end-date" className="block text-[11px] font-medium text-[var(--text-muted)] mb-1">
-                    End Date
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="custom-end-date" className="block text-[11px] font-medium text-[var(--text-muted)]">
+                      End Date
+                    </label>
+                    {customEndDate && (
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        {formatDateHuman(customEndDate)}
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="custom-end-date"
                     type="date"

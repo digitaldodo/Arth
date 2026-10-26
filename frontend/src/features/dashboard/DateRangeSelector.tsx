@@ -130,12 +130,19 @@ export function DateRangeSelector({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label
-                htmlFor="custom-start-date"
-                className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
-              >
-                Start Date
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="custom-start-date"
+                  className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                >
+                  Start Date
+                </label>
+                {customStart && (
+                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {formatDateHuman(customStart)}
+                  </span>
+                )}
+              </div>
               <input
                 id="custom-start-date"
                 type="date"
@@ -147,12 +154,19 @@ export function DateRangeSelector({
             </div>
 
             <div>
-              <label
-                htmlFor="custom-end-date"
-                className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
-              >
-                End Date
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="custom-end-date"
+                  className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                >
+                  End Date
+                </label>
+                {customEnd && (
+                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {formatDateHuman(customEnd)}
+                  </span>
+                )}
+              </div>
               <input
                 id="custom-end-date"
                 type="date"

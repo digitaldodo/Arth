@@ -156,10 +156,10 @@ describe('Personal Financial Statement PDF Redesign', () => {
       assert.ok(ref1.startsWith('ARTH-STMT-20261031-'));
     });
 
-    test('getTimestampIST returns date formatted in Asia/Kolkata timezone with IST suffix', () => {
+    test('getTimestampIST returns date formatted in Asia/Kolkata timezone with IST suffix in DD-MM-YYYY format', () => {
       const timestamp = getTimestampIST();
       assert.ok(timestamp.endsWith('IST'), 'Must include IST timezone suffix');
-      assert.ok(/\d{2} [A-Za-z]{3} \d{4},? \d{1,2}:\d{2}\s?(am|pm) IST/i.test(timestamp), `Timestamp "${timestamp}" should match expected format`);
+      assert.ok(/\d{2}-\d{2}-\d{4},? \d{1,2}:\d{2}\s?(am|pm) IST/i.test(timestamp), `Timestamp "${timestamp}" should match expected format`);
     });
   });
 
@@ -171,7 +171,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
         categories: mockCategories,
         startDate: '2026-10-01',
         endDate: '2026-10-31',
-        dateRangeLabel: '1 Oct 2026 – 31 Oct 2026',
+        dateRangeLabel: '01-10-2026 – 31-10-2026',
         prefetchedTransactions: mockFiveTransactions,
         userProfile: {
           displayName: 'Ansh Kumar',

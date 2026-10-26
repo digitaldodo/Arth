@@ -100,12 +100,12 @@ describe('Flexible Ledger PDF Export: Date Range Presets & Validation', () => {
     assert.equal(isValidDateRange('', '2026-10-31'), false);
   });
 
-  test('formatDateRangeLabel formats human-readable period string in DD MMM YYYY format', () => {
+  test('formatDateRangeLabel formats period string in DD-MM-YYYY format', () => {
     const label = formatDateRangeLabel('2026-10-01', '2026-10-31');
-    assert.equal(label, '1 Oct 2026 – 31 Oct 2026');
+    assert.equal(label, '01-10-2026 – 31-10-2026');
 
     const singleDay = formatDateRangeLabel('2026-10-25', '2026-10-25');
-    assert.equal(singleDay, '25 Oct 2026');
+    assert.equal(singleDay, '25-10-2026');
   });
 
   test('TransactionLedger implements accessible clickable rows with keyboard interaction', () => {

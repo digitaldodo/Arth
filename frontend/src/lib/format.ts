@@ -25,35 +25,68 @@ export function getTodayIST(): string {
 }
 
 /**
- * Formats a YYYY-MM-DD date into human-readable Indian format: "24 Oct 2026"
+ * Formats a date string (YYYY-MM-DD or ISO) into standard Indian format: "DD-MM-YYYY" (e.g. "24-10-2026")
  */
 export function formatDateHuman(dateStr: string): string {
   if (!dateStr) return '';
-  const [year, month, day] = dateStr.split('-').map(Number);
-  if (!year || !month || !day) return dateStr;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(d);
+  const trimmed = dateStr.trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+  }
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    const parts = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).formatToParts(d);
+    const day = parts.find((p) => p.type === 'day')?.value ?? '';
+    const month = parts.find((p) => p.type === 'month')?.value ?? '';
+    const year = parts.find((p) => p.type === 'year')?.value ?? '';
+    return `${day}-${month}-${year}`;
+  }
+  return dateStr;
 }
 
 /**
- * Formats an ISO timestamp into human-readable IST: "24 Oct 2026, 04:30 PM"
+ * Formats a date string (YYYY-MM-DD or ISO) into slash-separated Indian format: "DD/MM/YYYY" (e.g. "24/10/2026")
+ */
+export function formatDateSlash(dateStr: string): string {
+  if (!dateStr) return '';
+  const hyphenated = formatDateHuman(dateStr);
+  return hyphenated.replace(/-/g, '/');
+}
+
+/**
+ * Formats an ISO timestamp into human-readable IST: "DD-MM-YYYY, hh:mm AM/PM" (e.g. "24-10-2026, 04:30 PM")
  */
 export function formatDateTimeIST(isoStr: string): string {
   if (!isoStr) return '';
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return isoStr;
-  return new Intl.DateTimeFormat('en-IN', {
+
+  const parts = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
-  }).format(d);
+  }).formatToParts(d);
+
+  const day = parts.find((p) => p.type === 'day')?.value ?? '';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '';
+  const year = parts.find((p) => p.type === 'year')?.value ?? '';
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '';
+  const dayPeriod = parts.find((p) => p.type === 'dayPeriod')?.value?.toUpperCase() ?? '';
+
+  return `${day}-${month}-${year}, ${hour}:${minute} ${dayPeriod}`;
 }

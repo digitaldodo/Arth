@@ -7,6 +7,7 @@ import {
   type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
+import { formatPaiseToINR } from '@/lib/format';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
 import {
   getCachedBalances,
@@ -196,6 +197,69 @@ export function DashboardPage({
     setPreset('custom');
     setDateRange({ start_date: startDate, end_date: endDate });
   };
+
+  // Authoritative spending by necessity fallback reconciliation
+  const effectiveNecessityItems = React.useMemo(() => {
+    if (!summary) return [];
+    const items = summary.spending_by_necessity || [];
+    const sumPaise = items.reduce((acc, curr) => acc + (curr.amount_paise || 0), 0);
+    if (sumPaise > 0 || summary.expenses_paise <= 0) {
+      return items;
+    }
+
+    const txs = summary.recent_transactions || [];
+    let essential = 0;
+    let optional = 0;
+    let luxury = 0;
+
+    for (const t of txs) {
+      if (t.type === 'expense') {
+        const nec = String(t.necessity || '').toLowerCase().trim();
+        const amt = Number(t.amount_paise || 0);
+        if (nec === 'essential') essential += amt;
+        else if (nec === 'optional') optional += amt;
+        else if (nec === 'luxury') luxury += amt;
+      }
+    }
+
+    const calcTotal = essential + optional + luxury;
+    if (calcTotal > 0) {
+      return [
+        {
+          necessity: 'essential' as const,
+          label: 'Essential',
+          amount_paise: essential,
+          formatted_inr: formatPaiseToINR(essential),
+          share_percentage:
+            summary.expenses_paise > 0
+              ? Math.round((essential / summary.expenses_paise) * 1000) / 10
+              : 0,
+        },
+        {
+          necessity: 'optional' as const,
+          label: 'Optional',
+          amount_paise: optional,
+          formatted_inr: formatPaiseToINR(optional),
+          share_percentage:
+            summary.expenses_paise > 0
+              ? Math.round((optional / summary.expenses_paise) * 1000) / 10
+              : 0,
+        },
+        {
+          necessity: 'luxury' as const,
+          label: 'Luxury',
+          amount_paise: luxury,
+          formatted_inr: formatPaiseToINR(luxury),
+          share_percentage:
+            summary.expenses_paise > 0
+              ? Math.round((luxury / summary.expenses_paise) * 1000) / 10
+              : 0,
+        },
+      ];
+    }
+
+    return items;
+  }, [summary]);
 
   const isAuthError =
     error &&
@@ -430,20 +494,23 @@ export function DashboardPage({
             </div>
           )}
 
-          {/* Spending Composition and Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-            <div className="lg:col-span-5 space-y-6">
+          {/* Spending Composition, Spending by Necessity, and Recent Activity */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+            <div className="w-full">
               <SpendingComposition
                 categories={summary.spending_composition}
                 totalExpensesPaise={summary.expenses_paise}
               />
+            </div>
+
+            <div className="w-full">
               <SpendingByNecessity
-                items={summary.spending_by_necessity}
+                items={effectiveNecessityItems}
                 totalExpensesPaise={summary.expenses_paise}
               />
             </div>
 
-            <div className="lg:col-span-7 space-y-6">
+            <div className="w-full md:col-span-2 xl:col-span-1">
               <RecentActivity
                 transactions={summary.recent_transactions}
                 onNavigateToLedger={onNavigateToLedger}

@@ -14,7 +14,7 @@ import {
   formatPaiseToINR,
 } from '@arth/contracts';
 import { createTransaction, updateTransaction, fetchCategories } from '@/lib/api-client';
-import { getTodayIST } from '@/lib/format';
+import { getTodayIST, formatDateHuman } from '@/lib/format';
 import { enqueuePendingMutation, saveCachedTransaction } from '@/lib/offline-db';
 
 interface QuickAddModalProps {
@@ -651,9 +651,16 @@ export function QuickAddModal({
             </div>
 
             <div>
-              <label htmlFor="date-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                Date (IST)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="date-input" className="block text-xs font-medium text-[var(--text-secondary)]">
+                  Date (IST)
+                </label>
+                {transactionDate && (
+                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                    {formatDateHuman(transactionDate)}
+                  </span>
+                )}
+              </div>
               <input
                 id="date-input"
                 type="date"

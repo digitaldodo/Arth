@@ -10,6 +10,8 @@ import type {
 import { GET as handleGetTransactions } from '../src/app/api/backend/transactions/route.js';
 import { fetchTransactions } from '../src/lib/api-client/index.js';
 import { fetchAllMatchingTransactions } from '../src/features/transactions/ledger-pdf-exporter.js';
+import { formatDateHuman, formatDateSlash, formatDateTimeIST, formatPaiseToINR } from '../src/lib/format.js';
+import { formatDateRangeLabel } from '../src/features/transactions/date-range-utils.js';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
@@ -245,5 +247,69 @@ describe('Necessity Filtering and Spending Insights Suite', () => {
       mixedResult.tiers.optional.amountPaise +
       mixedResult.tiers.luxury.amountPaise;
     assert.equal(sumTiers, mixedResult.totalExpensesPaise);
+  });
+
+  // 5. Specific user 5-transaction regression scenario
+  test('accurately calculates user 5-transaction regression dataset (Total ₹270: Essential ₹215, Optional ₹55, Luxury ₹0)', () => {
+    const userTransactions = [
+      { id: '1', description: 'Chaudhary Dhaba', type: 'expense', amount_paise: 12500, necessity: 'essential' },
+      { id: '2', description: 'Coke', type: 'expense', amount_paise: 2000, necessity: 'optional' },
+      { id: '3', description: 'Lassi', type: 'expense', amount_paise: 3500, necessity: 'optional' },
+      { id: '4', description: 'Biryani', type: 'expense', amount_paise: 5000, necessity: 'essential' },
+      { id: '5', description: 'Travelling', type: 'expense', amount_paise: 4000, necessity: 'essential' },
+    ];
+
+    let totalPaise = 0;
+    let essentialPaise = 0;
+    let optionalPaise = 0;
+    let luxuryPaise = 0;
+
+    for (const t of userTransactions) {
+      totalPaise += t.amount_paise;
+      if (t.necessity === 'essential') essentialPaise += t.amount_paise;
+      else if (t.necessity === 'optional') optionalPaise += t.amount_paise;
+      else if (t.necessity === 'luxury') luxuryPaise += t.amount_paise;
+    }
+
+    assert.equal(totalPaise, 27000); // ₹270.00
+    assert.equal(essentialPaise, 21500); // ₹215.00
+    assert.equal(optionalPaise, 5500); // ₹55.00
+    assert.equal(luxuryPaise, 0); // ₹0.00
+
+    const essentialShare = Math.round((essentialPaise / totalPaise) * 1000) / 10;
+    const optionalShare = Math.round((optionalPaise / totalPaise) * 1000) / 10;
+    const luxuryShare = Math.round((luxuryPaise / totalPaise) * 1000) / 10;
+
+    assert.equal(essentialShare, 79.6);
+    assert.equal(optionalShare, 20.4);
+    assert.equal(luxuryShare, 0.0);
+
+    assert.equal(formatPaiseToINR(essentialPaise), '₹215.00');
+    assert.equal(formatPaiseToINR(optionalPaise), '₹55.00');
+    assert.equal(formatPaiseToINR(luxuryPaise), '₹0.00');
+    assert.equal(formatPaiseToINR(totalPaise), '₹270.00');
+  });
+
+  // 6. Project-wide DD-MM-YYYY date formatting standardization
+  test('standardizes all visible dates to DD-MM-YYYY across format utilities', () => {
+    // Standard ISO dates to DD-MM-YYYY
+    assert.equal(formatDateHuman('2026-10-24'), '24-10-2026');
+    assert.equal(formatDateHuman('2026-10-01'), '01-10-2026');
+    assert.equal(formatDateHuman('2026-02-09'), '09-02-2026');
+
+    // Already in DD-MM-YYYY format
+    assert.equal(formatDateHuman('24-10-2026'), '24-10-2026');
+
+    // Slash format helper
+    assert.equal(formatDateSlash('2026-10-24'), '24/10/2026');
+    assert.equal(formatDateSlash('2026-10-01'), '01/10/2026');
+
+    // IST DateTime formatting with DD-MM-YYYY
+    const istFormatted = formatDateTimeIST('2026-10-24T10:00:00Z');
+    assert.ok(istFormatted.startsWith('24-10-2026'), 'Expected istFormatted to start with 24-10-2026');
+
+    // Date range label
+    assert.equal(formatDateRangeLabel('2026-10-01', '2026-10-31'), '01-10-2026 – 31-10-2026');
+    assert.equal(formatDateRangeLabel('2026-10-25', '2026-10-25'), '25-10-2026');
   });
 });
