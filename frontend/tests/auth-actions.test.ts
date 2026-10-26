@@ -255,16 +255,15 @@ describe('Frontend Authentication Server Actions & Validation', () => {
 
   // 2. Sign Up Action Validation
   describe('signUpWithEmailAction validation & rules', () => {
-    test('rejects missing or invalid username characters and lengths', async () => {
+    test('rejects invalid username characters and lengths', async () => {
       const invalidUsernames = [
-        '',
         'a',
         'ab',
         'user with spaces',
         'user@bad!',
         'invalid.dots',
         'special$char',
-        'a'.repeat(35),
+        'a'.repeat(25),
       ];
       for (const username of invalidUsernames) {
         const formData = new FormData();
@@ -276,7 +275,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         const res = await signUpWithEmailAction(formData);
         assert.equal(
           res.error,
-          'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
+          'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.',
           `Should have rejected username: ${username}`
         );
       }
@@ -472,7 +471,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
   // 5. Existing Accounts & Claiming Usernames (setUsernameAction & checkUsernameAvailabilityAction)
   describe('setUsernameAction & checkUsernameAvailabilityAction', () => {
     test('setUsernameAction rejects invalid username characters and lengths', async () => {
-      const invalidUsernames = ['a', 'user with space', 'ab@cd', 'a'.repeat(35)];
+      const invalidUsernames = ['a', 'user with space', 'ab@cd', 'a'.repeat(25)];
       for (const name of invalidUsernames) {
         const formData = new FormData();
         formData.set('username', name);
@@ -480,7 +479,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         const res = await setUsernameAction(formData);
         assert.equal(
           res.error,
-          'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.'
+          'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.'
         );
       }
     });

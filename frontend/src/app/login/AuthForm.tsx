@@ -196,7 +196,27 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
   };
 
   // Live validation helpers
-  const isUsernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username);
+  const isUsernameProvided = username.trim().length > 0;
+  const isUsernameValidFormat =
+    !isUsernameProvided ||
+    (/^[a-z0-9_]{3,20}$/.test(username.trim().toLowerCase()) &&
+      ![
+        'admin',
+        'administrator',
+        'support',
+        'system',
+        'arth',
+        'root',
+        'superuser',
+        'help',
+        'api',
+        'auth',
+        'null',
+        'undefined',
+        'moderator',
+        'staff',
+      ].includes(username.trim().toLowerCase()));
+  const isUsernameValid = isUsernameValidFormat;
   const isPasswordValidLength = password.length >= 8;
   const isPasswordMatch = password.length > 0 && password === confirmPassword;
 
@@ -547,9 +567,9 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
                 htmlFor="signup-username"
                 className="block text-[12px] font-medium text-[var(--text-primary)]"
               >
-                Username
+                Username <span className="text-[var(--text-muted)] font-normal">(optional)</span>
               </label>
-              {username.length > 0 && (
+              {username.length > 0 ? (
                 <span
                   className={`text-[10px] font-mono ${
                     isUsernameValid
@@ -557,7 +577,11 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
                       : 'text-[var(--status-error-fg)]'
                   }`}
                 >
-                  {isUsernameValid ? '✓ Valid' : '3-30 chars, alphanumeric'}
+                  {isUsernameValid ? '✓ Valid' : '3-20 chars, a-z, 0-9, _'}
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                  auto-generated if blank
                 </span>
               )}
             </div>
@@ -565,12 +589,11 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
               id="signup-username"
               name="username"
               type="text"
-              required
               autoComplete="username"
-              placeholder="e.g. rahul_sharma"
+              placeholder="e.g. rahul_sharma (or leave blank)"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all lowercase"
             />
           </div>
 

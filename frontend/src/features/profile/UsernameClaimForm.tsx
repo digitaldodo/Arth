@@ -1,7 +1,14 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
-import { setUsernameAction } from '@/app/login/actions';
+import React, { useState, useEffect, useTransition } from 'react';
+import {
+  setUsernameAction,
+  checkUsernameAvailabilityAction,
+} from '@/app/login/actions';
+import {
+  isValidUsername,
+  isReservedUsername,
+} from '@/lib/username';
 
 interface UsernameClaimFormProps {
   currentUsername?: string;
@@ -16,9 +23,78 @@ export function UsernameClaimForm({
   const [isEditing, setIsEditing] = useState(!currentUsername);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState<
+    'idle' | 'available' | 'taken' | 'invalid' | 'reserved'
+  >('idle');
   const [isPending, startTransition] = useTransition();
 
-  const isValidFormat = /^[a-zA-Z0-9_-]{3,30}$/.test(username);
+  const clean = username.trim().toLowerCase();
+  const isSameAsCurrent = Boolean(currentUsername && clean === currentUsername.toLowerCase());
+  const isValidFormat = isValidUsername(clean);
+  const isReserved = isReservedUsername(clean);
+
+  // Debounced live availability check
+  useEffect(() => {
+    if (!isEditing) return;
+
+    if (!clean) {
+      setAvailabilityStatus('idle');
+      setSuggestions([]);
+      return;
+    }
+
+    if (!isValidFormat) {
+      setAvailabilityStatus('invalid');
+      setSuggestions([]);
+      return;
+    }
+
+    if (isReserved) {
+      setAvailabilityStatus('reserved');
+      return;
+    }
+
+    if (isSameAsCurrent) {
+      setAvailabilityStatus('available');
+      setSuggestions([]);
+      return;
+    }
+
+    let isMounted = true;
+    setIsCheckingAvailability(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkUsernameAvailabilityAction(clean);
+        if (!isMounted) return;
+
+        if (res.available) {
+          setAvailabilityStatus('available');
+          setSuggestions([]);
+        } else {
+          setAvailabilityStatus('taken');
+          if (res.suggestions && res.suggestions.length > 0) {
+            setSuggestions(res.suggestions);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setAvailabilityStatus('idle');
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingAvailability(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [clean, isEditing, isValidFormat, isReserved, isSameAsCurrent]);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -27,27 +103,45 @@ export function UsernameClaimForm({
 
     if (!isValidFormat) {
       setErrorMessage(
-        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.'
+        'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.'
       );
       return;
     }
 
+    if (isReserved) {
+      setErrorMessage('This username is reserved. Please choose another username.');
+      return;
+    }
+
+    if (isSameAsCurrent) {
+      setIsEditing(false);
+      return;
+    }
+
     const formData = new FormData();
-    formData.set('username', username.trim().toLowerCase());
+    formData.set('username', clean);
 
     startTransition(async () => {
       const res = await setUsernameAction(formData);
       if (res.error) {
         setErrorMessage(res.error);
+        if (res.suggestions && res.suggestions.length > 0) {
+          setSuggestions(res.suggestions);
+        }
       } else {
-        const cleaned = username.trim().toLowerCase();
-        setSuccessMessage(`Username @${cleaned} successfully set!`);
+        setSuccessMessage(`Username @${clean} successfully set!`);
         setIsEditing(false);
+        setSuggestions([]);
         if (onUsernameSet) {
-          onUsernameSet(cleaned);
+          onUsernameSet(clean);
         }
       }
     });
+  };
+
+  const handleApplySuggestion = (sug: string) => {
+    setUsername(sug);
+    setErrorMessage(null);
   };
 
   if (!isEditing && currentUsername) {
@@ -68,6 +162,7 @@ export function UsernameClaimForm({
             setIsEditing(true);
             setSuccessMessage(null);
             setErrorMessage(null);
+            setUsername(currentUsername);
           }}
           className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] underline underline-offset-2 cursor-pointer transition-colors"
         >
@@ -86,21 +181,31 @@ export function UsernameClaimForm({
         >
           {currentUsername ? 'Update Username' : 'Choose a Username'}
         </label>
-        {username.length > 0 && (
+        {clean.length > 0 && (
           <span
             className={`text-[10px] font-mono ${
-              isValidFormat
+              isCheckingAvailability
+                ? 'text-[var(--text-muted)]'
+                : availabilityStatus === 'available'
                 ? 'text-[var(--income-fg)]'
                 : 'text-[var(--status-error-fg)]'
             }`}
           >
-            {isValidFormat ? '✓ Format valid' : '3-30 chars, alphanumeric, _ -'}
+            {isCheckingAvailability
+              ? 'Checking...'
+              : availabilityStatus === 'available'
+              ? '✓ Available'
+              : availabilityStatus === 'reserved'
+              ? 'Reserved'
+              : availabilityStatus === 'taken'
+              ? 'Already taken'
+              : '3–20 chars, lowercase a-z, 0-9, _'}
           </span>
         )}
       </div>
 
       <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-        Choose a unique username to sign in to Arth with your username instead of email.
+        Choose a unique username to sign in to Arth with your username instead of email. Lowercase letters, numbers, and underscores only.
       </p>
 
       {errorMessage && (
@@ -135,6 +240,27 @@ export function UsernameClaimForm({
         </div>
       )}
 
+      {/* Suggested Alternatives */}
+      {suggestions.length > 0 && (
+        <div className="p-2 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] space-y-1">
+          <span className="text-[10px] font-medium text-[var(--text-secondary)] block">
+            Suggested available handles:
+          </span>
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {suggestions.map((sug) => (
+              <button
+                key={sug}
+                type="button"
+                onClick={() => handleApplySuggestion(sug)}
+                className="text-[11px] font-mono px-2 py-0.5 rounded-xs bg-[var(--bg-surface)] hover:bg-[var(--border-subtle)] border border-[var(--border-hairline)] text-[var(--text-primary)] transition-colors cursor-pointer"
+              >
+                @{sug}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex items-center gap-2 pt-1">
         <div className="relative flex-1">
           <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs font-mono text-[var(--text-muted)]">
@@ -149,16 +275,16 @@ export function UsernameClaimForm({
             placeholder="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full h-8 pl-7 pr-3 text-xs font-mono rounded-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--focus-ring)] transition-all"
+            className="w-full h-8 pl-7 pr-3 text-xs font-mono rounded-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--focus-ring)] transition-all lowercase"
           />
         </div>
 
         <button
           type="submit"
-          disabled={isPending || !isValidFormat}
+          disabled={isPending || !isValidFormat || isReserved || (availabilityStatus === 'taken' && !isSameAsCurrent)}
           className="h-8 px-3 rounded-xs bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-xs font-medium hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
-          {isPending ? 'Saving...' : currentUsername ? 'Update' : 'Claim'}
+          {isPending ? 'Saving...' : 'Save'}
         </button>
 
         {currentUsername && (
@@ -168,6 +294,7 @@ export function UsernameClaimForm({
               setUsername(currentUsername);
               setIsEditing(false);
               setErrorMessage(null);
+              setSuggestions([]);
             }}
             className="h-8 px-2.5 rounded-xs border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
           >

@@ -8,6 +8,14 @@ import {
   getAuthConfirmUrl,
 } from '@/lib/auth-config';
 
+import {
+  RESERVED_USERNAMES,
+  isValidUsername,
+  isReservedUsername,
+  generateRandomCandidateUsername,
+  generateUsernameSuggestions,
+} from '@/lib/username';
+
 export interface AuthActionResult {
   success?: boolean;
   error?: string;
@@ -21,13 +29,6 @@ export interface AuthActionResult {
  */
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-/**
- * Username validation: 3-30 characters, alphanumeric, underscores, hyphens.
- */
-function isValidUsername(username: string): boolean {
-  return /^[a-zA-Z0-9_-]{3,30}$/.test(username);
 }
 
 /**
@@ -212,16 +213,29 @@ export async function signUpWithEmailAction(
   formData: FormData,
   clientOrigin?: string
 ): Promise<AuthActionResult> {
-  const username = (formData.get('username') as string)?.trim();
+  const rawUsername = (formData.get('username') as string)?.trim();
   const email = (formData.get('email') as string)?.trim().toLowerCase();
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirmPassword') as string;
 
-  if (!username || !isValidUsername(username)) {
-    return {
-      error:
-        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
-    };
+  let normalizedUsername: string;
+
+  if (rawUsername) {
+    if (!isValidUsername(rawUsername)) {
+      return {
+        error:
+          'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.',
+      };
+    }
+    normalizedUsername = rawUsername.toLowerCase();
+    if (isReservedUsername(normalizedUsername)) {
+      return {
+        error: 'This username is reserved. Please choose another username.',
+      };
+    }
+  } else {
+    // If not provided, automatically generate a random, unique, human-readable username
+    normalizedUsername = generateRandomCandidateUsername();
   }
 
   if (!email || !isValidEmail(email)) {
@@ -238,8 +252,6 @@ export async function signUpWithEmailAction(
     return { error: 'Passwords do not match. Please verify both fields.' };
   }
 
-  const normalizedUsername = username.toLowerCase();
-
   try {
     let headersList;
     try {
@@ -253,15 +265,31 @@ export async function signUpWithEmailAction(
     const supabase = await createClient();
 
     // Verify username availability prior to creation
-    const { data: isAvailable, error: checkError } = await supabase.rpc(
-      'fn_check_username_available',
-      { p_username: normalizedUsername }
-    );
+    if (rawUsername) {
+      const { data: isAvailable, error: checkError } = await supabase.rpc(
+        'fn_check_username_available',
+        { p_username: normalizedUsername }
+      );
 
-    if (!checkError && isAvailable === false) {
-      return {
-        error: 'This username is already taken. Please choose another username.',
-      };
+      if (!checkError && isAvailable === false) {
+        return {
+          error: 'This username is already taken. Please choose another username.',
+        };
+      }
+    } else {
+      // Auto-generated username collision retry
+      let attempts = 0;
+      while (attempts < 10) {
+        attempts++;
+        const { data: isAvailable } = await supabase.rpc(
+          'fn_check_username_available',
+          { p_username: normalizedUsername }
+        );
+        if (isAvailable !== false) {
+          break;
+        }
+        normalizedUsername = generateRandomCandidateUsername();
+      }
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -270,7 +298,7 @@ export async function signUpWithEmailAction(
       options: {
         data: {
           username: normalizedUsername,
-          full_name: username,
+          full_name: rawUsername || normalizedUsername,
         },
         emailRedirectTo: confirmUrl,
       },
@@ -629,17 +657,24 @@ export async function signInWithGoogleAction(clientOrigin?: string): Promise<{
  */
 export async function setUsernameAction(
   formData: FormData
-): Promise<AuthActionResult> {
+): Promise<AuthActionResult & { suggestions?: string[] }> {
   const rawUsername = (formData.get('username') as string)?.trim();
 
   if (!rawUsername || !isValidUsername(rawUsername)) {
     return {
       error:
-        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
+        'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.',
     };
   }
 
   const normalizedUsername = rawUsername.toLowerCase();
+  if (isReservedUsername(normalizedUsername)) {
+    const suggestions = await generateUsernameSuggestions(normalizedUsername);
+    return {
+      error: 'This username is reserved. Please choose another username.',
+      suggestions,
+    };
+  }
 
   try {
     const supabase = await createClient();
@@ -663,8 +698,18 @@ export async function setUsernameAction(
         rpcError.code === '23505' ||
         rpcError.message.includes('already taken')
       ) {
+        const suggestions = await generateUsernameSuggestions(
+          normalizedUsername,
+          async (cand) => {
+            const { data } = await supabase.rpc('fn_check_username_available', {
+              p_username: cand,
+            });
+            return Boolean(data);
+          }
+        );
         return {
           error: 'This username is already taken. Please choose another username.',
+          suggestions,
         };
       }
 
@@ -688,8 +733,18 @@ export async function setUsernameAction(
             updateError.message.includes('unique') ||
             updateError.message.includes('already taken')
           ) {
+            const suggestions = await generateUsernameSuggestions(
+              normalizedUsername,
+              async (cand) => {
+                const { data } = await supabase.rpc('fn_check_username_available', {
+                  p_username: cand,
+                });
+                return Boolean(data);
+              }
+            );
             return {
               error: 'This username is already taken. Please choose another username.',
+              suggestions,
             };
           }
           if (
@@ -698,7 +753,7 @@ export async function setUsernameAction(
           ) {
             return {
               error:
-                'Database migration required: Migration 0014 has not been applied to your Supabase project. Please run migration 0014 in the Supabase SQL Editor.',
+                'Database migration required: Migration 0014/0019 has not been applied to your Supabase project. Please run migration 0019 in the Supabase SQL Editor.',
             };
           }
           return {
@@ -740,13 +795,22 @@ export async function setUsernameAction(
  */
 export async function checkUsernameAvailabilityAction(
   username: string
-): Promise<{ available: boolean; error?: string }> {
+): Promise<{ available: boolean; error?: string; suggestions?: string[] }> {
   const cleanUsername = username?.trim().toLowerCase();
   if (!cleanUsername || !isValidUsername(cleanUsername)) {
     return {
       available: false,
       error:
-        'Username must be between 3 and 30 characters and contain only letters, numbers, underscores, or hyphens.',
+        'Username must be between 3 and 20 characters and contain only letters, numbers, and underscores.',
+    };
+  }
+
+  if (isReservedUsername(cleanUsername)) {
+    const suggestions = await generateUsernameSuggestions(cleanUsername);
+    return {
+      available: false,
+      error: 'This username is reserved. Please choose another username.',
+      suggestions,
     };
   }
 
@@ -761,7 +825,24 @@ export async function checkUsernameAvailabilityAction(
       return { available: false, error: error.message };
     }
 
-    return { available: Boolean(isAvailable) };
+    if (!isAvailable) {
+      const suggestions = await generateUsernameSuggestions(
+        cleanUsername,
+        async (cand) => {
+          const { data } = await supabase.rpc('fn_check_username_available', {
+            p_username: cand,
+          });
+          return Boolean(data);
+        }
+      );
+      return {
+        available: false,
+        error: 'This username is already taken. Please choose another username.',
+        suggestions,
+      };
+    }
+
+    return { available: true };
   } catch {
     return { available: false, error: 'Failed to verify availability' };
   }

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
 import { UnauthenticatedHome } from '@/app/UnauthenticatedHome';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
+import { generateRandomCandidateUsername } from '@/lib/username';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,9 +63,27 @@ export default async function HomePage({
 
       if (profile?.username) {
         username = profile.username;
+      } else if (!username) {
+        // First-login initialization for legacy or OAuth users without a username
+        const generated = generateRandomCandidateUsername();
+        const { data: updatedProfile } = await supabase
+          .from('profiles')
+          .update({ username: generated, updated_at: new Date().toISOString() })
+          .eq('id', user.id)
+          .select('username')
+          .maybeSingle();
+
+        if (updatedProfile?.username) {
+          username = updatedProfile.username;
+        } else {
+          username = generated;
+        }
       }
+
       if (profile?.display_name) {
         displayName = profile.display_name;
+      } else if (!displayName && username) {
+        displayName = username;
       }
 
       const providers: string[] = Array.isArray(user.app_metadata?.providers)

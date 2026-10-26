@@ -28,7 +28,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0015_category_reorder_hardening.sql',
       '0016_account_deletion_support.sql',
       '0017_google_sheets_sync.sql',
-      '0018_account_balances_and_transfers.sql'
+      '0018_account_balances_and_transfers.sql',
+      '0019_username_system_enhancements.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -218,5 +219,18 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Must enable RLS on balance_movements');
     assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_account_balances'), 'Must define fn_account_balances function');
     assert.ok(sql.includes('SECURITY INVOKER'), 'Must execute with SECURITY INVOKER for caller security');
+  });
+
+  test('0019_username_system_enhancements.sql enforces NOT NULL, format regex, reserved names rejection, unique generation and atomic updates', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0019_username_system_enhancements.sql'), 'utf-8');
+    assert.ok(sql.includes('ALTER COLUMN username SET NOT NULL'), 'Must enforce NOT NULL on username');
+    assert.ok(sql.includes("username ~ '^[a-z0-9_]{3,20}$'"), 'Must enforce strict 3-20 lowercase alphanumeric + underscore regex');
+    assert.ok(sql.includes("'admin'") && sql.includes("'support'") && sql.includes("'superuser'"), 'Must reject reserved usernames');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_generate_unique_username'), 'Must define fn_generate_unique_username function');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_check_username_available'), 'Must define fn_check_username_available function');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_set_own_username'), 'Must define fn_set_own_username function');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_handle_new_user'), 'Must update fn_handle_new_user trigger function');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_generate_unique_username() TO authenticated'), 'Must grant execute to authenticated');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_set_own_username(TEXT) TO authenticated'), 'Must grant execute to authenticated');
   });
 });
