@@ -357,7 +357,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 </div>
 
                 {/* Account Balances Card in Settings */}
-                <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 space-y-3">
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">💰</span>

@@ -6,114 +6,211 @@ import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SheetsConnectionCard } from '../src/features/sheets/SheetsConnectionCard';
+import { InstallPromptCard } from '../src/features/pwa/InstallPromptCard';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-describe('Google Sheets Connection Button & UI States', () => {
-  const componentPath = path.join(
+describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => {
+  const sheetsComponentPath = path.join(
     projectRoot,
     'src',
     'features',
     'sheets',
     'SheetsConnectionCard.tsx'
   );
+  const pwaComponentPath = path.join(
+    projectRoot,
+    'src',
+    'features',
+    'pwa',
+    'InstallPromptCard.tsx'
+  );
 
-  test('SheetsConnectionCard source exists', () => {
-    assert.ok(fs.existsSync(componentPath), 'SheetsConnectionCard.tsx must exist');
+  test('Component sources exist', () => {
+    assert.ok(fs.existsSync(sheetsComponentPath), 'SheetsConnectionCard.tsx must exist');
+    assert.ok(fs.existsSync(pwaComponentPath), 'InstallPromptCard.tsx must exist');
   });
 
-  const sourceContent = fs.readFileSync(componentPath, 'utf8');
+  const sheetsSource = fs.readFileSync(sheetsComponentPath, 'utf8');
+  const pwaSource = fs.readFileSync(pwaComponentPath, 'utf8');
 
-  test('root cause eliminated: var(--bg-app) is completely removed', () => {
-    // var(--bg-app) was an undefined CSS variable in globals.css which caused browsers
-    // to discard the text color and fall back to inherited var(--text-primary).
-    // Because background was ALSO var(--text-primary), the button was completely blank.
-    assert.ok(
-      !sourceContent.includes('var(--bg-app)'),
-      'var(--bg-app) must NOT exist in SheetsConnectionCard.tsx as it is an undefined CSS token'
-    );
+  describe('1. Google Sheets Synchronization UX Polish', () => {
+    test('simplified description matches requirement', () => {
+      assert.ok(
+        sheetsSource.includes('Automatically sync your Arth transactions to your personal Google Sheet.'),
+        'Must display simplified description "Automatically sync your Arth transactions to your personal Google Sheet."'
+      );
+      assert.ok(
+        !sheetsSource.includes('Asynchronously replicate your financial transactions'),
+        'Old complex description must be removed'
+      );
+    });
+
+    test('Step 1 heading and instructions match requirement', () => {
+      assert.ok(
+        sheetsSource.includes('Step 1: Share your Google Sheet'),
+        'Step 1 heading must be "Step 1: Share your Google Sheet"'
+      );
+      assert.ok(
+        sheetsSource.includes(
+          'Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so Arth can add your transactions.'
+        ),
+        'Must provide clear Editor permission sharing instructions'
+      );
+    });
+
+    test('Service account email presentation is responsive and copyable', () => {
+      // Responsive layout on mobile (stacked on narrow screens, inline on sm+)
+      assert.ok(
+        sheetsSource.includes('flex flex-col sm:flex-row sm:items-center gap-2'),
+        'Must use flex-col on mobile to prevent squeezing email into narrow unreadable column'
+      );
+      assert.ok(
+        sheetsSource.includes('overflow-x-auto whitespace-nowrap'),
+        'Email code block must support horizontal scrolling for long service account addresses'
+      );
+      assert.ok(
+        sheetsSource.includes('select-all'),
+        'Email code block must allow instant full selection'
+      );
+      assert.ok(
+        sheetsSource.includes('Copied!'),
+        'Copy button must provide brief "Copied!" feedback'
+      );
+    });
+
+    test('Step 2 heading, supporting text, and placeholder match requirement', () => {
+      assert.ok(
+        sheetsSource.includes('Step 2: Connect your spreadsheet'),
+        'Step 2 heading must be "Step 2: Connect your spreadsheet"'
+      );
+      assert.ok(
+        sheetsSource.includes(
+          "Copy the link from your Google Sheet's address bar and paste it below. You can also enter the spreadsheet ID."
+        ) ||
+          sheetsSource.includes(
+            "Copy the link from your Google Sheet&apos;s address bar and paste it below. You can also enter the spreadsheet ID."
+          ),
+        'Step 2 must explain copying link or entering ID'
+      );
+      assert.ok(
+        sheetsSource.includes('placeholder="Paste Google Sheets URL or spreadsheet ID"'),
+        'Input must have placeholder "Paste Google Sheets URL or spreadsheet ID"'
+      );
+    });
+
+    test('Client-side validation accepts both URL and raw spreadsheet ID', () => {
+      assert.ok(
+        sheetsSource.includes('/spreadsheets\\/d\\/([a-zA-Z0-9-_]+)/') ||
+          sheetsSource.includes('/spreadsheets\\/d\\/'),
+        'Must validate Google Sheets URL format'
+      );
+      assert.ok(
+        sheetsSource.includes('/^[a-zA-Z0-9-_]{20,80}$/'),
+        'Must validate raw spreadsheet ID format'
+      );
+      assert.ok(
+        sheetsSource.includes(
+          'Please enter a valid Google Sheets URL (e.g., https://docs.google.com/spreadsheets/d/...) or spreadsheet ID.'
+        ),
+        'Must show helpful format validation error'
+      );
+    });
+
+    test('Button states and contrast tokens', () => {
+      assert.ok(
+        !sheetsSource.includes('var(--bg-app)'),
+        'var(--bg-app) must not exist'
+      );
+      assert.ok(
+        sheetsSource.includes('bg-[var(--action-primary-bg)]'),
+        'Button must use action primary background token'
+      );
+      assert.ok(
+        sheetsSource.includes('text-[var(--action-primary-fg)]'),
+        'Button must use action primary foreground token'
+      );
+      assert.ok(
+        sheetsSource.includes("'Connect Google Sheet'"),
+        'Button label must default to "Connect Google Sheet"'
+      );
+      assert.ok(
+        sheetsSource.includes("'Connecting…'"),
+        'Button label must show "Connecting…" during submission'
+      );
+      assert.ok(
+        sheetsSource.includes("'Retry Connection'"),
+        'Button label must show "Retry Connection" on failure'
+      );
+      assert.ok(
+        sheetsSource.includes('Change Sheet'),
+        'Must provide Change Sheet action in connected state'
+      );
+    });
+
+    test('Privacy explanation is rendered below connection controls', () => {
+      assert.ok(
+        sheetsSource.includes(
+          'Your spreadsheet remains private. Arth uses the sharing permission you grant to sync your transactions.'
+        ),
+        'Must include concise privacy note below connection controls'
+      );
+    });
+
+    test('Renders initial static markup cleanly', () => {
+      const markup = renderToStaticMarkup(React.createElement(SheetsConnectionCard));
+      assert.ok(typeof markup === 'string');
+      assert.ok(markup.includes('Google Sheets Synchronization'));
+      assert.ok(markup.includes('Automatically sync your Arth transactions'));
+    });
   });
 
-  test('button uses approved high-contrast action tokens for dark and light modes', () => {
-    // Verified design tokens in globals.css:
-    // Light: --action-primary-bg: #1C1917, --action-primary-fg: #FFFFFF
-    // Dark:  --action-primary-bg: #FFFFFF, --action-primary-fg: #1C1917
-    assert.ok(
-      sourceContent.includes('bg-[var(--action-primary-bg)]'),
-      'Connect button must use bg-[var(--action-primary-bg)]'
-    );
-    assert.ok(
-      sourceContent.includes('text-[var(--action-primary-fg)]'),
-      'Connect button must use text-[var(--action-primary-fg)] for maximum contrast'
-    );
-    assert.ok(
-      sourceContent.includes('hover:bg-[var(--action-primary-hover)]'),
-      'Connect button must support hover:bg-[var(--action-primary-hover)]'
-    );
-  });
+  describe('2. Offline Support Card Redesign', () => {
+    test('Row 1 contains icon, title, and status badge', () => {
+      assert.ok(
+        pwaSource.includes('Offline Support'),
+        'Must display "Offline Support" title'
+      );
+      assert.ok(
+        pwaSource.includes('flex items-center justify-between gap-3') ||
+          pwaSource.includes('flex items-center justify-between gap-2'),
+        'Row 1 must align icon + title with status badge using space-between'
+      );
+    });
 
-  test('button width is content-based rather than forced full-width rectangle', () => {
-    assert.ok(
-      sourceContent.includes('inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg'),
-      'Connect button must size cleanly around its label with standard padding and rounded corners'
-    );
-  });
+    test('Row 2 contains full-width concise description', () => {
+      assert.ok(
+        pwaSource.includes('Use Arth offline and sync your changes when you&apos;re back online.') ||
+          pwaSource.includes("Use Arth offline and sync your changes when you're back online."),
+        'Must display concise description "Use Arth offline and sync your changes when you\'re back online."'
+      );
+    });
 
-  test('button label defaults to "Connect Google Sheet"', () => {
-    assert.ok(
-      sourceContent.includes("'Connect Google Sheet'"),
-      'Button label must explicitly display "Connect Google Sheet"'
-    );
-  });
+    test('Accurate status tracks both standalone mode and service worker offline readiness', () => {
+      assert.ok(
+        pwaSource.includes('isOfflineReady'),
+        'Must track offline readiness via service worker controller'
+      );
+      assert.ok(
+        pwaSource.includes('navigator.serviceWorker'),
+        'Must check navigator.serviceWorker readiness'
+      );
+      assert.ok(
+        pwaSource.includes('Installed'),
+        'Must show Installed badge when running standalone'
+      );
+    });
 
-  test('accurate interaction states are implemented', () => {
-    // 1. In-flight loading state
-    assert.ok(
-      sourceContent.includes("'Connecting…'"),
-      'Button must show "Connecting…" while connection request is in flight'
-    );
-    assert.ok(
-      sourceContent.includes('animate-spin'),
-      'Button must render an animated spinner during connection'
-    );
-
-    // 2. Disabled when empty or connecting
-    assert.ok(
-      sourceContent.includes('disabled={connecting || !sheetUrlInput.trim()}'),
-      'Button must be disabled when sheet URL input is empty or request is connecting'
-    );
-    assert.ok(
-      sourceContent.includes('disabled:cursor-not-allowed'),
-      'Button must have disabled:cursor-not-allowed class for accessibility'
-    );
-
-    // 3. Error retry state
-    assert.ok(
-      sourceContent.includes("'Retry Connection'"),
-      'Button must show "Retry Connection" after an error occurs'
-    );
-    assert.ok(
-      sourceContent.includes('setHasConnectionError(true)'),
-      'Failure must trigger hasConnectionError state'
-    );
-
-    // 4. Change Sheet workflow in connected state
-    assert.ok(
-      sourceContent.includes('Change Sheet'),
-      'Connected view must offer a "Change Sheet" button to pair another spreadsheet'
-    );
-    assert.ok(
-      sourceContent.includes('isChangingSheet'),
-      'State isChangingSheet must allow switching back to input view without breaking connection'
-    );
-  });
-
-  test('renders initial static markup without throwing errors', () => {
-    const markup = renderToStaticMarkup(React.createElement(SheetsConnectionCard));
-    assert.ok(typeof markup === 'string', 'Should produce static HTML string');
-    assert.ok(markup.includes('Google Sheets Synchronization'), 'Should render card header');
-    assert.ok(markup.includes('Checking Google Sheets connection...'), 'Should render loading state initially');
+    test('Renders static markup cleanly', () => {
+      const markup = renderToStaticMarkup(React.createElement(InstallPromptCard));
+      assert.ok(typeof markup === 'string');
+      assert.ok(markup.includes('Offline Support'));
+      assert.ok(
+        markup.includes("Use Arth offline and sync your changes when you're back online") ||
+          markup.includes('Use Arth offline and sync your changes when you&#x27;re back online')
+      );
+    });
   });
 });

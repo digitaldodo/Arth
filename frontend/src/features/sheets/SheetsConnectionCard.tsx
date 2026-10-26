@@ -71,11 +71,28 @@ export function SheetsConnectionCard() {
     };
   }, []);
 
-  const handleCopyEmail = () => {
+  const handleCopyEmail = async () => {
     if (!serviceAccountEmail) return;
-    navigator.clipboard.writeText(serviceAccountEmail);
-    setCopiedEmail(true);
-    setTimeout(() => setCopiedEmail(false), 2000);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(serviceAccountEmail);
+      } else {
+        // Fallback for non-secure contexts
+        const textarea = document.createElement('textarea');
+        textarea.value = serviceAccountEmail;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2000);
+    } catch {
+      setErrorMessage('Could not copy automatically. Please select and copy the email address manually.');
+      setTimeout(() => setErrorMessage(null), 4000);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,8 +109,22 @@ export function SheetsConnectionCard() {
     setSuccessMessage(null);
     setHasConnectionError(false);
 
-    if (!sheetUrlInput.trim()) {
-      setErrorMessage('Please enter a Google Sheet URL or Spreadsheet ID.');
+    const trimmedInput = sheetUrlInput.trim();
+    if (!trimmedInput) {
+      setErrorMessage('Please enter your Google Sheet URL or spreadsheet ID.');
+      setHasConnectionError(true);
+      return;
+    }
+
+    // Client-side format validation: accept either full Google Sheets URL or raw Spreadsheet ID
+    const isUrl = /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/.test(trimmedInput);
+    const isId = /^[a-zA-Z0-9-_]{20,80}$/.test(trimmedInput);
+
+    if (!isUrl && !isId) {
+      setErrorMessage(
+        'Please enter a valid Google Sheets URL (e.g., https://docs.google.com/spreadsheets/d/...) or spreadsheet ID.'
+      );
+      setHasConnectionError(true);
       return;
     }
 
@@ -102,7 +133,7 @@ export function SheetsConnectionCard() {
       const res = await fetch('/api/backend/sheets/connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spreadsheetUrl: sheetUrlInput.trim() }),
+        body: JSON.stringify({ spreadsheetUrl: trimmedInput }),
       });
 
       const data = await res.json();
@@ -232,7 +263,7 @@ export function SheetsConnectionCard() {
   };
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 space-y-4">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -241,8 +272,8 @@ export function SheetsConnectionCard() {
             <h3 className="text-xs font-semibold text-[var(--text-primary)]">
               Google Sheets Synchronization
             </h3>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Asynchronously replicate your financial transactions to your personal Google Sheet in near-real-time.
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Automatically sync your Arth transactions to your personal Google Sheet.
             </p>
           </div>
         </div>
@@ -279,7 +310,7 @@ export function SheetsConnectionCard() {
           <div className="font-semibold text-[var(--text-primary)]">
             Service Account Configuration Required
           </div>
-          <p className="text-[11px] text-[var(--text-muted)]">
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
             Google Sheets synchronization requires <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and <code className="font-mono bg-[var(--bg-surface)] px-1 rounded">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> in server environment variables.
           </p>
         </div>
@@ -398,42 +429,73 @@ export function SheetsConnectionCard() {
             </div>
           )}
 
+          {/* Step 1: Share your Google Sheet */}
           {serviceAccountEmail && (
-            <div className="p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs space-y-1.5">
+            <div className="p-3.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs space-y-2">
               <div className="font-semibold text-[var(--text-primary)]">
                 Step 1: Share your Google Sheet
               </div>
-              <p className="text-[11px] text-[var(--text-muted)]">
-                Create a spreadsheet in your Google Drive and share it with edit access to our secure service account:
+              <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so Arth can add your transactions.
               </p>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="px-2 py-1 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded font-mono text-[11px] text-[var(--text-primary)] select-all break-all">
-                  {serviceAccountEmail}
-                </code>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+                <div className="flex-1 min-w-0 bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 flex items-center overflow-hidden">
+                  <code className="font-mono text-[11px] text-[var(--text-primary)] select-all overflow-x-auto whitespace-nowrap block w-full no-scrollbar">
+                    {serviceAccountEmail}
+                  </code>
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyEmail}
-                  className="px-2.5 py-1 text-xs font-medium border border-[var(--border-subtle)] rounded hover:bg-[var(--bg-surface)] transition-colors shrink-0 cursor-pointer"
+                  aria-label="Copy service account email"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-lg transition-colors shrink-0 cursor-pointer w-full sm:w-auto"
                 >
-                  {copiedEmail ? 'Copied!' : 'Copy'}
+                  {copiedEmail ? (
+                    <>
+                      <span className="text-emerald-500 font-bold">✓</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-3.5 h-3.5 text-[var(--text-muted)]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      <span>Copy Email</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           )}
 
+          {/* Step 2: Connect your spreadsheet */}
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-[var(--text-primary)]">
-              {connected ? 'Paste New Google Sheet URL or ID' : 'Step 2: Paste Google Sheet URL or Spreadsheet ID'}
+              {connected ? 'Connect your spreadsheet' : 'Step 2: Connect your spreadsheet'}
             </label>
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Copy the link from your Google Sheet&apos;s address bar and paste it below. You can also enter the spreadsheet ID.
+            </p>
             <input
               type="text"
               value={sheetUrlInput}
               onChange={handleInputChange}
-              placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs.../edit"
-              className="w-full px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)] text-[var(--text-primary)] font-mono transition-colors"
+              placeholder="Paste Google Sheets URL or spreadsheet ID"
+              className="w-full px-3.5 py-2.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg focus:outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)] text-[var(--text-primary)] font-mono transition-colors"
             />
           </div>
 
+          {/* Connection Actions */}
           <div className="flex items-center gap-2.5 pt-1">
             <button
               type="submit"
@@ -486,6 +548,12 @@ export function SheetsConnectionCard() {
               </button>
             )}
           </div>
+
+          {/* Privacy Note */}
+          <p className="text-[11px] text-[var(--text-muted)] flex items-start gap-1.5 pt-0.5 leading-relaxed">
+            <span className="text-xs shrink-0" aria-hidden="true">🔒</span>
+            <span>Your spreadsheet remains private. Arth uses the sharing permission you grant to sync your transactions.</span>
+          </p>
         </form>
       )}
     </div>

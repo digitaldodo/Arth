@@ -1,12 +1,37 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { usePwaInstall } from './usePwaInstall';
+
+function subscribeServiceWorker(callback: () => void): () => void {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return () => {};
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', callback);
+  return () => {
+    navigator.serviceWorker.removeEventListener('controllerchange', callback);
+  };
+}
+
+function getServiceWorkerSnapshot(): boolean {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return false;
+  return Boolean(navigator.serviceWorker.controller);
+}
+
+function getServiceWorkerServerSnapshot(): boolean {
+  return false;
+}
 
 export const InstallPromptCard: React.FC = () => {
   const { isStandalone, isInstallable, isInstalled, isIos, installApp } = usePwaInstall();
   const [isInstalling, setIsInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<'accepted' | 'dismissed' | null>(null);
+
+  const isOfflineReady = useSyncExternalStore(
+    subscribeServiceWorker,
+    getServiceWorkerSnapshot,
+    getServiceWorkerServerSnapshot
+  );
 
   const handleInstallClick = async () => {
     setIsInstalling(true);
@@ -23,24 +48,28 @@ export const InstallPromptCard: React.FC = () => {
     return (
       <div
         data-testid="pwa-installed-card"
-        className="p-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] flex items-center justify-between"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-mono text-sm">
-            ✓
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+        {/* Row 1: Icon, Title, Status badge */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs shrink-0">
+              ✓
+            </div>
+            <h3 className="text-xs font-semibold text-[var(--text-primary)] truncate">
               Offline Support
             </h3>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Installed in standalone mode. Use Arth offline and synchronize your changes when you&apos;re back online.
-            </p>
           </div>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/40 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Installed
+          </span>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100/60 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/40 shrink-0">
-          Installed
-        </span>
+
+        {/* Row 2: Full-width concise description */}
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+          Use Arth offline and sync your changes when you&apos;re back online.
+        </p>
       </div>
     );
   }
@@ -50,31 +79,37 @@ export const InstallPromptCard: React.FC = () => {
     return (
       <div
         data-testid="pwa-installable-card"
-        className="p-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-3"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2.5"
       >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-[var(--text-primary)] font-mono text-sm">
+        {/* Row 1: Icon, Title, Status badge */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs shrink-0">
               📲
             </div>
-            <div>
-              <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                Offline Support
-              </h3>
-              <p className="text-[11px] text-[var(--text-muted)]">
-                Use Arth offline and synchronize your changes when you&apos;re back online. Install on your device for standalone access.
-              </p>
-            </div>
+            <h3 className="text-xs font-semibold text-[var(--text-primary)] truncate">
+              Offline Support
+            </h3>
           </div>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            {isOfflineReady ? 'Offline Ready' : 'Installable'}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        {/* Row 2: Full-width concise description */}
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+          Use Arth offline and sync your changes when you&apos;re back online. Install on your device for standalone access.
+        </p>
+
+        {/* Action Button */}
+        <div className="flex items-center gap-2 pt-0.5">
           <button
             type="button"
             data-testid="pwa-install-button"
             onClick={handleInstallClick}
             disabled={isInstalling}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
           >
             {isInstalling ? 'Installing…' : 'Install on this Device'}
           </button>
@@ -93,23 +128,30 @@ export const InstallPromptCard: React.FC = () => {
     return (
       <div
         data-testid="pwa-ios-card"
-        className="p-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2.5"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2.5"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-[var(--text-primary)] text-sm">
-            🍏
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+        {/* Row 1: Icon, Title, Status badge */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs shrink-0">
+              🍏
+            </div>
+            <h3 className="text-xs font-semibold text-[var(--text-primary)] truncate">
               Offline Support
             </h3>
-            <p className="text-[11px] text-[var(--text-muted)]">
-              Use Arth offline and synchronize your changes when you&apos;re back online. Add to Home Screen in Safari.
-            </p>
           </div>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] shrink-0">
+            {isOfflineReady ? 'Offline Ready' : 'iOS Safari'}
+          </span>
         </div>
 
-        <div className="p-3 bg-[var(--bg-surface-subtle)] rounded-lg border border-[var(--border-hairline)] text-[11px] text-[var(--text-secondary)] space-y-1.5 font-mono">
+        {/* Row 2: Full-width concise description */}
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+          Use Arth offline and sync your changes when you&apos;re back online. Add to Home Screen in Safari.
+        </p>
+
+        {/* Guidance instructions */}
+        <div className="p-2.5 bg-[var(--bg-surface-subtle)] rounded-lg border border-[var(--border-hairline)] text-[11px] text-[var(--text-secondary)] space-y-1.5 font-mono">
           <div className="flex items-center gap-2">
             <span className="text-[var(--text-primary)] font-bold">1.</span>
             <span>Tap the <strong>Share</strong> icon in Safari toolbar</span>
@@ -131,24 +173,28 @@ export const InstallPromptCard: React.FC = () => {
   return (
     <div
       data-testid="pwa-info-card"
-      className="p-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] flex items-center justify-between"
+      className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2"
     >
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-[var(--text-muted)] text-sm">
-          📱
-        </div>
-        <div>
-          <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+      {/* Row 1: Icon, Title, Status badge */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs shrink-0">
+            ✓
+          </div>
+          <h3 className="text-xs font-semibold text-[var(--text-primary)] truncate">
             Offline Support
           </h3>
-          <p className="text-[11px] text-[var(--text-muted)]">
-            Use Arth offline and synchronize your changes when you&apos;re back online. Install via your browser address bar or menu.
-          </p>
         </div>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          {isOfflineReady ? 'Offline Ready' : 'Enabled'}
+        </span>
       </div>
-      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] shrink-0">
-        Offline Ready
-      </span>
+
+      {/* Row 2: Full-width concise description */}
+      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+        Use Arth offline and sync your changes when you&apos;re back online.
+      </p>
     </div>
   );
 };

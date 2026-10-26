@@ -129,7 +129,7 @@ export function DataExportCard({ user }: DataExportCardProps) {
   };
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 space-y-4">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-4">
       <div className="flex items-center gap-3">
         <span className="text-xl">💾</span>
         <div>
