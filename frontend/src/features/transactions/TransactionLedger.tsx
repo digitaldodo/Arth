@@ -13,7 +13,7 @@ import {
   deleteTransaction,
   restoreTransaction,
 } from '@/lib/api-client';
-import { formatDateHuman } from '@/lib/format';
+import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { ExportPdfDialog } from './ExportPdfDialog';
 import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
@@ -236,7 +236,7 @@ export function TransactionLedger({
             Total Income
           </span>
           <div className="text-lg font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-            +₹{(Number(totalIncomePaise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            +{formatPaiseToINR(totalIncomePaise)}
           </div>
         </div>
 
@@ -245,7 +245,7 @@ export function TransactionLedger({
             Total Expense
           </span>
           <div className="text-lg font-mono text-red-600 dark:text-red-400 mt-0.5">
-            -₹{(Number(totalExpensePaise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            -{formatPaiseToINR(totalExpensePaise)}
           </div>
         </div>
       </div>

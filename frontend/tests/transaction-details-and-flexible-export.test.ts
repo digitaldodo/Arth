@@ -8,6 +8,7 @@ import {
   formatDateRangeLabel,
   isValidDateRange,
 } from '../src/features/transactions/date-range-utils';
+import { formatPaiseToINR } from '../src/lib/format.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -162,5 +163,93 @@ describe('Flexible Ledger PDF Export: Date Range Presets & Validation', () => {
     assert.ok(content.includes('Income Only'), 'Must include Income Only option');
     assert.ok(content.includes('Expense Only'), 'Must include Expense Only option');
     assert.ok(content.includes('Statement Summary Preview'), 'Must render live statement summary preview');
+  });
+
+  describe('Single Rupee Symbol Integrity in Statement Summary Preview & Ledger', () => {
+    test('formatPaiseToINR formats with exactly one ₹ symbol across zero, positive, and negative amounts', () => {
+      const cases = [
+        { paise: 0, expected: '₹0.00' },
+        { paise: 27000, expected: '₹270.00' },
+        { paise: -27000, expected: '-₹270.00' },
+        { paise: 12500000, expected: '₹1,25,000.00' },
+        { paise: -12500050, expected: '-₹1,25,000.50' },
+      ];
+
+      for (const { paise, expected } of cases) {
+        const formatted = formatPaiseToINR(paise);
+        assert.equal(formatted, expected);
+        const count = (formatted.match(/₹/g) || []).length;
+        assert.equal(count, 1, `Expected exactly one ₹ in ${formatted}`);
+      }
+    });
+
+    test('Statement Summary Preview display conventions produce exactly one ₹ symbol for all metric types', () => {
+      // Income: always formatted with leading '+'
+      const incomeZero = `+${formatPaiseToINR(0)}`;
+      assert.equal(incomeZero, '+₹0.00');
+      assert.equal((incomeZero.match(/₹/g) || []).length, 1);
+
+      const incomePositive = `+${formatPaiseToINR(50000)}`;
+      assert.equal(incomePositive, '+₹500.00');
+      assert.equal((incomePositive.match(/₹/g) || []).length, 1);
+
+      // Expenses: always formatted with leading '-'
+      const expenseAmount = `-${formatPaiseToINR(27000)}`;
+      assert.equal(expenseAmount, '-₹270.00');
+      assert.equal((expenseAmount.match(/₹/g) || []).length, 1);
+
+      const expenseZero = `-${formatPaiseToINR(0)}`;
+      assert.equal(expenseZero, '-₹0.00');
+      assert.equal((expenseZero.match(/₹/g) || []).length, 1);
+
+      // Net Cash Flow: '+' if positive, direct formatting if negative (which includes '-'), or '₹0.00' if neutral
+      const formatNetFlow = (netPaise: number | bigint) => {
+        const p = BigInt(netPaise);
+        const formatted = formatPaiseToINR(p);
+        const isPositive = p > BigInt(0);
+        return `${isPositive ? '+' : ''}${formatted}`;
+      };
+
+      const netPositive = formatNetFlow(27000);
+      assert.equal(netPositive, '+₹270.00');
+      assert.equal((netPositive.match(/₹/g) || []).length, 1);
+
+      const netNegative = formatNetFlow(-27000);
+      assert.equal(netNegative, '-₹270.00');
+      assert.equal((netNegative.match(/₹/g) || []).length, 1);
+      assert.ok(!netNegative.includes('₹-₹'), 'Must not produce ₹-₹');
+
+      const netZero = formatNetFlow(0);
+      assert.equal(netZero, '₹0.00');
+      assert.equal((netZero.match(/₹/g) || []).length, 1);
+    });
+
+    test('ExportPdfDialog Statement Summary Preview component does not prepend redundant ₹ symbol', () => {
+      const dialogPath = path.resolve(__dirname, '../src/features/transactions/ExportPdfDialog.tsx');
+      const content = fs.readFileSync(dialogPath, 'utf8');
+
+      // Regression checks: ensure redundant ₹ is NOT prepended in JSX before already-formatted string
+      assert.ok(!content.includes('+₹{summaryMetrics.formattedIncome}'), 'Must not have duplicate +₹{formattedIncome}');
+      assert.ok(!content.includes('-₹{summaryMetrics.formattedExpense}'), 'Must not have duplicate -₹{formattedExpense}');
+      assert.ok(!content.includes('₹{summaryMetrics.formattedNet}'), 'Must not have duplicate ₹{formattedNet}');
+
+      // Ensure proper single symbol expressions are used
+      assert.ok(content.includes('+{summaryMetrics.formattedIncome}'), 'Must use +{summaryMetrics.formattedIncome}');
+      assert.ok(content.includes('-{summaryMetrics.formattedExpense}'), 'Must use -{summaryMetrics.formattedExpense}');
+      assert.ok(
+        content.includes("{summaryMetrics.isNetPositive ? '+' : ''}{summaryMetrics.formattedNet}"),
+        'Must use {summaryMetrics.isNetPositive ? "+" : ""}{summaryMetrics.formattedNet}'
+      );
+    });
+
+    test('TransactionLedger reuses formatPaiseToINR without hardcoded ₹ duplication', () => {
+      const ledgerPath = path.resolve(__dirname, '../src/features/transactions/TransactionLedger.tsx');
+      const content = fs.readFileSync(ledgerPath, 'utf8');
+
+      assert.ok(!content.includes('+₹{'), 'TransactionLedger must not contain hardcoded +₹{');
+      assert.ok(!content.includes('-₹{'), 'TransactionLedger must not contain hardcoded -₹{');
+      assert.ok(content.includes('+{formatPaiseToINR(totalIncomePaise)}'), 'Must reuse formatPaiseToINR for income');
+      assert.ok(content.includes('-{formatPaiseToINR(totalExpensePaise)}'), 'Must reuse formatPaiseToINR for expenses');
+    });
   });
 });

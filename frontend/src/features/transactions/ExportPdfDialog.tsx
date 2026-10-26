@@ -517,13 +517,13 @@ export function ExportPdfDialog({
                   <div>
                     <span className="text-[10px] text-[var(--text-muted)] block">Total Income</span>
                     <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
-                      +₹{summaryMetrics.formattedIncome}
+                      +{summaryMetrics.formattedIncome}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[var(--text-muted)] block">Total Expenses</span>
                     <span className="font-mono font-semibold text-red-600 dark:text-red-400 text-sm">
-                      -₹{summaryMetrics.formattedExpense}
+                      -{summaryMetrics.formattedExpense}
                     </span>
                   </div>
                   <div>
@@ -537,7 +537,7 @@ export function ExportPdfDialog({
                           : 'text-[var(--text-primary)]'
                       }`}
                     >
-                      {summaryMetrics.isNetPositive ? '+' : ''}₹{summaryMetrics.formattedNet}
+                      {summaryMetrics.isNetPositive ? '+' : ''}{summaryMetrics.formattedNet}
                     </span>
                   </div>
                 </div>
