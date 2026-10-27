@@ -409,4 +409,77 @@ describe('Personal Financial Statement PDF Redesign', () => {
       );
     });
   });
+
+  describe('PDF layout constants — FINANCIAL SUMMARY heading alignment', () => {
+    // Regression test for the bug where the FINANCIAL SUMMARY heading was placed
+    // only 2 mm above the summary card, causing it to overlap or crowd the card's
+    // top border and sit too close to the metadata cards above it.
+    //
+    // Expected invariants (all values in mm):
+    //   cardY       = 39   (metadata cards start)
+    //   cardHeight  = 27   (metadata cards height → bottom at y = 66)
+    //   headingGap  ≥ 6    (mm of clear space between card bottom and heading baseline)
+    //   headingRoom ≥ 4    (mm between heading baseline and summary card top)
+    //
+    // The source must NOT contain the old pattern `summaryY - 2` which places the
+    // heading only 2 mm above the card top.
+    test('heading is not placed via the buggy "summaryY - 2" pattern', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const src = fs.readFileSync(
+        path.resolve(__dirname, '../src/features/transactions/ledger-pdf-exporter.ts'),
+        'utf8'
+      );
+
+      assert.ok(
+        !src.includes('summaryY - 2'),
+        'The old buggy pattern "summaryY - 2" must be removed from the exporter'
+      );
+    });
+
+    test('summaryHeadingY provides at least 6 mm clearance below metadata cards', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const src = fs.readFileSync(
+        path.resolve(__dirname, '../src/features/transactions/ledger-pdf-exporter.ts'),
+        'utf8'
+      );
+
+      // Extract the numeric gap value from: cardY + cardHeight + <N>
+      // We look for the summaryHeadingY assignment pattern
+      const headingMatch = src.match(/summaryHeadingY\s*=\s*cardY\s*\+\s*cardHeight\s*\+\s*(\d+)/);
+      assert.ok(
+        headingMatch,
+        'summaryHeadingY must be defined as cardY + cardHeight + <gap> in the exporter'
+      );
+
+      const headingGap = parseInt(headingMatch![1], 10);
+      assert.ok(
+        headingGap >= 6,
+        `Heading gap (${headingGap} mm) must be at least 6 mm to avoid crowding the metadata cards`
+      );
+    });
+
+    test('summaryY provides at least 4 mm breathing room below the heading', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const src = fs.readFileSync(
+        path.resolve(__dirname, '../src/features/transactions/ledger-pdf-exporter.ts'),
+        'utf8'
+      );
+
+      // Extract the room value from: summaryY = summaryHeadingY + <N>
+      const cardGapMatch = src.match(/summaryY\s*=\s*summaryHeadingY\s*\+\s*(\d+)/);
+      assert.ok(
+        cardGapMatch,
+        'summaryY must be defined as summaryHeadingY + <room> in the exporter'
+      );
+
+      const headingRoom = parseInt(cardGapMatch![1], 10);
+      assert.ok(
+        headingRoom >= 4,
+        `Heading-to-card room (${headingRoom} mm) must be at least 4 mm so the heading does not crowd the card top border`
+      );
+    });
+  });
 });

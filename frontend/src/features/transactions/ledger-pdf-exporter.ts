@@ -580,13 +580,14 @@ export async function exportLedgerToPdf(
   const formattedExpense = formatCurrencyPdf(totalExpensePaise);
   const formattedNet = formatCurrencyPdf(netCashFlowPaise);
 
-  const summaryY = cardY + cardHeight + 4;
+  const summaryHeadingY = cardY + cardHeight + 8; // 8 mm below the bottom of both metadata cards
+  const summaryY = summaryHeadingY + 5;            // 5 mm of breathing room below the heading baseline
   const summaryHeight = 20;
 
   doc.setFont('NotoSans', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(113, 113, 122);
-  doc.text('FINANCIAL SUMMARY', margin, summaryY - 2);
+  doc.text('FINANCIAL SUMMARY', margin, summaryHeadingY);
 
   doc.setFillColor(250, 250, 249);
   doc.setDrawColor(228, 228, 231);
