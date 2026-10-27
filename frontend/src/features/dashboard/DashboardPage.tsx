@@ -369,9 +369,9 @@ export function DashboardPage({
 
       {/* Non-blocking Offline Banner when cached data is displayed */}
       {error && !isAuthError && summary && (
-        <div className="flex items-center justify-between p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs text-amber-200">
+        <div className="flex items-center justify-between p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
           <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-400 shrink-0" />
             <span className="font-medium">
               Showing cached ledger data. Unable to refresh from server ({error.message}).
             </span>
@@ -379,7 +379,7 @@ export function DashboardPage({
           <button
             type="button"
             onClick={handleRetry}
-            className="text-xs font-semibold text-amber-300 hover:text-white underline ml-3 shrink-0 cursor-pointer"
+            className="text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline ml-3 shrink-0 cursor-pointer"
           >
             Retry
           </button>

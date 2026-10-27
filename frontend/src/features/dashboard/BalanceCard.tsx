@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { AccountBalancesDTO } from '@arth/contracts';
+import { Badge } from '@/components/ui/Badge';
 import { ConfigureStartingBalancesModal } from './ConfigureStartingBalancesModal';
 import { TransferModal } from './TransferModal';
 import { AdjustBalanceModal } from './AdjustBalanceModal';
@@ -36,9 +37,9 @@ export function BalanceCard({
                 Total Available Balance
               </span>
               {!isConfigured && !loading && (
-                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/60">
+                <Badge variant="warning" size="xs">
                   Not Configured
-                </span>
+                </Badge>
               )}
             </div>
             <div className="text-2xl sm:text-3xl lg:text-4xl font-mono font-bold tracking-tight text-[var(--text-primary)]">
@@ -87,9 +88,9 @@ export function BalanceCard({
                 <span className="text-xs font-medium text-[var(--text-secondary)]">
                   Cash Balance
                 </span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-xs bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60 font-mono">
+                <Badge variant="cash" size="xs">
                   Cash
-                </span>
+                </Badge>
               </div>
               <p className="text-[11px] text-[var(--text-muted)]">Physical wallet &amp; cash on hand</p>
             </div>
@@ -109,9 +110,9 @@ export function BalanceCard({
                 <span className="text-xs font-medium text-[var(--text-secondary)]">
                   Online Balance
                 </span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-xs bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-900/60 font-mono">
+                <Badge variant="online" size="xs">
                   Online
-                </span>
+                </Badge>
               </div>
               <p className="text-[11px] text-[var(--text-muted)]">Bank accounts &amp; digital funds</p>
             </div>
@@ -127,19 +128,19 @@ export function BalanceCard({
 
         {/* Setup Prompt Banner if unconfigured */}
         {!isConfigured && !loading && (
-          <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-            <div className="space-y-0.5">
-              <span className="font-semibold text-amber-900 dark:text-amber-200">
+          <div className="p-4 bg-[var(--status-warning-bg)] border border-[var(--status-warning-border)] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-2xs">
+            <div className="space-y-1">
+              <span className="font-semibold text-[var(--text-primary)] block text-xs">
                 Track your actual money with Starting Balances
               </span>
-              <p className="text-amber-800 dark:text-amber-300/90 text-[11px]">
+              <p className="text-[var(--text-secondary)] text-[11px] leading-relaxed">
                 Enter how much cash and bank balance you have today. Starting balances are not classified as income or expenses.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsConfigureOpen(true)}
-              className="px-3 py-1.5 text-xs font-semibold bg-amber-700 text-white rounded-md hover:bg-amber-800 transition-colors shadow-2xs shrink-0 cursor-pointer"
+              className="px-3.5 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs shrink-0 cursor-pointer"
             >
               Configure Starting Balances &rarr;
             </button>

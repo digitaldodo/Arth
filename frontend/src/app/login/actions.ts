@@ -505,7 +505,13 @@ export async function updatePasswordAction(
       };
     }
 
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({
+      password,
+      data: {
+        has_password: true,
+        password_set_at: new Date().toISOString(),
+      },
+    });
 
     if (error) {
       return {
@@ -600,11 +606,13 @@ export async function changePasswordAction(
     }
 
     // Determine if account has an existing password (email provider identity)
-    const hasPassword =
+    const hasPassword = Boolean(
+      user.user_metadata?.has_password === true ||
       user.app_metadata?.provider === 'email' ||
       (Array.isArray(user.app_metadata?.providers) &&
         user.app_metadata.providers.includes('email')) ||
-      user.identities?.some((id) => id.provider === 'email');
+      user.identities?.some((id) => id.provider === 'email')
+    );
 
     if (hasPassword) {
       if (!currentPassword) {
@@ -632,9 +640,13 @@ export async function changePasswordAction(
       }
     }
 
-    // Update password in Supabase Auth
+    // Update password in Supabase Auth and persist has_password metadata
     const { error: updateError } = await supabase.auth.updateUser({
       password: newPassword,
+      data: {
+        has_password: true,
+        password_set_at: new Date().toISOString(),
+      },
     });
 
     if (updateError) {
@@ -1107,3 +1119,70 @@ export async function deleteAccountAction(
   }
 }
 
+
+/**
+ * Verify Current Account Password Action (Server Action)
+ * Used for secure reauthentication before performing sensitive operations
+ * such as exporting password-protected statements with account credentials.
+ * 
+ * - Authenticates against Supabase Auth without disclosing details.
+ * - Never logs or stores the submitted password.
+ * - Returns { valid: true } on success or { valid: false, error } on failure.
+ */
+export async function verifyCurrentPasswordAction(
+  password: string
+): Promise<{ valid: boolean; error?: string }> {
+  const trimmed = typeof password === 'string' ? password.trim() : '';
+  if (!trimmed) {
+    return { valid: false, error: 'Please enter your account password.' };
+  }
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user || !user.email) {
+      return {
+        valid: false,
+        error: 'Your session has expired. Please sign in again.',
+      };
+    }
+
+    const hasPassword = Boolean(
+      user.user_metadata?.has_password === true ||
+      user.app_metadata?.provider === 'email' ||
+      (Array.isArray(user.app_metadata?.providers) &&
+        user.app_metadata.providers.includes('email')) ||
+      user.identities?.some((id) => id.provider === 'email')
+    );
+
+    if (!hasPassword) {
+      return {
+        valid: false,
+        error: 'Your account does not have a password configured yet. Please set an account password in Settings or use a separate PDF password.',
+      };
+    }
+
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: trimmed,
+    });
+
+    if (verifyError) {
+      return {
+        valid: false,
+        error: 'Incorrect account password. Please try again.',
+      };
+    }
+
+    return { valid: true };
+  } catch (err: unknown) {
+    return {
+      valid: false,
+      error: err instanceof Error ? err.message : 'Password verification failed.',
+    };
+  }
+}

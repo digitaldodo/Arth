@@ -40,6 +40,7 @@ export default async function HomePage({
     displayName?: string;
     username?: string;
     providers?: string[];
+    hasPassword?: boolean;
   } | null = null;
 
   try {
@@ -92,12 +93,21 @@ export default async function HomePage({
           ? [user.app_metadata.provider as string]
           : [];
 
+      const hasPassword = Boolean(
+        user.user_metadata?.has_password === true ||
+        user.app_metadata?.provider === 'email' ||
+        (Array.isArray(user.app_metadata?.providers) &&
+          user.app_metadata.providers.includes('email')) ||
+        user.identities?.some((id) => id.provider === 'email')
+      );
+
       authenticatedUser = {
         id: user.id,
         email: user.email,
         displayName: displayName || undefined,
         username: username || undefined,
         providers,
+        hasPassword,
       };
     }
   } catch {

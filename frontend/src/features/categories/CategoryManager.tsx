@@ -12,6 +12,11 @@ import {
   archiveCategory,
   reorderCategories,
 } from '@/lib/api-client';
+import {
+  PRESET_CATEGORY_ICONS,
+  getDefaultCategoryIcon,
+  resolveCategoryIcon,
+} from './category-icons';
 
 interface CategoryManagerProps {
   onCategoryChange?: () => void;
@@ -39,6 +44,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
   // New Category Form State
   const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
+  const [newIcon, setNewIcon] = useState<string>('');
   const [newColor, setNewColor] = useState<string>(PRESET_COLORS[0]);
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -46,6 +52,8 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
+  const [editingIcon, setEditingIcon] = useState<string>('');
+  const [editingColor, setEditingColor] = useState<string>(PRESET_COLORS[0]);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
@@ -129,27 +137,47 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
     e.preventDefault();
     const trimmed = newName.trim();
     if (!trimmed) {
-      setCreateError('Category name is required');
+      setCreateError('Category name is required.');
+      return;
+    }
+    if (trimmed.length > 50) {
+      setCreateError('Category name cannot exceed 50 characters.');
+      return;
+    }
+
+    // Check for local active duplicate
+    const duplicate = categories.some(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) {
+      setCreateError(`An active ${activeTab} category named "${trimmed}" already exists.`);
       return;
     }
 
     setIsCreating(true);
     setCreateError(null);
     try {
+      const resolvedIcon = newIcon.trim() || null;
       await createCategory({
         name: trimmed,
         type: activeTab,
         color: newColor || null,
+        icon: resolvedIcon,
       });
 
       setNewName('');
+      setNewIcon('');
       setIsAddingNew(false);
       setLoadTrigger((prev) => prev + 1);
       onCategoryChange?.();
       showNotification(`Added category "${trimmed}"`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create category';
-      setCreateError(msg);
+      if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('conflict')) {
+        setCreateError(`A category with the name "${trimmed}" already exists.`);
+      } else {
+        setCreateError(msg);
+      }
     } finally {
       setIsCreating(false);
     }
@@ -159,6 +187,8 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
   const startEditing = (cat: CategoryDTO) => {
     setEditingId(cat.id);
     setEditingName(cat.name);
+    setEditingIcon(cat.icon || '');
+    setEditingColor(cat.color || PRESET_COLORS[0]);
     setUpdateError(null);
   };
 
@@ -166,32 +196,62 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
   const cancelEditing = () => {
     setEditingId(null);
     setEditingName('');
+    setEditingIcon('');
     setUpdateError(null);
   };
 
-  // Save renamed category
+  // Save updated category
   const handleUpdateSubmit = async (cat: CategoryDTO) => {
     const trimmed = editingName.trim();
     if (!trimmed) {
-      setUpdateError('Category name cannot be empty');
+      setUpdateError('Category name cannot be empty.');
       return;
     }
-    if (trimmed === cat.name) {
+    if (trimmed.length > 50) {
+      setUpdateError('Category name cannot exceed 50 characters.');
+      return;
+    }
+
+    const trimmedIcon = editingIcon.trim() || null;
+    const sameName = trimmed === cat.name;
+    const sameIcon = (trimmedIcon || null) === (cat.icon || null);
+    const sameColor = (editingColor || null) === (cat.color || null);
+
+    if (sameName && sameIcon && sameColor) {
       cancelEditing();
       return;
+    }
+
+    // Check for duplicate name if renamed
+    if (!sameName) {
+      const duplicate = categories.some(
+        (c) => c.id !== cat.id && c.name.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (duplicate) {
+        setUpdateError(`An active category named "${trimmed}" already exists.`);
+        return;
+      }
     }
 
     setIsUpdating(true);
     setUpdateError(null);
     try {
-      await updateCategory(cat.id, { name: trimmed });
+      await updateCategory(cat.id, {
+        name: trimmed,
+        icon: trimmedIcon,
+        color: editingColor || null,
+      });
       cancelEditing();
       setLoadTrigger((prev) => prev + 1);
       onCategoryChange?.();
-      showNotification(`Renamed to "${trimmed}"`);
+      showNotification(`Updated category "${trimmed}"`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update category';
-      setUpdateError(msg);
+      if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('conflict')) {
+        setUpdateError(`A category named "${trimmed}" already exists.`);
+      } else {
+        setUpdateError(msg);
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -238,7 +298,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
             Category Management
           </h1>
           <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-            Organize, rename, and prioritize your personal financial taxonomy
+            Organize, rename, customize icons, and prioritize your personal financial taxonomy
           </p>
         </div>
 
@@ -251,7 +311,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               setIsAddingNew(false);
               cancelEditing();
             }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors ${
+            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer ${
               activeTab === 'expense'
                 ? 'bg-[var(--bg-surface)] text-[var(--expense-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -266,7 +326,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               setIsAddingNew(false);
               cancelEditing();
             }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors ${
+            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer ${
               activeTab === 'income'
                 ? 'bg-[var(--bg-surface)] text-[var(--income-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -283,7 +343,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
           <span>✓ {successBanner}</span>
           <button
             onClick={() => setSuccessBanner(null)}
-            className="text-emerald-600 dark:text-emerald-400 font-bold ml-2"
+            className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 cursor-pointer"
           >
             ✕
           </button>
@@ -292,10 +352,10 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
 
       {errorMessage && (
         <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-800 dark:text-red-200 rounded-md flex items-center justify-between">
-          <span>⚠ {errorMessage}</span>
+          <span>⚠️ {errorMessage}</span>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-red-600 dark:text-red-400 font-bold ml-2"
+            className="text-red-600 dark:text-red-400 font-bold ml-2 cursor-pointer"
           >
             ✕
           </button>
@@ -320,7 +380,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               setIsAddingNew(true);
               setCreateError(null);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
           >
             <span className="text-sm leading-none">+</span>
             <span>Add Category</span>
@@ -343,9 +403,10 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               onClick={() => {
                 setIsAddingNew(false);
                 setNewName('');
+                setNewIcon('');
                 setCreateError(null);
               }}
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
             >
               Cancel
             </button>
@@ -357,7 +418,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
               <label
                 htmlFor="cat-name-input"
@@ -377,6 +438,65 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               />
             </div>
 
+            {/* Icon Picker */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-[var(--text-secondary)]">
+                  Category Icon
+                </span>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Preview:{' '}
+                  <span className="text-sm">
+                    {resolveCategoryIcon(newIcon, newName, activeTab)}
+                  </span>
+                  {!newIcon && (
+                    <span className="text-[10px] italic ml-1">(auto default)</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Curated Presets Palette */}
+              <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-md max-h-24 overflow-y-auto">
+                {PRESET_CATEGORY_ICONS.map((icon) => (
+                  <button
+                    key={icon}
+                    type="button"
+                    onClick={() => setNewIcon(icon)}
+                    className={`w-7 h-7 rounded-sm flex items-center justify-center text-sm transition-all cursor-pointer ${
+                      newIcon === icon
+                        ? 'bg-[var(--bg-surface-elevated)] ring-2 ring-[var(--text-primary)] scale-110 shadow-xs'
+                        : 'hover:bg-[var(--bg-surface)] opacity-80 hover:opacity-100'
+                    }`}
+                    title={`Select ${icon}`}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Emoji / Text Input */}
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newIcon}
+                  onChange={(e) => setNewIcon(e.target.value)}
+                  placeholder="Or enter custom emoji (e.g. 🍔, ☕)"
+                  maxLength={10}
+                  className="px-2.5 py-1.5 text-xs bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] w-48 focus:outline-hidden focus:border-[var(--border-strong)]"
+                />
+                {newIcon && (
+                  <button
+                    type="button"
+                    onClick={() => setNewIcon('')}
+                    className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)] underline cursor-pointer"
+                  >
+                    Reset to Auto
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Color Palette */}
             <div>
               <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                 Badge Color
@@ -387,7 +507,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
                     key={c}
                     type="button"
                     onClick={() => setNewColor(c)}
-                    className={`w-6 h-6 rounded-full transition-transform ${
+                    className={`w-6 h-6 rounded-full transition-transform cursor-pointer ${
                       newColor === c
                         ? 'ring-2 ring-offset-2 ring-[var(--text-primary)] scale-110'
                         : 'opacity-70 hover:opacity-100'
@@ -406,16 +526,17 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               onClick={() => {
                 setIsAddingNew(false);
                 setNewName('');
+                setNewIcon('');
                 setCreateError(null);
               }}
-              className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-md hover:text-[var(--text-primary)]"
+              className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-md hover:text-[var(--text-primary)] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isCreating || !newName.trim()}
-              className="px-4 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] disabled:opacity-50 transition-colors shadow-2xs"
+              className="px-4 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
             >
               {isCreating ? 'Creating...' : 'Save Category'}
             </button>
@@ -441,19 +562,19 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
             return (
               <div
                 key={cat.id}
-                className="flex items-center justify-between px-3 py-2.5 hover:bg-[var(--bg-surface-subtle)] transition-colors gap-3"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 hover:bg-[var(--bg-surface-subtle)] transition-colors gap-3"
               >
-                {/* Left side: Reorder controls + color + name */}
+                {/* Left side: Reorder controls + icon + color + name */}
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
                   {/* Up / Down Reorder buttons */}
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-0.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => handleMove(idx, 'up')}
                       disabled={idx === 0 || isReordering}
                       aria-label={`Move ${cat.name} up`}
                       title="Move up"
-                      className="w-5 h-4 flex items-center justify-center text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:hover:text-[var(--text-muted)] transition-colors rounded-xs border border-[var(--border-hairline)]"
+                      className="w-5 h-4 flex items-center justify-center text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:hover:text-[var(--text-muted)] transition-colors rounded-xs border border-[var(--border-hairline)] cursor-pointer"
                     >
                       ▲
                     </button>
@@ -463,55 +584,114 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
                       disabled={idx === categories.length - 1 || isReordering}
                       aria-label={`Move ${cat.name} down`}
                       title="Move down"
-                      className="w-5 h-4 flex items-center justify-center text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:hover:text-[var(--text-muted)] transition-colors rounded-xs border border-[var(--border-hairline)]"
+                      className="w-5 h-4 flex items-center justify-center text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-20 disabled:hover:text-[var(--text-muted)] transition-colors rounded-xs border border-[var(--border-hairline)] cursor-pointer"
                     >
                       ▼
                     </button>
                   </div>
 
                   {/* Rank / Order badge */}
-                  <span className="font-mono text-[11px] text-[var(--text-muted)] w-4 text-center select-none">
+                  <span className="font-mono text-[11px] text-[var(--text-muted)] w-4 text-center select-none shrink-0">
                     {idx + 1}
                   </span>
 
-                  {/* Color pill / chip */}
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: cat.color || '#78716C' }}
-                  />
+                  {/* Icon badge + Color dot */}
+                  <div className="relative flex items-center justify-center w-7 h-7 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] shrink-0 text-sm select-none">
+                    <span>
+                      {isEditing
+                        ? resolveCategoryIcon(editingIcon, editingName, cat.type)
+                        : resolveCategoryIcon(cat.icon, cat.name, cat.type)}
+                    </span>
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[var(--bg-surface)] ring-1 ring-[var(--border-hairline)]"
+                      style={{
+                        backgroundColor: isEditing
+                          ? editingColor || '#78716C'
+                          : cat.color || '#78716C',
+                      }}
+                      title={`Color: ${cat.color || 'Default'}`}
+                    />
+                  </div>
 
-                  {/* Inline Edit Form vs Static Display */}
+                  {/* Edit Form vs Static Display */}
                   {isEditing ? (
-                    <div className="flex items-center gap-2 flex-1 max-w-sm">
-                      <input
-                        type="text"
-                        autoFocus
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleUpdateSubmit(cat);
-                          if (e.key === 'Escape') cancelEditing();
-                        }}
-                        maxLength={50}
-                        className="px-2 py-1 text-xs bg-[var(--bg-canvas)] border border-[var(--border-strong)] rounded-xs text-[var(--text-primary)] focus:outline-hidden w-full font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateSubmit(cat)}
-                        disabled={isUpdating || !editingName.trim()}
-                        className="px-2 py-1 text-[11px] font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-xs hover:bg-[var(--action-primary-hover)] shrink-0"
-                      >
-                        {isUpdating ? '...' : 'Save'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEditing}
-                        className="px-2 py-1 text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-xs hover:text-[var(--text-primary)] shrink-0"
-                      >
-                        Cancel
-                      </button>
+                    <div className="flex flex-col gap-2 flex-1 max-w-md">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateSubmit(cat);
+                            if (e.key === 'Escape') cancelEditing();
+                          }}
+                          maxLength={50}
+                          placeholder="Category name"
+                          className="px-2 py-1 text-xs bg-[var(--bg-canvas)] border border-[var(--border-strong)] rounded-xs text-[var(--text-primary)] focus:outline-hidden w-full font-medium"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSubmit(cat)}
+                          disabled={isUpdating || !editingName.trim()}
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-xs hover:bg-[var(--action-primary-hover)] shrink-0 cursor-pointer"
+                        >
+                          {isUpdating ? '...' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditing}
+                          className="px-2 py-1 text-[11px] font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-xs hover:text-[var(--text-primary)] shrink-0 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      {/* Icon & Color controls while editing */}
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-[var(--text-muted)]">Icon:</span>
+                          <input
+                            type="text"
+                            value={editingIcon}
+                            onChange={(e) => setEditingIcon(e.target.value)}
+                            placeholder="Emoji"
+                            maxLength={10}
+                            className="w-16 px-1.5 py-0.5 text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded text-center"
+                          />
+                          {editingIcon && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingIcon('')}
+                              className="text-[10px] text-[var(--text-muted)] hover:underline cursor-pointer"
+                            >
+                              Auto
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-[var(--text-muted)]">Color:</span>
+                          <div className="flex items-center gap-1">
+                            {PRESET_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setEditingColor(c)}
+                                className={`w-3.5 h-3.5 rounded-full cursor-pointer ${
+                                  editingColor === c ? 'ring-2 ring-[var(--text-primary)] scale-110' : 'opacity-70 hover:opacity-100'
+                                }`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       {updateError && (
-                        <span className="text-[10px] text-red-600 truncate">{updateError}</span>
+                        <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">
+                          ⚠️ {updateError}
+                        </span>
                       )}
                     </div>
                   ) : (
@@ -530,18 +710,18 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
 
                 {/* Right side: Action buttons */}
                 {!isEditing && (
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
                     <button
                       type="button"
                       onClick={() => startEditing(cat)}
-                      className="px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xs hover:bg-[var(--bg-surface)] transition-colors"
+                      className="px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-xs hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
                     >
-                      Rename
+                      Rename &amp; Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => setArchivingCategory(cat)}
-                      className="px-2 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xs transition-colors"
+                      className="px-2 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/40 rounded-xs transition-colors cursor-pointer"
                     >
                       Archive
                     </button>
@@ -558,7 +738,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
         <button
           type="button"
           onClick={() => setShowArchived((prev) => !prev)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[var(--bg-surface-subtle)] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-[var(--text-secondary)]">
@@ -583,22 +763,24 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
               archivedCategories.map((cat) => (
                 <div
                   key={cat.id}
-                  className="flex items-center justify-between px-4 py-2.5 text-xs text-[var(--text-muted)]"
+                  className="flex items-center justify-between px-4 py-2.5 opacity-70 hover:opacity-100 transition-opacity"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs select-none">
+                      <span>{resolveCategoryIcon(cat.icon, cat.name, cat.type)}</span>
+                    </div>
                     <span
-                      className="w-2 h-2 rounded-full opacity-50"
+                      className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: cat.color || '#78716C' }}
                     />
-                    <span className="line-through decoration-[var(--border-subtle)]">
+                    <span className="text-xs font-medium text-[var(--text-muted)] line-through">
                       {cat.name}
                     </span>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => handleRestore(cat)}
-                    className="px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-xs transition-colors shadow-2xs"
+                    className="px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xs transition-colors cursor-pointer"
                   >
                     Restore
                   </button>
@@ -609,30 +791,28 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
         )}
       </div>
 
-      {/* Non-Destructive Archive Confirmation Modal */}
+      {/* Confirmation Modal for Archiving */}
       {archivingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-5 space-y-4 shadow-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-sm p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4 shadow-xl">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                Archive &quot;{archivingCategory.name}&quot;?
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                Archive &ldquo;{archivingCategory.name}&rdquo;?
               </h3>
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                Archiving hides this category from new entries and the Quick Add picker.
-                All past transactions categorized as <strong>{archivingCategory.name}</strong> remain intact and unaffected.
+                Archiving hides this category from transaction selectors. Existing transactions in this category will preserve their classification and history.
               </p>
             </div>
-
-            <div className="p-3 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-md text-[11px] text-[var(--text-muted)]">
-              ℹ You can restore an archived category at any time from the &quot;Archived Categories&quot; section below.
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-hairline)]">
               <button
                 type="button"
                 onClick={() => setArchivingCategory(null)}
                 disabled={isArchiving}
-                className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md"
+                className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-md hover:text-[var(--text-primary)] cursor-pointer"
               >
                 Cancel
               </button>
@@ -640,9 +820,9 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
                 type="button"
                 onClick={confirmArchive}
                 disabled={isArchiving}
-                className="px-4 py-1.5 text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 rounded-md transition-colors shadow-2xs disabled:opacity-50"
+                className="px-4 py-1.5 text-xs font-semibold bg-amber-800 text-white hover:bg-amber-900 rounded-md transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isArchiving ? 'Archiving...' : 'Confirm Archive'}
+                {isArchiving ? 'Archiving...' : 'Archive Category'}
               </button>
             </div>
           </div>

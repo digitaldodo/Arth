@@ -19,6 +19,7 @@ import {
   filterEligibleCategories,
   resolveEligibleCategory,
 } from './export-category-filter';
+import { verifyCurrentPasswordAction } from '@/app/login/actions';
 
 export interface ExportPdfDialogProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export interface ExportPdfDialogProps {
   initialCategoryId?: string; // 'all' or category ID
   initialNecessity?: NecessityClass | 'all';
   userProfile?: UserProfileSummary;
+  hasPassword?: boolean;
 }
 
 export function ExportPdfDialog({
@@ -38,6 +40,7 @@ export function ExportPdfDialog({
   initialCategoryId = 'all',
   initialNecessity = 'all',
   userProfile,
+  hasPassword = false,
 }: ExportPdfDialogProps) {
   // Preset & Dates
   const [preset, setPreset] = useState<DateRangePreset>('this_month');
@@ -64,10 +67,16 @@ export function ExportPdfDialog({
   const [exportError, setExportError] = useState<string | null>(null);
 
   // Password protection state
-  const [enablePasswordProtection, setEnablePasswordProtection] = useState<boolean>(false);
-  const [pdfPassword, setPdfPassword] = useState<string>('');
-  const [pdfConfirmPassword, setPdfConfirmPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [protectionMode, setProtectionMode] = useState<'standard' | 'protected'>('standard');
+  const [passwordOption, setPasswordOption] = useState<'account' | 'separate'>(
+    hasPassword ? 'account' : 'separate'
+  );
+  const [accountPassword, setAccountPassword] = useState<string>('');
+  const [showAccountPassword, setShowAccountPassword] = useState<boolean>(false);
+
+  const [separatePassword, setSeparatePassword] = useState<string>('');
+  const [separateConfirmPassword, setSeparateConfirmPassword] = useState<string>('');
+  const [showSeparatePassword, setShowSeparatePassword] = useState<boolean>(false);
 
   // Determine active date range based on preset or custom inputs
   const effectiveRange = useMemo(() => {
@@ -82,7 +91,7 @@ export function ExportPdfDialog({
 
   const isRangeValid = isValidDateRange(effectiveRange.startDate, effectiveRange.endDate);
 
-  // Reset initial category/type when dialog opens
+  // Reset initial category/type and password inputs when dialog opens
   useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {
@@ -94,14 +103,17 @@ export function ExportPdfDialog({
       setCustomStartDate(defaultRange.startDate);
       setCustomEndDate(defaultRange.endDate);
       setExportError(null);
-      setEnablePasswordProtection(false);
-      setPdfPassword('');
-      setPdfConfirmPassword('');
-      setShowPassword(false);
+      setProtectionMode('standard');
+      setPasswordOption(hasPassword ? 'account' : 'separate');
+      setAccountPassword('');
+      setSeparatePassword('');
+      setSeparateConfirmPassword('');
+      setShowAccountPassword(false);
+      setShowSeparatePassword(false);
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [isOpen, initialType, initialCategoryId, initialNecessity]);
+  }, [isOpen, initialType, initialCategoryId, initialNecessity, hasPassword]);
 
   // Fetch complete matching transaction set across all pages for the current date range and type
   useEffect(() => {
@@ -122,7 +134,6 @@ export function ExportPdfDialog({
       }
     }, 0);
 
-    // Fetch all matching transactions without category restriction to evaluate category eligibility
     fetchAllMatchingTransactions(
       selectedType,
       'all',
@@ -186,36 +197,58 @@ export function ExportPdfDialog({
     }
 
     const netPaise = incomePaise - expensePaise;
+    const formattedIncome = formatPaiseToINR(incomePaise);
+    const formattedExpense = formatPaiseToINR(expensePaise);
+    const formattedNet = formatPaiseToINR(netPaise < BigInt(0) ? -netPaise : netPaise);
+
     return {
-      count: previewTransactions.length,
       incomePaise,
       expensePaise,
       netPaise,
-      formattedIncome: formatPaiseToINR(incomePaise),
-      formattedExpense: formatPaiseToINR(expensePaise),
-      formattedNet: formatPaiseToINR(netPaise),
+      formattedIncome,
+      formattedExpense,
+      formattedNet,
       isNetPositive: netPaise > BigInt(0),
       isNetNegative: netPaise < BigInt(0),
     };
   }, [previewTransactions]);
 
-  // Validate password protection requirements
-  const isPasswordValid = useMemo(() => {
-    if (!enablePasswordProtection) return true;
-    const p = pdfPassword.trim();
-    return p.length > 0 && pdfPassword === pdfConfirmPassword;
-  }, [enablePasswordProtection, pdfPassword, pdfConfirmPassword]);
-
-  const passwordError = useMemo(() => {
-    if (!enablePasswordProtection) return null;
-    if (pdfPassword.length > 0 && pdfPassword.trim().length === 0) {
-      return 'Password cannot consist solely of whitespace';
+  // Validation for protected export form
+  const isProtectedFormValid = useMemo(() => {
+    if (protectionMode !== 'protected') return true;
+    if (passwordOption === 'account') {
+      return Boolean(hasPassword && accountPassword.trim().length > 0);
     }
-    if (pdfConfirmPassword.length > 0 && pdfPassword !== pdfConfirmPassword) {
-      return 'Passwords do not match';
+    // Separate password validation
+    const p = separatePassword.trim();
+    return (
+      p.length >= 6 &&
+      !separatePassword.startsWith(' ') &&
+      !separatePassword.endsWith(' ') &&
+      separatePassword === separateConfirmPassword
+    );
+  }, [
+    protectionMode,
+    passwordOption,
+    hasPassword,
+    accountPassword,
+    separatePassword,
+    separateConfirmPassword,
+  ]);
+
+  const separatePasswordError = useMemo(() => {
+    if (protectionMode !== 'protected' || passwordOption !== 'separate') return null;
+    if (separatePassword.length > 0 && separatePassword.trim().length < 6) {
+      return 'Password must be at least 6 characters.';
+    }
+    if (separatePassword.startsWith(' ') || separatePassword.endsWith(' ')) {
+      return 'Password cannot begin or end with a space.';
+    }
+    if (separateConfirmPassword.length > 0 && separatePassword !== separateConfirmPassword) {
+      return 'Passwords do not match.';
     }
     return null;
-  }, [enablePasswordProtection, pdfPassword, pdfConfirmPassword]);
+  }, [protectionMode, passwordOption, separatePassword, separateConfirmPassword]);
 
   // Handle Escape key
   useEffect(() => {
@@ -239,23 +272,10 @@ export function ExportPdfDialog({
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownloadStandard = async () => {
     if (!isRangeValid || isExporting || previewTransactions.length === 0) return;
-
-    if (enablePasswordProtection) {
-      const trimmed = pdfPassword.trim();
-      if (!trimmed) {
-        setExportError('Please enter a password or disable password protection.');
-        return;
-      }
-      if (pdfPassword !== pdfConfirmPassword) {
-        setExportError('Passwords do not match. Please verify your password.');
-        return;
-      }
-    }
-
     setIsExporting(true);
-    setExportProgress('Generating PDF…');
+    setExportProgress('Generating PDF statement…');
     setExportError(null);
 
     try {
@@ -271,12 +291,98 @@ export function ExportPdfDialog({
         preset,
         prefetchedTransactions: previewTransactions,
         userProfile,
-        password: enablePasswordProtection ? pdfPassword.trim() : undefined,
         onProgress: (status) => setExportProgress(status),
       });
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to export statement to PDF';
+      setExportError(msg);
+    } finally {
+      setIsExporting(false);
+      setExportProgress('');
+    }
+  };
+
+  const handleDownloadProtected = async () => {
+    if (!isRangeValid || isExporting || previewTransactions.length === 0) return;
+
+    let finalEncryptionPassword = '';
+
+    if (passwordOption === 'account') {
+      if (!hasPassword) {
+        setExportError(
+          'Your account does not have a password configured. Please use a separate PDF password or set an account password in Settings.'
+        );
+        return;
+      }
+      const trimmed = accountPassword.trim();
+      if (!trimmed) {
+        setExportError('Please enter your Arth account password.');
+        return;
+      }
+
+      setIsExporting(true);
+      setExportProgress('Verifying account credentials…');
+      setExportError(null);
+
+      try {
+        const verifyResult = await verifyCurrentPasswordAction(trimmed);
+        if (!verifyResult.valid) {
+          setIsExporting(false);
+          setExportProgress('');
+          setExportError(verifyResult.error || 'Incorrect account password. Please try again.');
+          return;
+        }
+        finalEncryptionPassword = trimmed;
+      } catch (err: unknown) {
+        setIsExporting(false);
+        setExportProgress('');
+        setExportError(err instanceof Error ? err.message : 'Failed to verify account password.');
+        return;
+      }
+    } else {
+      const trimmed = separatePassword.trim();
+      if (!trimmed) {
+        setExportError('Please enter a separate PDF password.');
+        return;
+      }
+      if (trimmed.length < 6) {
+        setExportError('Password must be at least 6 characters in length.');
+        return;
+      }
+      if (separatePassword.startsWith(' ') || separatePassword.endsWith(' ')) {
+        setExportError('Password cannot begin or end with a space.');
+        return;
+      }
+      if (separatePassword !== separateConfirmPassword) {
+        setExportError('Passwords do not match. Please verify both fields.');
+        return;
+      }
+      finalEncryptionPassword = trimmed;
+      setIsExporting(true);
+      setExportProgress('Generating PDF statement…');
+      setExportError(null);
+    }
+
+    try {
+      const dateRangeLabel = formatDateRangeLabel(effectiveRange.startDate, effectiveRange.endDate);
+      await exportLedgerToPdf({
+        selectedType,
+        selectedCategory: activeCategory,
+        selectedNecessity: selectedType === 'income' ? 'all' : selectedNecessity,
+        categories,
+        startDate: effectiveRange.startDate,
+        endDate: effectiveRange.endDate,
+        dateRangeLabel,
+        preset,
+        prefetchedTransactions: previewTransactions,
+        userProfile,
+        password: finalEncryptionPassword,
+        onProgress: (status) => setExportProgress(status),
+      });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to export encrypted statement';
       setExportError(msg);
     } finally {
       setIsExporting(false);
@@ -448,53 +554,67 @@ export function ExportPdfDialog({
             )}
           </div>
 
-          {/* 2. Transaction Type Filters (Mutually exclusive: Both, Income Only, Expense Only) */}
+          {/* 2. Transaction Type Segment */}
           <div>
             <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1.5">
-              Transaction Type
+              Transaction Flow
             </label>
-            <div className="grid grid-cols-3 gap-1.5 text-xs font-medium">
-              {[
-                { id: 'all', label: 'Both Income & Expense' },
-                { id: 'income', label: 'Income Only' },
-                { id: 'expense', label: 'Expense Only' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setSelectedType(t.id as TransactionType | 'all')}
-                  disabled={isExporting}
-                  className={`py-2 px-2 rounded-lg border text-center transition-all cursor-pointer truncate ${
-                    selectedType === t.id
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)] font-semibold shadow-xs'
-                      : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setSelectedType('all')}
+                disabled={isExporting}
+                className={`py-1.5 rounded-md transition-all cursor-pointer ${
+                  selectedType === 'all'
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Both Income & Expense
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedType('expense')}
+                disabled={isExporting}
+                className={`py-1.5 rounded-md transition-all cursor-pointer ${
+                  selectedType === 'expense'
+                    ? 'bg-[var(--bg-surface)] text-[var(--expense-fg)] font-semibold shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Expense Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedType('income')}
+                disabled={isExporting}
+                className={`py-1.5 rounded-md transition-all cursor-pointer ${
+                  selectedType === 'income'
+                    ? 'bg-[var(--bg-surface)] text-[var(--income-fg)] font-semibold shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Income Only
+              </button>
             </div>
           </div>
 
-          {/* 3. Category Filter (Filtered by Available Matching Transactions) */}
+          {/* 3a. Category Filter */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label htmlFor="export-category-select" className="text-xs font-semibold text-[var(--text-secondary)]">
                 Category Scope
               </label>
-              {isLoadingScope && (
-                <span className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 font-mono">
-                  <span className="inline-block w-2.5 h-2.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
-                  Filtering...
-                </span>
-              )}
+              <span className="text-[11px] text-[var(--text-muted)]">
+                {eligibleCategories.length} active with records
+              </span>
             </div>
             <select
               id="export-category-select"
               value={activeCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              disabled={isExporting || isLoadingScope || eligibleCategories.length === 0}
-              className="w-full text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-hidden cursor-pointer disabled:opacity-50"
+              disabled={isExporting}
+              className="w-full text-xs bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-hidden cursor-pointer"
             >
               <option value="all">
                 All Categories {scopeTransactions.length > 0 ? `(${scopeTransactions.length})` : ''}
@@ -508,11 +628,6 @@ export function ExportPdfDialog({
                 );
               })}
             </select>
-            {eligibleCategories.length === 0 && !isLoadingScope && isRangeValid && (
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                No categories contain transactions for the selected period and type.
-              </p>
-            )}
           </div>
 
           {/* 3b. Necessity Filter */}
@@ -541,107 +656,230 @@ export function ExportPdfDialog({
             </select>
           </div>
 
-          {/* 3c. Optional Password Protection (AES-256) */}
-          <div className="p-3.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl space-y-3">
+          {/* 3c. Statement Security & Protection (Standard vs AES-256 Encrypted) */}
+          <div className="p-4 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl space-y-3.5">
             <div className="flex items-center justify-between">
-              <label
-                htmlFor="enable-password-protection"
-                className="flex items-center gap-2 cursor-pointer select-none"
-              >
-                <input
-                  id="enable-password-protection"
-                  type="checkbox"
-                  checked={enablePasswordProtection}
-                  onChange={(e) => {
-                    setEnablePasswordProtection(e.target.checked);
-                    if (!e.target.checked) {
-                      setPdfPassword('');
-                      setPdfConfirmPassword('');
-                    }
-                  }}
-                  disabled={isExporting}
-                  className="rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-0 cursor-pointer w-4 h-4"
-                />
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🔐</span>
                 <span className="text-xs font-semibold text-[var(--text-primary)]">
-                  Password-Protect PDF
+                  Statement Protection &amp; Security
                 </span>
-              </label>
+              </div>
               <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                AES-256 Encryption
+                {protectionMode === 'protected' ? 'AES-256 Encrypted' : 'Standard Unencrypted'}
               </span>
             </div>
 
-            {enablePasswordProtection && (
-              <div className="space-y-3 pt-2 border-t border-[var(--border-hairline)]">
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                  Protect this statement with a password. Arth never stores or transmits this password. You must securely share the password with your recipient to unlock the PDF.
-                </p>
+            {/* Mode Selector */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setProtectionMode('standard')}
+                disabled={isExporting}
+                className={`py-1.5 rounded-md transition-all cursor-pointer ${
+                  protectionMode === 'standard'
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Standard PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setProtectionMode('protected')}
+                disabled={isExporting}
+                className={`py-1.5 rounded-md transition-all cursor-pointer ${
+                  protectionMode === 'protected'
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Password-Protected PDF
+              </button>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="pdf-password-input"
-                      className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
-                    >
-                      Password
-                    </label>
-                    <div className="relative">
+            {/* Password Protection Details */}
+            {protectionMode === 'protected' && (
+              <div className="space-y-3 pt-2 border-t border-[var(--border-hairline)] animate-in fade-in duration-150">
+                {/* Method Options: Account Password vs Separate Password */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+                    Choose Encryption Password Method
+                  </label>
+
+                  {/* Option 1: Account Password */}
+                  <div
+                    onClick={() => setPasswordOption('account')}
+                    className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                      passwordOption === 'account'
+                        ? 'bg-[var(--bg-surface)] border-[var(--text-primary)] shadow-2xs'
+                        : 'bg-[var(--bg-canvas)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
                       <input
-                        id="pdf-password-input"
-                        type={showPassword ? 'text' : 'password'}
-                        value={pdfPassword}
-                        onChange={(e) => setPdfPassword(e.target.value)}
-                        disabled={isExporting}
-                        placeholder="Enter password"
-                        autoComplete="new-password"
-                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 pr-8 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                        type="radio"
+                        id="opt-account-pw"
+                        name="pdf-password-choice"
+                        checked={passwordOption === 'account'}
+                        onChange={() => setPasswordOption('account')}
+                        className="mt-0.5"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        tabIndex={-1}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                      >
-                        {showPassword ? '🙈' : '👁️'}
-                      </button>
+                      <div className="space-y-1 flex-1">
+                        <label
+                          htmlFor="opt-account-pw"
+                          className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
+                        >
+                          Use my Arth account password
+                        </label>
+                        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                          Re-authenticate with your account password to secure this PDF.
+                        </p>
+
+                        {/* If user has no password configured (e.g. Google OAuth) */}
+                        {!hasPassword && passwordOption === 'account' && (
+                          <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded text-[11px]">
+                            Your account is authenticated via Google or does not have a password configured yet. Please select <strong>&quot;Use a separate PDF password&quot;</strong> below or configure a password in Settings.
+                          </div>
+                        )}
+
+                        {/* Account password input */}
+                        {hasPassword && passwordOption === 'account' && (
+                          <div className="mt-2.5 space-y-2">
+                            <div className="relative">
+                              <input
+                                type={showAccountPassword ? 'text' : 'password'}
+                                value={accountPassword}
+                                onChange={(e) => setAccountPassword(e.target.value)}
+                                disabled={isExporting}
+                                placeholder="Enter your current Arth password"
+                                autoComplete="current-password"
+                                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 pr-8 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAccountPassword(!showAccountPassword)}
+                                aria-label={showAccountPassword ? 'Hide password' : 'Show password'}
+                                tabIndex={-1}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                              >
+                                {showAccountPassword ? '🙈' : '👁️'}
+                              </button>
+                            </div>
+
+                            {/* Security Warning */}
+                            <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded text-[11px] text-amber-900 dark:text-amber-200 leading-normal">
+                              ⚠️ <strong>Important Security Guidance:</strong> Anyone who knows your Arth account password may also be able to access your Arth account. Share this password carefully.
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label
-                      htmlFor="pdf-confirm-password-input"
-                      className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
-                    >
-                      Confirm Password
-                    </label>
-                    <div className="relative">
+                  {/* Option 2: Separate PDF Password */}
+                  <div
+                    onClick={() => setPasswordOption('separate')}
+                    className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                      passwordOption === 'separate'
+                        ? 'bg-[var(--bg-surface)] border-[var(--text-primary)] shadow-2xs'
+                        : 'bg-[var(--bg-canvas)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
                       <input
-                        id="pdf-confirm-password-input"
-                        type={showPassword ? 'text' : 'password'}
-                        value={pdfConfirmPassword}
-                        onChange={(e) => setPdfConfirmPassword(e.target.value)}
-                        disabled={isExporting}
-                        placeholder="Re-enter password"
-                        autoComplete="new-password"
-                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                        type="radio"
+                        id="opt-separate-pw"
+                        name="pdf-password-choice"
+                        checked={passwordOption === 'separate'}
+                        onChange={() => setPasswordOption('separate')}
+                        className="mt-0.5"
                       />
+                      <div className="space-y-1 flex-1">
+                        <label
+                          htmlFor="opt-separate-pw"
+                          className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
+                        >
+                          Use a separate PDF password (Recommended for sharing)
+                        </label>
+                        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                          Choose a dedicated password specifically for this document. Use this option to share with accountants, banks, or third parties without revealing your Arth account credentials.
+                        </p>
+
+                        {/* Separate password inputs */}
+                        {passwordOption === 'separate' && (
+                          <div className="mt-2.5 space-y-2.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label
+                                  htmlFor="sep-password-input"
+                                  className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
+                                >
+                                  Document Password
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    id="sep-password-input"
+                                    type={showSeparatePassword ? 'text' : 'password'}
+                                    value={separatePassword}
+                                    onChange={(e) => setSeparatePassword(e.target.value)}
+                                    disabled={isExporting}
+                                    placeholder="Min 6 characters"
+                                    autoComplete="new-password"
+                                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 pr-8 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowSeparatePassword(!showSeparatePassword)}
+                                    aria-label={showSeparatePassword ? 'Hide password' : 'Show password'}
+                                    tabIndex={-1}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                                  >
+                                    {showSeparatePassword ? '🙈' : '👁️'}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label
+                                  htmlFor="sep-confirm-password-input"
+                                  className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
+                                >
+                                  Confirm Password
+                                </label>
+                                <input
+                                  id="sep-confirm-password-input"
+                                  type={showSeparatePassword ? 'text' : 'password'}
+                                  value={separateConfirmPassword}
+                                  onChange={(e) => setSeparateConfirmPassword(e.target.value)}
+                                  disabled={isExporting}
+                                  placeholder="Re-enter password"
+                                  autoComplete="new-password"
+                                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Validation feedback */}
+                            {separatePasswordError && (
+                              <div className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                                ⚠️ {separatePasswordError}
+                              </div>
+                            )}
+                            {!separatePasswordError &&
+                              separatePassword.trim().length >= 6 &&
+                              separatePassword === separateConfirmPassword && (
+                                <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                  <span>✓</span>
+                                  <span>Passwords match (AES-256 standard encryption ready)</span>
+                                </div>
+                              )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Validation Feedback */}
-                {passwordError && (
-                  <div className="text-[11px] text-red-600 dark:text-red-400 font-medium">
-                    ⚠️ {passwordError}
-                  </div>
-                )}
-                {!passwordError && pdfPassword.trim().length > 0 && pdfPassword === pdfConfirmPassword && (
-                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                    <span>✓</span>
-                    <span>Passwords match (AES-256 standard encryption ready)</span>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -649,52 +887,33 @@ export function ExportPdfDialog({
           {/* 4. Export Configuration Summary */}
           <div className="p-4 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
                 Statement Summary Preview
               </span>
-              {isLoadingScope && (
-                <span className="text-[11px] text-[var(--text-muted)] flex items-center gap-1">
-                  <span className="inline-block w-2.5 h-2.5 border-2 border-[var(--text-secondary)] border-t-transparent rounded-full animate-spin" />
-                  Calculating...
-                </span>
-              )}
+              <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)]">
+                {isLoadingScope ? 'Calculating…' : `${previewTransactions.length} matching txns`}
+              </span>
             </div>
 
-            {!isLoadingScope && isRangeValid && previewTransactions.length === 0 ? (
-              <div className="py-4 text-center space-y-1.5 border-t border-[var(--border-hairline)]">
-                <span className="text-2xl block" aria-hidden="true">📭</span>
-                <h4 className="text-xs font-semibold text-[var(--text-primary)]">
-                  No Matching Transactions
-                </h4>
-                <p className="text-[11px] text-[var(--text-muted)] max-w-sm mx-auto">
-                  No active {selectedType === 'all' ? '' : `${selectedType} `}transactions match the selected criteria. Adjust your date range or select a different transaction type.
-                </p>
-              </div>
-            ) : (
+            {!isLoadingScope && (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-[var(--border-hairline)] text-xs">
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[var(--border-hairline)]">
                   <div>
-                    <span className="text-[10px] text-[var(--text-muted)] block">Records</span>
-                    <span className="font-mono font-semibold text-[var(--text-primary)] text-sm">
-                      {summaryMetrics.count}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[var(--text-muted)] block">Total Income</span>
-                    <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase block">Total Inflow</span>
+                    <span className="text-xs font-mono font-semibold text-[var(--income-fg)] block">
                       +{summaryMetrics.formattedIncome}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--text-muted)] block">Total Expenses</span>
-                    <span className="font-mono font-semibold text-red-600 dark:text-red-400 text-sm">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase block">Total Outflow</span>
+                    <span className="text-xs font-mono font-semibold text-[var(--expense-fg)] block">
                       -{summaryMetrics.formattedExpense}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[var(--text-muted)] block">Net Cash Flow</span>
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase block">Net Flow</span>
                     <span
-                      className={`font-mono font-semibold text-sm ${
+                      className={`text-xs font-mono font-semibold block ${
                         summaryMetrics.isNetPositive
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : summaryMetrics.isNetNegative
@@ -733,43 +952,96 @@ export function ExportPdfDialog({
             )}
           </div>
 
-          {/* 5. Action Buttons */}
-          <div className="pt-2 flex items-center gap-2">
+          {/* 5. Action Buttons (Two Clear Export Options) */}
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={isExporting}
-              className="w-1/3 py-2.5 text-xs font-medium border border-[var(--border-subtle)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+              className="sm:w-1/4 py-2.5 text-xs font-medium border border-[var(--border-subtle)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={
-                !isRangeValid ||
-                isExporting ||
-                isLoadingScope ||
-                previewTransactions.length === 0 ||
-                (enablePasswordProtection && !isPasswordValid)
-              }
-              aria-busy={isExporting}
-              className="w-2/3 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isExporting ? (
-                <>
-                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  <span>{exportProgress || 'Preparing statement…'}</span>
-                </>
-              ) : previewTransactions.length === 0 && !isLoadingScope ? (
-                <span>No Transactions to Export</span>
-              ) : (
-                <>
-                  <span aria-hidden="true">📥</span>
-                  <span>Download PDF Statement</span>
-                </>
-              )}
-            </button>
+
+            {protectionMode === 'standard' ? (
+              <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadStandard}
+                  disabled={
+                    !isRangeValid ||
+                    isExporting ||
+                    isLoadingScope ||
+                    previewTransactions.length === 0
+                  }
+                  className="flex-1 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span>{exportProgress || 'Preparing statement…'}</span>
+                    </>
+                  ) : previewTransactions.length === 0 && !isLoadingScope ? (
+                    <span>No Transactions to Export</span>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">📥</span>
+                      <span>Download Standard PDF</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProtectionMode('protected')}
+                  disabled={
+                    !isRangeValid ||
+                    isExporting ||
+                    isLoadingScope ||
+                    previewTransactions.length === 0
+                  }
+                  className="sm:w-auto px-3.5 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] rounded-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  title="Configure encryption password"
+                >
+                  <span aria-hidden="true">🔐</span>
+                  <span>Protect with Password…</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProtectionMode('standard')}
+                  disabled={isExporting}
+                  className="px-3 py-2.5 text-xs font-medium border border-[var(--border-hairline)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg cursor-pointer"
+                >
+                  ← Standard PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadProtected}
+                  disabled={
+                    !isRangeValid ||
+                    isExporting ||
+                    isLoadingScope ||
+                    previewTransactions.length === 0 ||
+                    !isProtectedFormValid
+                  }
+                  className="flex-1 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isExporting ? (
+                    <>
+                      <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span>{exportProgress || 'Encrypting statement…'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">🔐</span>
+                      <span>Download Password-Protected PDF</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
 
 export interface TransactionLedgerProps {
   userProfile?: UserProfileSummary;
+  hasPassword?: boolean;
   onOpenQuickAdd: () => void;
   refreshTrigger: number;
   onTransactionMutated?: () => void;
@@ -41,6 +42,7 @@ export function clearLedgerQueryCache(): void {
 
 export function TransactionLedger({
   userProfile,
+  hasPassword,
   onOpenQuickAdd,
   refreshTrigger,
   onTransactionMutated,
@@ -749,6 +751,7 @@ export function TransactionLedger({
         initialCategoryId={selectedCategory}
         initialNecessity={selectedNecessity}
         userProfile={userProfile}
+        hasPassword={hasPassword}
       />
     </div>
   );

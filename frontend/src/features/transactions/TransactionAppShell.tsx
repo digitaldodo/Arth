@@ -44,13 +44,16 @@ interface TransactionAppShellProps {
     displayName?: string;
     username?: string;
     providers?: string[];
+    hasPassword?: boolean;
   } | null;
 }
 
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
-  const hasPassword = Boolean(user?.providers?.includes('email'));
+  const [hasPassword, setHasPassword] = useState<boolean>(
+    Boolean(user?.hasPassword ?? user?.providers?.includes('email'))
+  );
   const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -337,6 +340,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   username: currentUsername || user?.username,
                   email: user?.email,
                 }}
+                hasPassword={hasPassword}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
@@ -647,7 +651,10 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsPasswordModalOpen(false)}
           userEmail={user.email}
           hasPassword={hasPassword}
-          onSuccess={(msg) => setSaveSuccessBanner(msg)}
+          onSuccess={(msg) => {
+            setHasPassword(true);
+            setSaveSuccessBanner(msg);
+          }}
         />
       )}
 
