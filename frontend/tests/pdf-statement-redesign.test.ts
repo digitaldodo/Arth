@@ -7,6 +7,9 @@ import {
   generateStatementReference,
   sanitizeUsernameForFilename,
   getTimestampIST,
+  formatCurrencyPdf,
+  isCurrentMonthInProgress,
+  getMonthInProgressLabel,
 } from '../src/features/transactions/ledger-pdf-exporter';
 
 const mockCategories: CategoryDTO[] = [
@@ -156,10 +159,66 @@ describe('Personal Financial Statement PDF Redesign', () => {
       assert.ok(ref1.startsWith('ARTH-STMT-20261031-'));
     });
 
-    test('getTimestampIST returns date formatted in Asia/Kolkata timezone with IST suffix in DD-MM-YYYY format', () => {
+    test('getTimestampIST returns date formatted in Asia/Kolkata timezone with IST suffix in DD/MM/YYYY format', () => {
       const timestamp = getTimestampIST();
       assert.ok(timestamp.endsWith('IST'), 'Must include IST timezone suffix');
-      assert.ok(/\d{2}-\d{2}-\d{4},? \d{1,2}:\d{2}\s?(am|pm) IST/i.test(timestamp), `Timestamp "${timestamp}" should match expected format`);
+      assert.ok(/\d{2}\/\d{2}\/\d{4},? \d{1,2}:\d{2}\s?(am|pm) IST/i.test(timestamp), `Timestamp "${timestamp}" should match expected format`);
+    });
+
+    test('formatCurrencyPdf strips leading plus and minus signs while preserving paise precision and currency symbol', () => {
+      // Income / positive flow
+      assert.equal(formatCurrencyPdf(50000n), '₹500.00');
+      // Expense / negative flow
+      assert.equal(formatCurrencyPdf(-27000n), '₹270.00');
+      // Zero flow
+      assert.equal(formatCurrencyPdf(0n), '₹0.00');
+      // Number input
+      assert.equal(formatCurrencyPdf(12500), '₹125.00');
+      // Ensure no plus or minus symbol in output
+      assert.ok(!formatCurrencyPdf(50000n).includes('+'));
+      assert.ok(!formatCurrencyPdf(-27000n).includes('-'));
+    });
+
+    test('isCurrentMonthInProgress correctly identifies ongoing month and rejects completed or partial ranges', () => {
+      // Current month before end date: 27 Oct 2026 for month 01 Oct - 31 Oct
+      assert.equal(
+        isCurrentMonthInProgress('2026-10-01', '2026-10-31', '2026-10-27'),
+        true,
+        'Should identify ongoing month as in progress'
+      );
+
+      // Completed month: Sep 2026 when today is 27 Oct 2026
+      assert.equal(
+        isCurrentMonthInProgress('2026-09-01', '2026-09-30', '2026-10-27'),
+        false,
+        'Completed month must not be marked in progress'
+      );
+
+      // Arbitrary custom range within current month
+      assert.equal(
+        isCurrentMonthInProgress('2026-10-05', '2026-10-20', '2026-10-27'),
+        false,
+        'Arbitrary date ranges must not be marked in progress'
+      );
+
+      // Non-this_month preset
+      assert.equal(
+        isCurrentMonthInProgress('2026-10-01', '2026-10-31', '2026-10-27', 'last_month'),
+        false,
+        'Should respect preset override'
+      );
+
+      // this_month preset
+      assert.equal(
+        isCurrentMonthInProgress('2026-10-01', '2026-10-31', '2026-10-27', 'this_month'),
+        true,
+        'Should recognize this_month preset'
+      );
+    });
+
+    test('getMonthInProgressLabel formats label correctly', () => {
+      const label = getMonthInProgressLabel('2026-10-01', '2026-10-27');
+      assert.equal(label, 'October 2026 · Month in progress');
     });
   });
 
@@ -284,6 +343,70 @@ describe('Personal Financial Statement PDF Redesign', () => {
 
       assert.ok(result.doc);
       assert.ok(result.filename.startsWith('arth-statement-all-to-'));
+      assert.equal(result.encryptedBytes, undefined, 'Unprotected export must not return encryptedBytes');
+    });
+
+    test('exports statement with exact title PERSONAL TRANSACTION STATEMENT and correct metadata', async () => {
+      const result = await exportLedgerToPdf({
+        selectedType: 'all',
+        selectedCategory: 'all',
+        categories: mockCategories,
+        startDate: '2026-10-01',
+        endDate: '2026-10-31',
+        prefetchedTransactions: mockFiveTransactions,
+        userProfile: {
+          displayName: 'Ansh Kumar',
+          username: 'digitaldodo',
+        },
+      });
+
+      assert.ok(result.doc);
+      assert.equal(result.filename, 'arth-statement-digitaldodo-2026-10-01-to-2026-10-31.pdf');
+
+      const rawStr = Buffer.from(result.doc.output('arraybuffer')).toString('binary');
+      assert.ok(
+        rawStr.includes('/Title (Personal Transaction Statement)'),
+        'PDF metadata must include Personal Transaction Statement title'
+      );
+      assert.ok(
+        rawStr.includes('/Creator (Arth Personal Finance)'),
+        'PDF metadata must include Arth Personal Finance creator'
+      );
+    });
+
+    test('exports statement with genuine AES-256 password encryption when password is provided', async () => {
+      const result = await exportLedgerToPdf({
+        selectedType: 'all',
+        selectedCategory: 'all',
+        categories: mockCategories,
+        startDate: '2026-10-01',
+        endDate: '2026-10-31',
+        prefetchedTransactions: mockFiveTransactions,
+        userProfile: {
+          displayName: 'Ansh Kumar',
+          username: 'digitaldodo',
+        },
+        password: 'SuperSecretStatementPassword2026!',
+      });
+
+      assert.ok(result.encryptedBytes, 'Encrypted bytes must be returned when password is provided');
+      assert.ok(result.encryptedBytes instanceof Uint8Array, 'Encrypted bytes must be a Uint8Array');
+      assert.ok(result.encryptedBytes.length > 1000, 'Encrypted file size must be non-trivial');
+
+      // Verify PDF encryption markers in binary stream
+      const binStr = Buffer.from(result.encryptedBytes).toString('binary');
+      assert.ok(binStr.includes('/Encrypt'), 'Must contain standard PDF /Encrypt dictionary marker');
+      assert.ok(binStr.includes('/Standard'), 'Must use standard PDF security handler');
+
+      // Verify that sensitive payload text is obfuscated/encrypted and does NOT appear in plaintext
+      assert.ok(
+        !binStr.includes('Chaudhary Dhaba'),
+        'Transaction descriptions must be encrypted and not appear as plaintext'
+      );
+      assert.ok(
+        !binStr.includes('SuperSecretStatementPassword2026!'),
+        'Password itself must never be stored as plaintext in the PDF document'
+      );
     });
   });
 });

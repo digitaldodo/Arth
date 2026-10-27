@@ -1,12 +1,13 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { encryptPDF } from '@pdfsmaller/pdf-encrypt';
 import type {
   TransactionDTO,
   CategoryDTO,
   TransactionType,
   NecessityClass,
 } from '@arth/contracts';
-import { formatPaiseToINR, formatDateHuman, getTodayIST } from '@/lib/format';
+import { formatPaiseToINR, formatDateSlash, getTodayIST } from '@/lib/format';
 import { fetchTransactions } from '@/lib/api-client';
 
 export interface UserProfileSummary {
@@ -23,9 +24,67 @@ export interface ExportPdfOptions {
   startDate?: string;
   endDate?: string;
   dateRangeLabel?: string;
+  preset?: string;
   userProfile?: UserProfileSummary;
+  password?: string;
   onProgress?: (status: string) => void;
   prefetchedTransactions?: TransactionDTO[];
+}
+
+/**
+ * Formats a monetary amount in paise for PDF presentation without explicit leading '+' or '-' signs.
+ * Retains single '₹' currency symbol and standard paise precision (2 decimal places).
+ * Example: 50000n -> "₹500.00", -27000n -> "₹270.00", 0n -> "₹0.00".
+ */
+export function formatCurrencyPdf(paise: bigint | number): string {
+  const p = typeof paise === 'number' ? BigInt(Math.round(paise)) : paise;
+  const absP = p < BigInt(0) ? -p : p;
+  return formatPaiseToINR(absP).replace(/^[+-]/, '');
+}
+
+/**
+ * Determines whether the given date range represents the current calendar month
+ * that has not yet ended, in Asia/Kolkata timezone.
+ *
+ * @param startDate Start date (YYYY-MM-DD)
+ * @param endDate End date (YYYY-MM-DD)
+ * @param baseDate Optional override for current date (YYYY-MM-DD) for deterministic testing
+ * @param preset Optional preset identifier (e.g. 'this_month')
+ */
+export function isCurrentMonthInProgress(
+  startDate?: string | null,
+  endDate?: string | null,
+  baseDate?: string,
+  preset?: string
+): boolean {
+  if (preset && preset !== 'this_month') {
+    return false;
+  }
+  if (!startDate || !endDate) return false;
+
+  const todayStr = baseDate || getTodayIST();
+  const [todayYear, todayMonth, todayDay] = todayStr.split('-').map(Number);
+  const startExpected = `${todayYear}-${String(todayMonth).padStart(2, '0')}-01`;
+  const lastDayOfMonth = new Date(todayYear, todayMonth, 0).getDate();
+  const endExpected = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
+  const isCurrentMonth = startDate === startExpected && endDate === endExpected;
+  const hasNotEnded = todayDay < lastDayOfMonth;
+
+  return isCurrentMonth && hasNotEnded;
+}
+
+/**
+ * Returns a human-readable status badge label for a month in progress: "October 2026 · Month in progress".
+ */
+export function getMonthInProgressLabel(dateStr?: string, baseDate?: string): string {
+  const dStr = dateStr || baseDate || getTodayIST();
+  const [year, month] = dStr.split('-').map(Number);
+  const d = new Date(year, month - 1, 1);
+  const monthName = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+  }).format(d);
+  return `${monthName} ${year} · Month in progress`;
 }
 
 // In-memory cache for loaded font base64 strings so repeated exports are instantaneous
@@ -105,10 +164,10 @@ export async function loadFonts(): Promise<{ regular: string; bold: string }> {
 }
 
 /**
- * Formats a Date object into an Asia/Kolkata (IST) timestamp string: "25 Oct 2026, 06:15 PM IST".
+ * Formats a Date object into an Asia/Kolkata (IST) timestamp string: "27/10/2026, 12:15 pm IST".
  */
-export function getTimestampIST(): string {
-  const now = new Date();
+export function getTimestampIST(date?: Date): string {
+  const now = date || new Date();
   const parts = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: '2-digit',
@@ -124,9 +183,9 @@ export function getTimestampIST(): string {
   const year = parts.find((p) => p.type === 'year')?.value ?? '';
   const hour = parts.find((p) => p.type === 'hour')?.value ?? '';
   const minute = parts.find((p) => p.type === 'minute')?.value ?? '';
-  const dayPeriod = parts.find((p) => p.type === 'dayPeriod')?.value?.toUpperCase() ?? '';
+  const dayPeriod = parts.find((p) => p.type === 'dayPeriod')?.value?.toLowerCase() ?? '';
 
-  return `${day}-${month}-${year}, ${hour}:${minute} ${dayPeriod} IST`;
+  return `${day}/${month}/${year}, ${hour}:${minute} ${dayPeriod} IST`;
 }
 
 /**
@@ -242,7 +301,9 @@ export async function fetchAllMatchingTransactions(
 /**
  * Generates and downloads a redesigned, professional personal financial statement PDF.
  */
-export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ filename: string; doc: jsPDF }> {
+export async function exportLedgerToPdf(
+  options: ExportPdfOptions
+): Promise<{ filename: string; doc: jsPDF; encryptedBytes?: Uint8Array }> {
   const {
     selectedType,
     selectedCategory,
@@ -285,6 +346,14 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     format: 'a4',
   });
 
+  // Set document metadata properties
+  doc.setProperties({
+    title: 'Personal Transaction Statement',
+    subject: 'Personal Transaction Statement generated from Arth records',
+    author: userProfile?.displayName || userProfile?.username || 'Arth User',
+    creator: 'Arth Personal Finance',
+  });
+
   // Register font in VFS
   doc.addFileToVFS('NotoSans-Regular.ttf', fonts.regular);
   doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
@@ -295,22 +364,26 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   const margin = 14;
   const usableWidth = pageWidth - margin * 2; // 182mm
 
-  // Determine Effective Period Label
-  let effectivePeriod = dateRangeLabel;
-  if (!effectivePeriod) {
+  // Determine Effective Period Label with standardized DD/MM/YYYY formatting
+  let effectivePeriod = dateRangeLabel ? dateRangeLabel.replace(/-/g, '/') : '';
+  if (!effectivePeriod || (startDate && endDate)) {
     if (startDate && endDate) {
-      effectivePeriod = `${formatDateHuman(startDate)} – ${formatDateHuman(endDate)}`;
+      effectivePeriod = `${formatDateSlash(startDate)} – ${formatDateSlash(endDate)}`;
     } else if (transactions.length > 0) {
       const dates = transactions.map((t) => t.transaction_date).filter(Boolean);
       dates.sort();
-      effectivePeriod = `${formatDateHuman(dates[0])} – ${formatDateHuman(dates[dates.length - 1])}`;
+      effectivePeriod = `${formatDateSlash(dates[0])} – ${formatDateSlash(dates[dates.length - 1])}`;
     } else {
       effectivePeriod = 'All Recorded Dates';
     }
   }
 
-  // Determine Scope Labels
-  let categoryLabel = 'All Categories';
+  // Month-in-progress status (active only when This Month preset is selected and month is ongoing)
+  const monthInProgress = isCurrentMonthInProgress(startDate, endDate, undefined, options.preset);
+  const statusLabel = monthInProgress ? getMonthInProgressLabel(startDate) : null;
+
+  // Determine Scope Labels with user-friendly terminology
+  let categoryLabel = 'All categories';
   if (selectedCategory !== 'all') {
     const foundCat = categories.find((c) => c.id === selectedCategory);
     categoryLabel = foundCat ? foundCat.name : 'Filtered Category';
@@ -318,14 +391,14 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
 
   const typeLabel =
     selectedType === 'all'
-      ? 'Both Income & Expense'
+      ? 'All'
       : selectedType === 'expense'
-      ? 'Expense Only'
-      : 'Income Only';
+      ? 'Expense only'
+      : 'Income only';
 
   const necessityLabel =
     !selectedNecessity || selectedNecessity === 'all'
-      ? 'All Necessities'
+      ? 'All'
       : selectedNecessity === 'essential'
       ? 'Essential'
       : selectedNecessity === 'optional'
@@ -366,17 +439,17 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   doc.setFontSize(7.5);
   doc.text('PERSONAL FINANCE', margin + 25.5, 19.5);
 
-  // Document Title
+  // Document Title - EXACT: PERSONAL TRANSACTION STATEMENT
   doc.setFont('NotoSans', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(24, 24, 27);
-  doc.text('PERSONAL FINANCIAL STATEMENT', margin, 29);
+  doc.text('PERSONAL TRANSACTION STATEMENT', margin, 29);
 
   // Subtitle Descriptor
   doc.setFont('NotoSans', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(113, 113, 122);
-  doc.text('Personal transaction record generated from Arth ledger', margin, 33.5);
+  doc.text('Personal transaction record generated from Arth records', margin, 33.5);
 
   // Top Right: Statement Reference
   doc.setFont('NotoSans', 'bold');
@@ -401,10 +474,10 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   doc.line(margin, 36, pageWidth - margin, 36);
 
   // ---------------------------------------------------------------------------
-  // 5. Account Holder & Statement Scope Cards (Side-by-Side Balance)
+  // 5. Account Holder & Statement Details Cards (Side-by-Side Balance)
   // ---------------------------------------------------------------------------
   const cardY = 39;
-  const cardHeight = 26;
+  const cardHeight = 27;
   const colGap = 4;
   const cardWidth = (usableWidth - colGap) / 2; // 89mm each
 
@@ -430,27 +503,27 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   // Render identity rows with balanced vertical distribution
   let currentIdentityY = cardY + 11.5;
   doc.setFont('NotoSans', 'bold');
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(24, 24, 27);
   doc.text(holderDisplayName, margin + 4, currentIdentityY);
 
   if (holderUsername) {
-    currentIdentityY += 5;
+    currentIdentityY += 4.8;
     doc.setFont('NotoSans', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(7.8);
     doc.setTextColor(75, 85, 99);
     doc.text(holderUsername, margin + 4, currentIdentityY);
   }
 
   if (holderEmail) {
-    currentIdentityY += 4.8;
+    currentIdentityY += 4.5;
     doc.setFont('NotoSans', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7.2);
     doc.setTextColor(113, 113, 122);
     doc.text(holderEmail, margin + 4, currentIdentityY);
   }
 
-  // B. Right Card: Statement Parameters & Scope
+  // B. Right Card: Statement Details & Scope
   const rightX = margin + cardWidth + colGap;
   doc.setFillColor(250, 250, 249);
   doc.setDrawColor(228, 228, 231);
@@ -460,21 +533,30 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   doc.setFont('NotoSans', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(113, 113, 122);
-  doc.text('STATEMENT PARAMETERS', rightX + 4, cardY + 5.5);
+  doc.text('STATEMENT DETAILS', rightX + 4, cardY + 5.5);
 
   doc.setFont('NotoSans', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7.8);
   doc.setTextColor(24, 24, 27);
-  doc.text(`Period: ${effectivePeriod}`, rightX + 4, cardY + 11);
+  doc.text(`Period: ${effectivePeriod}`, rightX + 4, cardY + 10.8);
+
+  let detailsRowY = cardY + 15.2;
+  if (statusLabel) {
+    doc.setFont('NotoSans', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(5, 150, 105); // Emerald-600
+    doc.text(`Status: ${statusLabel}`, rightX + 4, detailsRowY);
+    detailsRowY += 4.2;
+  }
 
   doc.setFont('NotoSans', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(75, 85, 99);
-  doc.text(`Type Scope: ${typeLabel}   •   Category: ${categoryLabel}`, rightX + 4, cardY + 16.5);
-  doc.text(`Necessity: ${necessityLabel}   •   Currency: INR (₹) · Paise Precision`, rightX + 4, cardY + 21.5);
+  doc.text(`Transaction types: ${typeLabel}   •   Category: ${categoryLabel}`, rightX + 4, detailsRowY);
+  doc.text(`Necessity: ${necessityLabel}   •   Currency: INR (₹) · 2 decimal places`, rightX + 4, detailsRowY + 4.2);
 
   // ---------------------------------------------------------------------------
-  // 6. Financial Summary Card (Exact BigInt Paise Precision & Single ₹ Symbol)
+  // 6. Financial Summary Card (Exact BigInt Paise Precision, No Leading +/-)
   // ---------------------------------------------------------------------------
   let totalIncomePaise = BigInt(0);
   let totalExpensePaise = BigInt(0);
@@ -491,13 +573,14 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   const netCashFlowPaise = totalIncomePaise - totalExpensePaise;
   const isNetPositive = netCashFlowPaise > BigInt(0);
   const isNetNegative = netCashFlowPaise < BigInt(0);
+  const netSubtext = isNetPositive ? 'Net inflow' : isNetNegative ? 'Net outflow' : 'Neutral';
 
-  // Format exactly one ₹ symbol using formatPaiseToINR
-  const formattedIncome = `+${formatPaiseToINR(totalIncomePaise)}`;
-  const formattedExpense = `-${formatPaiseToINR(totalExpensePaise)}`;
-  const formattedNet = `${isNetPositive ? '+' : ''}${formatPaiseToINR(netCashFlowPaise)}`;
+  // Format monetary values without leading +/- signs
+  const formattedIncome = formatCurrencyPdf(totalIncomePaise);
+  const formattedExpense = formatCurrencyPdf(totalExpensePaise);
+  const formattedNet = formatCurrencyPdf(netCashFlowPaise);
 
-  const summaryY = 68;
+  const summaryY = cardY + cardHeight + 4;
   const summaryHeight = 20;
 
   doc.setFont('NotoSans', 'bold');
@@ -527,7 +610,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     {
       label: 'NET CASH FLOW',
       value: formattedNet,
-      sub: 'Inflows minus outflows',
+      sub: netSubtext,
       color: isNetPositive
         ? [5, 150, 105]
         : isNetNegative
@@ -577,7 +660,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
   doc.setFontSize(6.5);
   doc.setTextColor(113, 113, 122);
   doc.text(
-    '* Net Cash Flow represents net funds delta across exported transactions. It strictly excludes People Tracker debt / loan balances.',
+    '* Net cash flow is calculated as income minus expenses for the transactions included in this statement. People Tracker balances and starting account balances are excluded.',
     margin,
     summaryY + summaryHeight + 4.5
   );
@@ -598,7 +681,8 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
 
   const tableRows = transactions.map((t) => {
     const isIncome = t.type === 'income';
-    const amountStr = isIncome ? `+${t.formatted_inr}` : `-${t.formatted_inr}`;
+    // Remove explicit leading +/- sign; color differentiation handled in didParseCell
+    const amountStr = formatCurrencyPdf(t.amount_paise);
     const name = t.description?.trim() || t.category_name?.trim() || 'Transaction';
     const category = t.category_name?.trim() || 'Uncategorized';
     const type = isIncome ? 'Income' : 'Expense';
@@ -617,7 +701,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
         : String(t.necessity);
 
     return [
-      formatDateHuman(t.transaction_date) || t.transaction_date,
+      formatDateSlash(t.transaction_date) || t.transaction_date,
       name,
       category,
       type,
@@ -659,7 +743,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
       fillColor: [250, 250, 249],
     },
     columnStyles: {
-      0: { cellWidth: 23 }, // Date (e.g. 26 Oct 2026 on single line)
+      0: { cellWidth: 23 }, // Date (e.g. 26/10/2026 on single line)
       1: { cellWidth: 48 }, // Transaction Description
       2: { cellWidth: 26 }, // Category
       3: { cellWidth: 19 }, // Type (fits 'Expense' and 'Income' without wrap)
@@ -670,12 +754,30 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     didParseCell: (data) => {
       // Color-code amounts for accessible, grayscale-printable distinction
       if (data.section === 'body' && data.column.index === 6) {
-        const val = String(data.cell.raw);
-        if (val.startsWith('+')) {
+        const rowType = Array.isArray(data.row.raw) ? data.row.raw[3] : '';
+        if (rowType === 'Income') {
           data.cell.styles.textColor = [5, 150, 105]; // Emerald
-        } else if (val.startsWith('-')) {
+        } else {
           data.cell.styles.textColor = [190, 18, 60]; // Rose-700
         }
+      }
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) {
+        // Compact repeating header on page 2+
+        doc.setFont('NotoSans', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(24, 24, 27);
+        doc.text('PERSONAL TRANSACTION STATEMENT', margin, 11);
+
+        doc.setFont('NotoSans', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(113, 113, 122);
+        doc.text(`Ref: ${statementRefId}  •  Period: ${effectivePeriod}`, pageWidth - margin, 11, { align: 'right' });
+
+        doc.setDrawColor(228, 228, 231);
+        doc.setLineWidth(0.2);
+        doc.line(margin, 13.5, pageWidth - margin, 13.5);
       }
     },
   });
@@ -687,7 +789,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     doc.setFontSize(7);
     doc.setTextColor(161, 161, 170);
     doc.text(
-      `— End of Personal Financial Statement · Records 1–${transactions.length} of ${transactions.length} —`,
+      `— End of Personal Transaction Statement · Records 1–${transactions.length} of ${transactions.length} —`,
       pageWidth / 2,
       finalY + 8,
       { align: 'center' }
@@ -711,7 +813,7 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     doc.setFontSize(6);
     doc.setTextColor(156, 163, 175);
     doc.text(
-      'Notice: This statement is generated from records maintained in Arth and may not represent a bank-verified account statement.',
+      'Notice: This personal transaction statement is generated from records maintained in Arth. It may not represent a bank-verified account statement.',
       margin,
       285.5
     );
@@ -721,14 +823,14 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     doc.setFontSize(6.8);
     doc.setTextColor(113, 113, 122);
     doc.text('Generated by Arth · Private & Confidential', margin, 290);
-    doc.text(`Statement Period: ${effectivePeriod}`, pageWidth / 2, 290, { align: 'center' });
+    doc.text(`Statement period: ${effectivePeriod}`, pageWidth / 2, 290, { align: 'center' });
 
     doc.setFont('NotoSans', 'bold');
     doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, 290, { align: 'right' });
   }
 
   // ---------------------------------------------------------------------------
-  // 9. Save and Trigger Browser Download with Username-Based Filename
+  // 9. Save and Trigger Browser Download with Username-Based Filename & AES-256
   // ---------------------------------------------------------------------------
   const filename = generateStatementFilename({
     username: userProfile?.username,
@@ -736,10 +838,46 @@ export async function exportLedgerToPdf(options: ExportPdfOptions): Promise<{ fi
     endDate,
   });
 
-  doc.save(filename);
+  let encryptedBytes: Uint8Array | undefined;
+  const trimmedPassword = options.password?.trim();
+
+  if (trimmedPassword) {
+    onProgress?.('Encrypting document (AES-256)…');
+    try {
+      const rawArrayBuffer = doc.output('arraybuffer');
+      const rawBytes = new Uint8Array(rawArrayBuffer);
+      encryptedBytes = await encryptPDF(rawBytes, trimmedPassword, { algorithm: 'AES-256' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Encryption failed';
+      throw new Error(`Failed to encrypt statement with password: ${msg}`);
+    }
+
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const blob = new Blob([encryptedBytes as unknown as BlobPart], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  } else {
+    if (typeof window !== 'undefined') {
+      doc.save(filename);
+    } else {
+      try {
+        doc.save(filename);
+      } catch {
+        // Safe in Node.js test environment
+      }
+    }
+  }
 
   return {
     filename,
     doc,
+    encryptedBytes,
   };
 }

@@ -63,6 +63,12 @@ export function ExportPdfDialog({
   const [exportProgress, setExportProgress] = useState<string>('');
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Password protection state
+  const [enablePasswordProtection, setEnablePasswordProtection] = useState<boolean>(false);
+  const [pdfPassword, setPdfPassword] = useState<string>('');
+  const [pdfConfirmPassword, setPdfConfirmPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+
   // Determine active date range based on preset or custom inputs
   const effectiveRange = useMemo(() => {
     if (preset === 'custom') {
@@ -88,6 +94,10 @@ export function ExportPdfDialog({
       setCustomStartDate(defaultRange.startDate);
       setCustomEndDate(defaultRange.endDate);
       setExportError(null);
+      setEnablePasswordProtection(false);
+      setPdfPassword('');
+      setPdfConfirmPassword('');
+      setShowPassword(false);
     }, 0);
 
     return () => clearTimeout(timer);
@@ -189,6 +199,24 @@ export function ExportPdfDialog({
     };
   }, [previewTransactions]);
 
+  // Validate password protection requirements
+  const isPasswordValid = useMemo(() => {
+    if (!enablePasswordProtection) return true;
+    const p = pdfPassword.trim();
+    return p.length > 0 && pdfPassword === pdfConfirmPassword;
+  }, [enablePasswordProtection, pdfPassword, pdfConfirmPassword]);
+
+  const passwordError = useMemo(() => {
+    if (!enablePasswordProtection) return null;
+    if (pdfPassword.length > 0 && pdfPassword.trim().length === 0) {
+      return 'Password cannot consist solely of whitespace';
+    }
+    if (pdfConfirmPassword.length > 0 && pdfPassword !== pdfConfirmPassword) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }, [enablePasswordProtection, pdfPassword, pdfConfirmPassword]);
+
   // Handle Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -214,6 +242,18 @@ export function ExportPdfDialog({
   const handleDownload = async () => {
     if (!isRangeValid || isExporting || previewTransactions.length === 0) return;
 
+    if (enablePasswordProtection) {
+      const trimmed = pdfPassword.trim();
+      if (!trimmed) {
+        setExportError('Please enter a password or disable password protection.');
+        return;
+      }
+      if (pdfPassword !== pdfConfirmPassword) {
+        setExportError('Passwords do not match. Please verify your password.');
+        return;
+      }
+    }
+
     setIsExporting(true);
     setExportProgress('Generating PDF…');
     setExportError(null);
@@ -228,8 +268,10 @@ export function ExportPdfDialog({
         startDate: effectiveRange.startDate,
         endDate: effectiveRange.endDate,
         dateRangeLabel,
+        preset,
         prefetchedTransactions: previewTransactions,
         userProfile,
+        password: enablePasswordProtection ? pdfPassword.trim() : undefined,
         onProgress: (status) => setExportProgress(status),
       });
       onClose();
@@ -499,6 +541,111 @@ export function ExportPdfDialog({
             </select>
           </div>
 
+          {/* 3c. Optional Password Protection (AES-256) */}
+          <div className="p-3.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="enable-password-protection"
+                className="flex items-center gap-2 cursor-pointer select-none"
+              >
+                <input
+                  id="enable-password-protection"
+                  type="checkbox"
+                  checked={enablePasswordProtection}
+                  onChange={(e) => {
+                    setEnablePasswordProtection(e.target.checked);
+                    if (!e.target.checked) {
+                      setPdfPassword('');
+                      setPdfConfirmPassword('');
+                    }
+                  }}
+                  disabled={isExporting}
+                  className="rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-0 cursor-pointer w-4 h-4"
+                />
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  Password-Protect PDF
+                </span>
+              </label>
+              <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                AES-256 Encryption
+              </span>
+            </div>
+
+            {enablePasswordProtection && (
+              <div className="space-y-3 pt-2 border-t border-[var(--border-hairline)]">
+                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  Protect this statement with a password. Arth never stores or transmits this password. You must securely share the password with your recipient to unlock the PDF.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="pdf-password-input"
+                      className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
+                    >
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="pdf-password-input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={pdfPassword}
+                        onChange={(e) => setPdfPassword(e.target.value)}
+                        disabled={isExporting}
+                        placeholder="Enter password"
+                        autoComplete="new-password"
+                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 pr-8 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        tabIndex={-1}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                      >
+                        {showPassword ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="pdf-confirm-password-input"
+                      className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1"
+                    >
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="pdf-confirm-password-input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={pdfConfirmPassword}
+                        onChange={(e) => setPdfConfirmPassword(e.target.value)}
+                        disabled={isExporting}
+                        placeholder="Re-enter password"
+                        autoComplete="new-password"
+                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Validation Feedback */}
+                {passwordError && (
+                  <div className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                    ⚠️ {passwordError}
+                  </div>
+                )}
+                {!passwordError && pdfPassword.trim().length > 0 && pdfPassword === pdfConfirmPassword && (
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <span>✓</span>
+                    <span>Passwords match (AES-256 standard encryption ready)</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* 4. Export Configuration Summary */}
           <div className="p-4 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl space-y-3">
             <div className="flex items-center justify-between">
@@ -557,6 +704,13 @@ export function ExportPdfDialog({
                     >
                       {summaryMetrics.isNetPositive ? '+' : ''}{summaryMetrics.formattedNet}
                     </span>
+                    <span className="text-[9px] text-[var(--text-muted)] block">
+                      {summaryMetrics.isNetPositive
+                        ? 'Net inflow'
+                        : summaryMetrics.isNetNegative
+                        ? 'Net outflow'
+                        : 'Neutral'}
+                    </span>
                   </div>
                 </div>
 
@@ -592,7 +746,13 @@ export function ExportPdfDialog({
             <button
               type="button"
               onClick={handleDownload}
-              disabled={!isRangeValid || isExporting || isLoadingScope || previewTransactions.length === 0}
+              disabled={
+                !isRangeValid ||
+                isExporting ||
+                isLoadingScope ||
+                previewTransactions.length === 0 ||
+                (enablePasswordProtection && !isPasswordValid)
+              }
               aria-busy={isExporting}
               className="w-2/3 min-h-[38px] py-2.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
