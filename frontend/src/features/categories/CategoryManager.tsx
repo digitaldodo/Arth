@@ -253,7 +253,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
             }}
             className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors ${
               activeTab === 'expense'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--expense-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -268,7 +268,7 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
             }}
             className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors ${
               activeTab === 'income'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--income-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >

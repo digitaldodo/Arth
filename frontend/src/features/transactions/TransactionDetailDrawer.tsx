@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import type { TransactionDTO } from '@arth/contracts';
 import { formatDateHuman, formatDateTimeIST } from '@/lib/format';
+import { Badge } from '@/components/ui/Badge';
 
 interface TransactionDetailDrawerProps {
   transaction: TransactionDTO | null;
@@ -96,28 +97,14 @@ export function TransactionDetailDrawer({
             </div>
 
             <div className="flex items-center gap-2 mt-3">
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                  isIncome
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                    : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-                }`}
-              >
+              <Badge variant={isIncome ? 'income' : 'expense'} size="sm" dot={true}>
                 {isIncome ? 'Income' : 'Expense'}
-              </span>
+              </Badge>
 
               {transaction.necessity && (
-                <span
-                  className={`capitalize px-2 py-0.5 rounded text-[10px] font-medium border ${
-                    transaction.necessity === 'essential'
-                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                      : transaction.necessity === 'optional'
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                      : 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                  }`}
-                >
-                  {transaction.necessity}
-                </span>
+                <Badge variant={transaction.necessity} size="sm" dot={true}>
+                  <span className="capitalize">{transaction.necessity}</span>
+                </Badge>
               )}
             </div>
           </div>
@@ -153,18 +140,18 @@ export function TransactionDetailDrawer({
             {/* Payment Method */}
             <div className="flex items-center justify-between p-3 gap-3">
               <span className="text-[var(--text-muted)] font-medium shrink-0">Payment Method</span>
-              <span className="text-[var(--text-primary)] capitalize text-right font-medium">
-                {transaction.payment_method === 'online' ? '💳 Online' : '💵 Cash'}
-              </span>
+              <Badge variant={transaction.payment_method === 'online' ? 'online' : 'cash'} size="sm">
+                {transaction.payment_method === 'online' ? 'Online' : 'Cash'}
+              </Badge>
             </div>
 
             {/* Necessity (Expense only) */}
             {transaction.necessity && (
               <div className="flex items-center justify-between p-3 gap-3">
                 <span className="text-[var(--text-muted)] font-medium shrink-0">Necessity</span>
-                <span className="text-[var(--text-primary)] capitalize text-right font-medium">
-                  {transaction.necessity}
-                </span>
+                <Badge variant={transaction.necessity} size="sm" dot={true}>
+                  <span className="capitalize">{transaction.necessity}</span>
+                </Badge>
               </div>
             )}
 

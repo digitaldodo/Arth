@@ -526,6 +526,160 @@ export async function updatePasswordAction(
 }
 
 /**
+ * Secure Account Password Management Action (Settings)
+ * Handles both:
+ * 1. Changing an existing account password (requiring verification of current password).
+ * 2. Setting a password for Google OAuth accounts that do not currently have a password.
+ *
+ * Rules:
+ * - Active authenticated session required.
+ * - Does not accept passwords with accidental leading or trailing spaces.
+ * - Minimum 8 characters.
+ * - Matching confirmation.
+ * - If user has email identity, verifies current password via re-authentication.
+ * - Prohibits reuse of the exact same password as current password.
+ * - Uses Supabase Auth updateUser mechanism.
+ * - Sanitizes all internal errors.
+ */
+export async function changePasswordAction(
+  formData: FormData
+): Promise<AuthActionResult> {
+  const rawCurrentPassword = formData.get('currentPassword');
+  const rawNewPassword = formData.get('newPassword') || formData.get('password');
+  const rawConfirmPassword = formData.get('confirmPassword');
+
+  const currentPassword = typeof rawCurrentPassword === 'string' ? rawCurrentPassword : '';
+  const newPasswordRaw = typeof rawNewPassword === 'string' ? rawNewPassword : '';
+  const confirmPasswordRaw = typeof rawConfirmPassword === 'string' ? rawConfirmPassword : '';
+
+  // Check for leading or trailing whitespace
+  if (
+    newPasswordRaw.startsWith(' ') ||
+    newPasswordRaw.endsWith(' ') ||
+    confirmPasswordRaw.startsWith(' ') ||
+    confirmPasswordRaw.endsWith(' ')
+  ) {
+    return {
+      error: 'Password cannot begin or end with a space.',
+    };
+  }
+
+  const newPassword = newPasswordRaw.trim();
+  const confirmPassword = confirmPasswordRaw.trim();
+
+  if (!newPassword) {
+    return {
+      error: 'Please enter a new password.',
+    };
+  }
+
+  if (!isValidPassword(newPassword)) {
+    return {
+      error: 'New password must be at least 8 characters in length.',
+    };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return {
+      error: 'Passwords do not match. Please verify both fields.',
+    };
+  }
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        error:
+          'Your session has expired. Please sign in again before updating your password.',
+      };
+    }
+
+    // Determine if account has an existing password (email provider identity)
+    const hasPassword =
+      user.app_metadata?.provider === 'email' ||
+      (Array.isArray(user.app_metadata?.providers) &&
+        user.app_metadata.providers.includes('email')) ||
+      user.identities?.some((id) => id.provider === 'email');
+
+    if (hasPassword) {
+      if (!currentPassword) {
+        return {
+          error: 'Current password is required to change your password.',
+        };
+      }
+
+      if (newPassword === currentPassword.trim()) {
+        return {
+          error: 'New password must be different from your current password.',
+        };
+      }
+
+      // Verify current credentials
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
+        return {
+          error: 'Incorrect current password. Please try again.',
+        };
+      }
+    }
+
+    // Update password in Supabase Auth
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      const errMsg = updateError.message?.toLowerCase() || '';
+      if (
+        errMsg.includes('reauthenticate') ||
+        errMsg.includes('recent login') ||
+        updateError.status === 422 ||
+        (updateError as { code?: string }).code === 'reauthentication_needed'
+      ) {
+        return {
+          error:
+            'Security policy requires recent authentication before updating your password. Please sign out and sign back in, then try again.',
+        };
+      }
+      if (
+        updateError.status === 429 ||
+        errMsg.includes('rate') ||
+        errMsg.includes('too many')
+      ) {
+        return {
+          error:
+            'Too many password update attempts. Please wait a few moments before trying again.',
+        };
+      }
+
+      return {
+        error: updateError.message || 'Failed to update password. Please try again.',
+      };
+    }
+
+    return {
+      success: true,
+      message: hasPassword
+        ? 'Your password has been successfully updated.'
+        : 'Password successfully set! You can now sign in using your email or username and password, or continue using Google sign-in.',
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : 'Password update failed';
+    return { error: message };
+  }
+}
+
+/**
  * Set or Update Account Password Action (Authenticated User)
  * Allows authenticated users (including those originally registered via Google OAuth)
  * to choose and confirm a new password on their existing account.

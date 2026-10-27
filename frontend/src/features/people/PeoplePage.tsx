@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Badge } from '@/components/ui/Badge';
 import type {
   PersonDTO,
   PersonDetailDTO,
@@ -528,15 +529,9 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
                     </span>
                   </div>
 
-                  <span
-                    className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-xs border select-none ${
-                      isIOweThem
-                        ? 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50'
-                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50'
-                    }`}
-                  >
+                  <Badge variant={isIOweThem ? 'expense' : 'income'} size="xs" dot={true}>
                     {isIOweThem ? 'I Owe' : 'Owes Me'}
-                  </span>
+                  </Badge>
                 </div>
 
                 <div className="pt-2 border-t border-[var(--border-hairline)] flex items-baseline justify-between">
@@ -864,21 +859,23 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
                             <span className="text-xs font-bold text-[var(--text-primary)]">
                               {record.name}
                             </span>
-                            <span
-                              className={`text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-xs border select-none ${
+                            <Badge
+                              variant={
                                 isRecordSettled
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50'
+                                  ? 'success'
                                   : isRecordPartial
-                                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/50'
-                                  : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)]'
-                              }`}
+                                  ? 'warning'
+                                  : 'neutral'
+                              }
+                              size="xs"
+                              dot={true}
                             >
                               {record.status === 'settled'
                                 ? 'Settled'
                                 : record.status === 'partially_settled'
                                 ? 'Partially Settled'
                                 : 'Outstanding'}
-                            </span>
+                            </Badge>
                           </div>
                           <span className="text-[11px] text-[var(--text-muted)] font-mono">
                             {record.record_date}
@@ -932,7 +929,7 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
                               <span>
                                 {s.settlement_date} {s.notes ? `• ${s.notes}` : ''}
                               </span>
-                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                              <span className="text-[var(--income-fg)] font-semibold">
                                 +{s.formatted_amount}
                               </span>
                             </div>

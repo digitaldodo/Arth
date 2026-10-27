@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Badge } from '@/components/ui/Badge';
 
 interface SummaryCardsProps {
   incomePaise: number;
@@ -30,11 +31,9 @@ export function SummaryCards({
           <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Income
           </span>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60">
-            Money In
-          </span>
+          <Badge variant="income" size="xs">Money In</Badge>
         </div>
-        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-emerald-700 dark:text-emerald-400 truncate tabular-nums">
+        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-[var(--income-fg)] truncate tabular-nums">
           {incomePaise > 0 ? `+${formattedIncome}` : formattedIncome}
         </div>
         <p className="text-xs sm:text-sm text-[var(--text-muted)]">
@@ -48,11 +47,9 @@ export function SummaryCards({
           <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Expenses
           </span>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-sm bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60">
-            Money Out
-          </span>
+          <Badge variant="expense" size="xs">Money Out</Badge>
         </div>
-        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-rose-700 dark:text-rose-400 truncate tabular-nums">
+        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-[var(--expense-fg)] truncate tabular-nums">
           {expensesPaise > 0 ? `-${formattedExpenses}` : formattedExpenses}
         </div>
         <p className="text-xs sm:text-sm text-[var(--text-muted)]">
@@ -66,24 +63,16 @@ export function SummaryCards({
           <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Net Cash Flow
           </span>
-          <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-sm border ${
-              isNetPositive
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/60'
-                : isNetNegative
-                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/60'
-                : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border-[var(--border-subtle)]'
-            }`}
-          >
+          <Badge variant={isNetPositive ? 'income' : isNetNegative ? 'expense' : 'neutral'} size="xs">
             {isNetPositive ? 'Surplus' : isNetNegative ? 'Deficit' : 'Neutral'}
-          </span>
+          </Badge>
         </div>
         <div
           className={`text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight truncate tabular-nums ${
             isNetPositive
-              ? 'text-emerald-700 dark:text-emerald-400'
+              ? 'text-[var(--income-fg)]'
               : isNetNegative
-              ? 'text-rose-700 dark:text-rose-400'
+              ? 'text-[var(--expense-fg)]'
               : 'text-[var(--text-primary)]'
           }`}
         >

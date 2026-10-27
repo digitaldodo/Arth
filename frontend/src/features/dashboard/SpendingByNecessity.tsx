@@ -3,6 +3,7 @@
 import React from 'react';
 import type { NecessitySpendingDTO, NecessityClass } from '@arth/contracts';
 import { formatPaiseToINR } from '@/lib/format';
+import { Badge, type BadgeVariant } from '@/components/ui/Badge';
 
 interface SpendingByNecessityProps {
   items?: NecessitySpendingDTO[];
@@ -128,18 +129,12 @@ export function SpendingByNecessity({
             className="py-2.5 flex items-center justify-between gap-3 text-xs"
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <span
-                style={{ backgroundColor: tier.color }}
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-              />
-              <div className="min-w-0">
-                <span className="font-semibold text-[var(--text-primary)]">
-                  {tier.label}
-                </span>
-                <span className="hidden sm:inline text-[10px] text-[var(--text-muted)] ml-2 truncate">
-                  {tier.description}
-                </span>
-              </div>
+              <Badge variant={tier.necessity as BadgeVariant} size="xs" dot={true}>
+                {tier.label}
+              </Badge>
+              <span className="hidden sm:inline text-[10px] text-[var(--text-muted)] truncate">
+                {tier.description}
+              </span>
             </div>
 
             <div className="flex items-center gap-3 shrink-0">

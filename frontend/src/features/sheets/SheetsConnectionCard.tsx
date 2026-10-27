@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { Badge } from '@/components/ui/Badge';
 
 interface SheetConnectionData {
   id: string;
@@ -278,14 +279,13 @@ export function SheetsConnectionCard() {
           </div>
         </div>
         {connected ? (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <Badge variant="connected" size="sm" dot={true} pulse={true}>
             Connected
-          </span>
+          </Badge>
         ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border border-[var(--border-hairline)] shrink-0">
+          <Badge variant="disconnected" size="sm" dot={true}>
             Not Connected
-          </span>
+          </Badge>
         )}
       </div>
 

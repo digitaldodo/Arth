@@ -14,6 +14,7 @@ import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
+import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
 import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
 import {
   type CreateTransactionResponse,
@@ -49,6 +50,7 @@ interface TransactionAppShellProps {
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
+  const hasPassword = Boolean(user?.providers?.includes('email'));
   const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -56,6 +58,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | undefined>(user?.username);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState<boolean>(false);
   const [isStartingBalancesModalOpen, setIsStartingBalancesModalOpen] = useState<boolean>(false);
   const [shellBalances, setShellBalances] = useState<AccountBalancesDTO | null>(null);
 
@@ -68,7 +71,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
   // Guard critical operations: defer PWA updates while user is entering/saving transactions or syncing
   useCriticalOperation(
-    isQuickAddOpen || isDeleteModalOpen || isStartingBalancesModalOpen || isSyncing
+    isQuickAddOpen || isDeleteModalOpen || isPasswordModalOpen || isStartingBalancesModalOpen || isSyncing
   );
 
   // Check pending mutations in IndexedDB
@@ -441,6 +444,30 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     <ThemeToggle />
                   </div>
 
+                  {/* Security: Password Management */}
+                  <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">🔐</span>
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Security &amp; Password
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          {hasPassword
+                            ? 'Update your account password or credentials'
+                            : 'Set a password to enable email & username sign-in'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPasswordModalOpen(true)}
+                      className="px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-surface-active)] border border-[var(--border-hairline)] rounded-md transition-colors cursor-pointer shrink-0"
+                    >
+                      {hasPassword ? 'Change Password' : 'Set Password'}
+                    </button>
+                  </div>
+
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">👤</span>
@@ -610,6 +637,17 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsQuickAddOpen(false)}
           onSuccess={handleTransactionCreated}
           categoryVersion={categoryVersion}
+        />
+      )}
+
+      {/* Change / Set Password Modal */}
+      {user && (
+        <ChangePasswordModal
+          isOpen={isPasswordModalOpen}
+          onClose={() => setIsPasswordModalOpen(false)}
+          userEmail={user.email}
+          hasPassword={hasPassword}
+          onSuccess={(msg) => setSaveSuccessBanner(msg)}
         />
       )}
 

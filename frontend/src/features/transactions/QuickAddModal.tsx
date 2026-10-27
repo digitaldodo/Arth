@@ -570,10 +570,10 @@ export function QuickAddModal({
                 type="button"
                 onClick={() => handlePaymentMethodChange('online')}
                 disabled={isSubmitting}
-                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer ${
+                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   paymentMethod === 'online'
-                    ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
-                    : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                    ? 'bg-[var(--tag-online-bg)] text-[var(--tag-online-fg)] border-[var(--tag-online-border)] font-semibold ring-1 ring-[var(--tag-online-dot)]'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
                 }`}
               >
                 Online
@@ -582,10 +582,10 @@ export function QuickAddModal({
                 type="button"
                 onClick={() => handlePaymentMethodChange('cash')}
                 disabled={isSubmitting}
-                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer ${
+                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   paymentMethod === 'cash'
-                    ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)]'
-                    : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                    ? 'bg-[var(--tag-cash-bg)] text-[var(--tag-cash-fg)] border-[var(--tag-cash-border)] font-semibold ring-1 ring-[var(--tag-cash-dot)]'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
                 }`}
               >
                 Cash
@@ -618,12 +618,28 @@ export function QuickAddModal({
                         setErrorMessage(null);
                       }}
                       disabled={isSubmitting}
-                      className={`py-2 px-2 rounded-md border capitalize transition-all cursor-pointer text-center ${
+                      className={`py-2 px-2 rounded-md border capitalize transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                         isSelected
-                          ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] border-[var(--action-primary-bg)] font-semibold shadow-xs'
-                          : 'bg-[var(--bg-canvas)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                          ? n === 'essential'
+                            ? 'bg-[var(--tag-essential-bg)] text-[var(--tag-essential-fg)] border-[var(--tag-essential-border)] font-semibold ring-1 ring-[var(--tag-essential-dot)]'
+                            : n === 'optional'
+                            ? 'bg-[var(--tag-optional-bg)] text-[var(--tag-optional-fg)] border-[var(--tag-optional-border)] font-semibold ring-1 ring-[var(--tag-optional-dot)]'
+                            : 'bg-[var(--tag-luxury-bg)] text-[var(--tag-luxury-fg)] border-[var(--tag-luxury-border)] font-semibold ring-1 ring-[var(--tag-luxury-dot)]'
+                          : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
                       }`}
                     >
+                      {isSelected && (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            n === 'essential'
+                              ? 'bg-[var(--tag-essential-dot)]'
+                              : n === 'optional'
+                              ? 'bg-[var(--tag-optional-dot)]'
+                              : 'bg-[var(--tag-luxury-dot)]'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      )}
                       {n}
                     </button>
                   );

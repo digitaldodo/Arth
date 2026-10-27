@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Badge } from '@/components/ui/Badge';
 import {
   type TransactionDTO,
   type CategoryDTO,
@@ -366,9 +367,9 @@ export function TransactionLedger({
           <div
             className={`text-2xl font-mono tracking-tight font-semibold mt-0.5 ${
               netCashFlowPaise > BigInt(0)
-                ? 'text-emerald-600 dark:text-emerald-400'
+                ? 'text-[var(--income-fg)]'
                 : netCashFlowPaise < BigInt(0)
-                ? 'text-red-600 dark:text-red-400'
+                ? 'text-[var(--expense-fg)]'
                 : 'text-[var(--text-primary)]'
             }`}
           >
@@ -383,7 +384,7 @@ export function TransactionLedger({
           <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
             Total Income
           </span>
-          <div className="text-lg font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+          <div className="text-lg font-mono text-[var(--income-fg)] mt-0.5">
             +{formatPaiseToINR(totalIncomePaise)}
           </div>
         </div>
@@ -392,7 +393,7 @@ export function TransactionLedger({
           <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
             Total Expense
           </span>
-          <div className="text-lg font-mono text-red-600 dark:text-red-400 mt-0.5">
+          <div className="text-lg font-mono text-[var(--expense-fg)] mt-0.5">
             -{formatPaiseToINR(totalExpensePaise)}
           </div>
         </div>
@@ -671,25 +672,16 @@ export function TransactionLedger({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
-                    <span>{formatDateHuman(txn.transaction_date)}</span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
+                    <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
                     <span>•</span>
-                    <span className="capitalize">{txn.payment_method}</span>
+                    <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
+                      {txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                    </Badge>
                     {txn.necessity && (
-                      <>
-                        <span>•</span>
-                        <span
-                          className={`capitalize px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                            txn.necessity === 'essential'
-                              ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                              : txn.necessity === 'optional'
-                              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                              : 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
-                          }`}
-                        >
-                          {txn.necessity}
-                        </span>
-                      </>
+                      <Badge variant={txn.necessity} size="xs" dot={true}>
+                        <span className="capitalize">{txn.necessity}</span>
+                      </Badge>
                     )}
                   </div>
                 </div>
@@ -699,7 +691,7 @@ export function TransactionLedger({
                   <div
                     className={`font-mono text-sm md:text-base font-semibold tracking-tight ${
                       isIncome
-                        ? 'text-emerald-600 dark:text-emerald-400'
+                        ? 'text-[var(--income-fg)]'
                         : 'text-[var(--text-primary)]'
                     }`}
                   >

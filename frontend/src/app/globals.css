@@ -33,56 +33,92 @@
    ========================================================================== */
 :root, .light, [data-theme="light"] {
   /* Canvas & Surfaces */
-  --bg-canvas: #FBFBF9;
+  --bg-canvas: #F8F8F6;
   --bg-surface: #FFFFFF;
-  --bg-surface-subtle: #F4F4F1;
+  --bg-surface-subtle: #F1F1ED;
   --bg-surface-elevated: #FFFFFF;
 
-  /* Typography & Text */
-  --text-primary: #1C1917;
-  --text-secondary: #57534E;
-  --text-muted: #78716C;
+  /* Typography & Text (Strict WCAG AA/AAA charcoal scale) */
+  --text-primary: #181615;
+  --text-secondary: #494541;
+  --text-muted: #736E66;
   --text-inverse: #FFFFFF;
 
   /* Borders & Dividers */
-  --border-hairline: #E7E5E4;
-  --border-subtle: #D6D3D1;
-  --border-strong: #A8A29E;
-  --focus-ring: #1C1917;
+  --border-hairline: #E4E2DC;
+  --border-subtle: #CDCABF;
+  --border-strong: #9C978D;
+  --focus-ring: #181615;
 
   /* Primary Actions */
-  --action-primary-bg: #1C1917;
+  --action-primary-bg: #181615;
   --action-primary-fg: #FFFFFF;
-  --action-primary-hover: #292524;
+  --action-primary-hover: #2B2826;
   --action-secondary-bg: transparent;
-  --action-secondary-border: #D6D3D1;
+  --action-secondary-border: #CDCABF;
 
   /* Financial Semantics */
-  --income-fg: #15803D;
+  --income-fg: #166534;
   --income-bg: #F0FDF4;
   --income-border: #BBF7D0;
-  --expense-fg: #B91C1C;
+  --income-dot: #22C55E;
+  --expense-fg: #991B1B;
   --expense-bg: #FEF2F2;
-  --expense-border: #FECACA;
+  --expense-border: #FECDD3;
+  --expense-dot: #EF4444;
 
-  /* Necessity Classification */
-  --nec-essential-fg: #292524;
-  --nec-essential-bg: #F5F5F4;
-  --nec-optional-fg: #0369A1;
-  --nec-optional-bg: #F0F9FF;
-  --nec-luxury-fg: #7E22CE;
-  --nec-luxury-bg: #FAF5FF;
+  /* Semantic Tags: Necessity Classification */
+  --tag-essential-fg: #1E40AF;
+  --tag-essential-bg: #EFF6FF;
+  --tag-essential-border: #BFDBFE;
+  --tag-essential-dot: #3B82F6;
+
+  --tag-optional-fg: #92400E;
+  --tag-optional-bg: #FFFBEB;
+  --tag-optional-border: #FDE68A;
+  --tag-optional-dot: #F59E0B;
+
+  --tag-luxury-fg: #6B21A8;
+  --tag-luxury-bg: #FAF5FF;
+  --tag-luxury-border: #E9D5FF;
+  --tag-luxury-dot: #A855F7;
+
+  /* Semantic Tags: Payment Method */
+  --tag-cash-fg: #292524;
+  --tag-cash-bg: #F5F5F4;
+  --tag-cash-border: #E7E5E4;
+  --tag-cash-dot: #78716C;
+
+  --tag-online-fg: #0369A1;
+  --tag-online-bg: #F0F9FF;
+  --tag-online-border: #BAE6FD;
+  --tag-online-dot: #0284C7;
+
+  /* Semantic Tags: Connection & Integrations */
+  --tag-connected-fg: #166534;
+  --tag-connected-bg: #F0FDF4;
+  --tag-connected-border: #BBF7D0;
+  --tag-connected-dot: #22C55E;
+
+  --tag-disconnected-fg: #57534E;
+  --tag-disconnected-bg: #F5F5F4;
+  --tag-disconnected-border: #E7E5E4;
+  --tag-disconnected-dot: #A8A29E;
 
   /* System Status */
-  --status-warning-fg: #B45309;
+  --status-warning-fg: #92400E;
   --status-warning-bg: #FFFBEB;
-  --status-error-fg: #DC2626;
+  --status-warning-border: #FDE68A;
+  --status-error-fg: #991B1B;
   --status-error-bg: #FEF2F2;
-  --status-success-fg: #15803D;
+  --status-error-border: #FECACA;
+  --status-success-fg: #166534;
+  --status-success-bg: #F0FDF4;
+  --status-success-border: #BBF7D0;
 
   /* Interactive States */
-  --state-disabled-fg: #A8A29E;
-  --state-disabled-bg: #F5F5F4;
+  --state-disabled-fg: #9C978D;
+  --state-disabled-bg: #F1F1ED;
   --state-hover-overlay: rgba(0, 0, 0, 0.03);
   --shadow-dialog: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
@@ -115,25 +151,59 @@
     --action-secondary-bg: transparent;
     --action-secondary-border: #3F3B37;
 
-    --income-fg: #4ADE80;
-    --income-bg: rgba(74, 222, 128, 0.12);
-    --income-border: rgba(74, 222, 128, 0.25);
-    --expense-fg: #F87171;
-    --expense-bg: rgba(248, 113, 113, 0.12);
-    --expense-border: rgba(248, 113, 113, 0.25);
+    --income-fg: #86EFAC;
+    --income-bg: rgba(34, 197, 94, 0.14);
+    --income-border: rgba(34, 197, 94, 0.28);
+    --income-dot: #4ADE80;
+    --expense-fg: #FCA5A5;
+    --expense-bg: rgba(239, 68, 68, 0.14);
+    --expense-border: rgba(239, 68, 68, 0.28);
+    --expense-dot: #F87171;
 
-    --nec-essential-fg: #E7E5E4;
-    --nec-essential-bg: #292524;
-    --nec-optional-fg: #38BDF8;
-    --nec-optional-bg: rgba(56, 189, 248, 0.12);
-    --nec-luxury-fg: #C084FC;
-    --nec-luxury-bg: rgba(192, 132, 252, 0.12);
+    --tag-essential-fg: #93C5FD;
+    --tag-essential-bg: rgba(59, 130, 246, 0.14);
+    --tag-essential-border: rgba(59, 130, 246, 0.28);
+    --tag-essential-dot: #60A5FA;
 
-    --status-warning-fg: #FBBF24;
-    --status-warning-bg: rgba(251, 191, 36, 0.12);
-    --status-error-fg: #F87171;
-    --status-error-bg: rgba(248, 113, 113, 0.15);
-    --status-success-fg: #4ADE80;
+    --tag-optional-fg: #FCD34D;
+    --tag-optional-bg: rgba(245, 158, 11, 0.14);
+    --tag-optional-border: rgba(245, 158, 11, 0.28);
+    --tag-optional-dot: #FBBF24;
+
+    --tag-luxury-fg: #D8B4FE;
+    --tag-luxury-bg: rgba(168, 85, 247, 0.14);
+    --tag-luxury-border: rgba(168, 85, 247, 0.28);
+    --tag-luxury-dot: #C084FC;
+
+    --tag-cash-fg: #E7E5E4;
+    --tag-cash-bg: rgba(255, 255, 255, 0.08);
+    --tag-cash-border: rgba(255, 255, 255, 0.14);
+    --tag-cash-dot: #A8A29E;
+
+    --tag-online-fg: #7DD3FC;
+    --tag-online-bg: rgba(14, 165, 233, 0.14);
+    --tag-online-border: rgba(14, 165, 233, 0.28);
+    --tag-online-dot: #38BDF8;
+
+    --tag-connected-fg: #86EFAC;
+    --tag-connected-bg: rgba(34, 197, 94, 0.14);
+    --tag-connected-border: rgba(34, 197, 94, 0.28);
+    --tag-connected-dot: #4ADE80;
+
+    --tag-disconnected-fg: #A8A29E;
+    --tag-disconnected-bg: rgba(255, 255, 255, 0.06);
+    --tag-disconnected-border: rgba(255, 255, 255, 0.1);
+    --tag-disconnected-dot: #78716C;
+
+    --status-warning-fg: #FCD34D;
+    --status-warning-bg: rgba(245, 158, 11, 0.14);
+    --status-warning-border: rgba(245, 158, 11, 0.28);
+    --status-error-fg: #FCA5A5;
+    --status-error-bg: rgba(239, 68, 68, 0.14);
+    --status-error-border: rgba(239, 68, 68, 0.28);
+    --status-success-fg: #86EFAC;
+    --status-success-bg: rgba(34, 197, 94, 0.14);
+    --status-success-border: rgba(34, 197, 94, 0.28);
 
     --state-disabled-fg: #57534E;
     --state-disabled-bg: #1C1917;
@@ -164,25 +234,59 @@
   --action-secondary-bg: transparent;
   --action-secondary-border: #3F3B37;
 
-  --income-fg: #4ADE80;
-  --income-bg: rgba(74, 222, 128, 0.12);
-  --income-border: rgba(74, 222, 128, 0.25);
-  --expense-fg: #F87171;
-  --expense-bg: rgba(248, 113, 113, 0.12);
-  --expense-border: rgba(248, 113, 113, 0.25);
+  --income-fg: #86EFAC;
+  --income-bg: rgba(34, 197, 94, 0.14);
+  --income-border: rgba(34, 197, 94, 0.28);
+  --income-dot: #4ADE80;
+  --expense-fg: #FCA5A5;
+  --expense-bg: rgba(239, 68, 68, 0.14);
+  --expense-border: rgba(239, 68, 68, 0.28);
+  --expense-dot: #F87171;
 
-  --nec-essential-fg: #E7E5E4;
-  --nec-essential-bg: #292524;
-  --nec-optional-fg: #38BDF8;
-  --nec-optional-bg: rgba(56, 189, 248, 0.12);
-  --nec-luxury-fg: #C084FC;
-  --nec-luxury-bg: rgba(192, 132, 252, 0.12);
+  --tag-essential-fg: #93C5FD;
+  --tag-essential-bg: rgba(59, 130, 246, 0.14);
+  --tag-essential-border: rgba(59, 130, 246, 0.28);
+  --tag-essential-dot: #60A5FA;
 
-  --status-warning-fg: #FBBF24;
-  --status-warning-bg: rgba(251, 191, 36, 0.12);
-  --status-error-fg: #F87171;
-  --status-error-bg: rgba(248, 113, 113, 0.15);
-  --status-success-fg: #4ADE80;
+  --tag-optional-fg: #FCD34D;
+  --tag-optional-bg: rgba(245, 158, 11, 0.14);
+  --tag-optional-border: rgba(245, 158, 11, 0.28);
+  --tag-optional-dot: #FBBF24;
+
+  --tag-luxury-fg: #D8B4FE;
+  --tag-luxury-bg: rgba(168, 85, 247, 0.14);
+  --tag-luxury-border: rgba(168, 85, 247, 0.28);
+  --tag-luxury-dot: #C084FC;
+
+  --tag-cash-fg: #E7E5E4;
+  --tag-cash-bg: rgba(255, 255, 255, 0.08);
+  --tag-cash-border: rgba(255, 255, 255, 0.14);
+  --tag-cash-dot: #A8A29E;
+
+  --tag-online-fg: #7DD3FC;
+  --tag-online-bg: rgba(14, 165, 233, 0.14);
+  --tag-online-border: rgba(14, 165, 233, 0.28);
+  --tag-online-dot: #38BDF8;
+
+  --tag-connected-fg: #86EFAC;
+  --tag-connected-bg: rgba(34, 197, 94, 0.14);
+  --tag-connected-border: rgba(34, 197, 94, 0.28);
+  --tag-connected-dot: #4ADE80;
+
+  --tag-disconnected-fg: #A8A29E;
+  --tag-disconnected-bg: rgba(255, 255, 255, 0.06);
+  --tag-disconnected-border: rgba(255, 255, 255, 0.1);
+  --tag-disconnected-dot: #78716C;
+
+  --status-warning-fg: #FCD34D;
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
+  --status-warning-border: rgba(245, 158, 11, 0.28);
+  --status-error-fg: #FCA5A5;
+  --status-error-bg: rgba(239, 68, 68, 0.14);
+  --status-error-border: rgba(239, 68, 68, 0.28);
+  --status-success-fg: #86EFAC;
+  --status-success-bg: rgba(34, 197, 94, 0.14);
+  --status-success-border: rgba(34, 197, 94, 0.28);
 
   --state-disabled-fg: #57534E;
   --state-disabled-bg: #1C1917;
