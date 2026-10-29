@@ -53,10 +53,13 @@ describe('Dashboard Recent Activity preview', () => {
     assert.match(html, /tie-c/);
     assert.match(html, /tie-b/);
     assert.doesNotMatch(html, /oldest|tie-a/);
-    assert.equal((html.match(/py-2\.5 flex min-w-0/g) || []).length, 3);
+    assert.equal((html.match(/py-1 lg:py-0\.5 flex min-w-0/g) || []).length, 3);
     assert.match(html, /₹123\.45/);
     assert.match(html, /Food/);
     assert.match(html, /cash/);
+    assert.match(html, /lg:absolute/);
+    assert.match(html, /backdrop-blur-md/);
+    assert.match(html, /pointer-events-none/);
   });
 
   it('handles exactly three, fewer than three, and no transactions', () => {
@@ -75,21 +78,32 @@ describe('Dashboard Recent Activity preview', () => {
     }));
     assert.match(emptyHtml, /No transactions recorded in this period/);
     assert.match(emptyHtml, /View more transactions/);
+    const shortListHtml = renderToStaticMarkup(React.createElement(RecentActivity, {
+      transactions: exactlyThree.slice(0, 2),
+      onNavigateToLedger: () => {},
+    }));
+    assert.doesNotMatch(shortListHtml, /lg:absolute/);
   });
 
   it('keeps the Ledger action last, tappable, keyboard visible, and connected to the shell view state', () => {
     const componentPath = path.resolve(__dirname, '../src/features/dashboard/RecentActivity.tsx');
     const dashboardPath = path.resolve(__dirname, '../src/features/dashboard/DashboardPage.tsx');
+    const compositionPath = path.resolve(__dirname, '../src/features/dashboard/SpendingComposition.tsx');
+    const necessityPath = path.resolve(__dirname, '../src/features/dashboard/SpendingByNecessity.tsx');
     const shellPath = path.resolve(__dirname, '../src/features/transactions/TransactionAppShell.tsx');
     const component = fs.readFileSync(componentPath, 'utf8');
     const dashboard = fs.readFileSync(dashboardPath, 'utf8');
+    const composition = fs.readFileSync(compositionPath, 'utf8');
+    const necessity = fs.readFileSync(necessityPath, 'utf8');
     const shell = fs.readFileSync(shellPath, 'utf8');
     assert.ok(component.indexOf('View more transactions') > component.indexOf('latestTransactions.map'));
     assert.match(component, /min-h-11 w-full/);
     assert.match(component, /focus-visible:ring-2/);
     assert.match(component, /active:opacity-70/);
-    assert.match(dashboard, /grid-cols-1 md:grid-cols-2 xl:grid-cols-3/);
-    assert.match(dashboard, /md:col-span-2 xl:col-span-1/);
+    assert.match(dashboard, /grid-cols-1 md:grid-cols-2 lg:grid-cols-3/);
+    assert.match(dashboard, /md:col-span-2 lg:col-span-1/);
+    assert.match(composition, /lg:h-full/);
+    assert.match(necessity, /lg:h-full/);
     assert.match(shell, /onNavigateToLedger=\{\(\) => setActiveView\('ledger'\)\}/);
   });
 });

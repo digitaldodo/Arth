@@ -495,22 +495,22 @@ export function DashboardPage({
           )}
 
           {/* Spending Composition, Spending by Necessity, and Recent Activity */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-            <div className="w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="w-full min-w-0">
               <SpendingComposition
                 categories={summary.spending_composition}
                 totalExpensesPaise={summary.expenses_paise}
               />
             </div>
 
-            <div className="w-full">
+            <div className="w-full min-w-0">
               <SpendingByNecessity
                 items={effectiveNecessityItems}
                 totalExpensesPaise={summary.expenses_paise}
               />
             </div>
 
-            <div className="w-full md:col-span-2 xl:col-span-1">
+            <div className="w-full min-w-0 md:col-span-2 lg:col-span-1">
               <RecentActivity
                 transactions={summary.recent_transactions}
                 onNavigateToLedger={onNavigateToLedger}

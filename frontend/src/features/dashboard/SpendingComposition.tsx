@@ -26,7 +26,7 @@ export function SpendingComposition({
 }: SpendingCompositionProps) {
   if (totalExpensesPaise <= 0 || categories.length === 0) {
     return (
-      <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
+      <div className="p-5 lg:h-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">
           Spending Composition
         </h3>
@@ -43,7 +43,7 @@ export function SpendingComposition({
   }
 
   return (
-    <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
+    <div className="p-5 lg:h-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">
           Spending Composition

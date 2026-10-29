@@ -69,7 +69,7 @@ export function SpendingByNecessity({
 
   if (!hasExpenses) {
     return (
-      <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
+      <div className="p-5 lg:h-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">
           Spending by Necessity
         </h3>
@@ -86,7 +86,7 @@ export function SpendingByNecessity({
   }
 
   return (
-    <div className="p-5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
+    <div className="p-5 lg:h-full bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-[var(--text-primary)]">
           Spending by Necessity
