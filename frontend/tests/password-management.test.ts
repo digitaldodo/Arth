@@ -80,7 +80,7 @@ describe('Password Management (changePasswordAction) Tests', () => {
     }
   });
 
-  test('for email user: rejects missing current password', async () => {
+  test('unknown password marker does not infer a password from an email identity', async () => {
     const originalFetch = globalThis.fetch;
     try {
       (globalThis as unknown as { __mockCookies?: { name: string; value: string }[] }).__mockCookies = [
@@ -120,7 +120,7 @@ describe('Password Management (changePasswordAction) Tests', () => {
       formData.set('confirmPassword', 'NewValidPass123!');
 
       const res = await changePasswordAction(formData);
-      assert.equal(res.error, 'Current password is required to change your password.');
+      assert.equal(res.success, true);
     } finally {
       delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
       globalThis.fetch = originalFetch;
@@ -255,7 +255,7 @@ describe('Password Management (changePasswordAction) Tests', () => {
         const urlStr = url.toString();
         if (opts?.method === 'PUT' && urlStr.includes('/auth/v1/user')) {
           const body = JSON.parse(opts.body as string);
-          updatedUserPassword = body.password;
+          if (body.password) updatedUserPassword = body.password;
           return new Response(
             JSON.stringify({
               id: 'email-user-123',
@@ -333,7 +333,7 @@ describe('Password Management (changePasswordAction) Tests', () => {
         const urlStr = url.toString();
         if (opts?.method === 'PUT' && urlStr.includes('/auth/v1/user')) {
           const body = JSON.parse(opts.body as string);
-          updatedUserPassword = body.password;
+          if (body.password) updatedUserPassword = body.password;
           return new Response(
             JSON.stringify({
               id: 'google-user-123',

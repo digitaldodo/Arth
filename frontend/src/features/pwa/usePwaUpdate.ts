@@ -25,12 +25,16 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
   const lastCheckTimeRef = useRef<number>(0);
   const currentBuildIdRef = useRef<string | null>(null);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+  const activationRequestedRef = useRef<WeakSet<ServiceWorker>>(new WeakSet());
   const pendingReloadRef = useRef<boolean>(false);
   const hasLoadedControllerRef = useRef<boolean>(false);
 
   // Activates a waiting service worker once safe
   const activateWaitingWorker = useCallback((worker: ServiceWorker) => {
     if (!worker) return;
+    if (worker.state === 'redundant') return;
+    if (activationRequestedRef.current.has(worker)) return;
+    activationRequestedRef.current.add(worker);
 
     if (isCriticalOperationActive()) {
       console.log('[PWA Update] Deferring update activation: critical operation in progress');
@@ -38,6 +42,7 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
       const unsubscribe = onCriticalOperationChange((isBusy) => {
         if (!isBusy) {
           unsubscribe();
+          if (worker.state === 'redundant') return;
           console.log('[PWA Update] Critical operation completed. Activating update now.');
           worker.postMessage({ type: 'SKIP_WAITING' });
         }
@@ -70,11 +75,40 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
           const data = await res.json();
           if (data.buildId) {
             if (!currentBuildIdRef.current) {
+              // Compare with the last known deployment when available across reloads.
+              try {
+                currentBuildIdRef.current = localStorage.getItem('arth_build_id');
+              } catch {
+                currentBuildIdRef.current = null;
+              }
+            }
+            if (!currentBuildIdRef.current) {
               currentBuildIdRef.current = data.buildId;
             } else if (currentBuildIdRef.current !== data.buildId) {
               console.log(
-                `[PWA Update] New version detected on server (${currentBuildIdRef.current} -> ${data.buildId}). Triggering SW update.`
+                `[PWA Update] New deployment detected (${currentBuildIdRef.current} → ${data.buildId}). Triggering immediate SW update check.`
               );
+              // Advance the tracked ID so this deployment is not logged again
+              currentBuildIdRef.current = data.buildId;
+              try {
+                localStorage.setItem('arth_build_id', data.buildId);
+              } catch {
+                // Persistent comparison is an enhancement; SW checks still work.
+              }
+              // Trigger an immediate SW update check for the new deployment
+              const reg =
+                registrationRef.current ?? (await navigator.serviceWorker.getRegistration());
+              if (reg) {
+                registrationRef.current = reg;
+                await reg.update();
+              }
+              // Return early — the standard update() below is redundant now
+              return;
+            }
+            try {
+              localStorage.setItem('arth_build_id', data.buildId);
+            } catch {
+              // Persistent comparison is an enhancement; SW checks still work.
             }
           }
         }
@@ -187,6 +221,9 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
       .catch((err) => {
         console.warn('[PWA Update] Service Worker registration failed:', err);
       });
+
+    // Check immediately on launch after initiating registration.
+    void checkForUpdate();
 
     // 1. Periodic background checks while app is open (every 5 minutes)
     const intervalId = setInterval(() => {

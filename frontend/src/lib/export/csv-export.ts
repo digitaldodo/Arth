@@ -101,5 +101,6 @@ export function downloadCSV(csvContent: string, filename: string): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Safari and installed PWAs may begin the download after click() returns.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

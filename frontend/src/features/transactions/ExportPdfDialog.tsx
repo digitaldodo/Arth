@@ -30,6 +30,7 @@ export interface ExportPdfDialogProps {
   initialNecessity?: NecessityClass | 'all';
   userProfile?: UserProfileSummary;
   hasPassword?: boolean;
+  onAccountPasswordVerified?: () => void;
 }
 
 export function ExportPdfDialog({
@@ -41,6 +42,7 @@ export function ExportPdfDialog({
   initialNecessity = 'all',
   userProfile,
   hasPassword = false,
+  onAccountPasswordVerified,
 }: ExportPdfDialogProps) {
   // Preset & Dates
   const [preset, setPreset] = useState<DateRangePreset>('this_month');
@@ -217,7 +219,7 @@ export function ExportPdfDialog({
   const isProtectedFormValid = useMemo(() => {
     if (protectionMode !== 'protected') return true;
     if (passwordOption === 'account') {
-      return Boolean(hasPassword && accountPassword.trim().length > 0);
+      return Boolean(accountPassword.trim().length > 0);
     }
     // Separate password validation
     const p = separatePassword.trim();
@@ -230,7 +232,6 @@ export function ExportPdfDialog({
   }, [
     protectionMode,
     passwordOption,
-    hasPassword,
     accountPassword,
     separatePassword,
     separateConfirmPassword,
@@ -309,12 +310,6 @@ export function ExportPdfDialog({
     let finalEncryptionPassword = '';
 
     if (passwordOption === 'account') {
-      if (!hasPassword) {
-        setExportError(
-          'Your account does not have a password configured. Please use a separate PDF password or set an account password in Settings.'
-        );
-        return;
-      }
       const trimmed = accountPassword.trim();
       if (!trimmed) {
         setExportError('Please enter your Arth account password.');
@@ -333,6 +328,7 @@ export function ExportPdfDialog({
           setExportError(verifyResult.error || 'Incorrect account password. Please try again.');
           return;
         }
+        onAccountPasswordVerified?.();
         finalEncryptionPassword = trimmed;
       } catch (err: unknown) {
         setIsExporting(false);
@@ -736,15 +732,15 @@ export function ExportPdfDialog({
                           Re-authenticate with your account password to secure this PDF.
                         </p>
 
-                        {/* If user has no password configured (e.g. Google OAuth) */}
+                        {/* Marker status is advisory; the server verifies the credential itself. */}
                         {!hasPassword && passwordOption === 'account' && (
                           <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded text-[11px]">
-                            Your account is authenticated via Google or does not have a password configured yet. Please select <strong>&quot;Use a separate PDF password&quot;</strong> below or configure a password in Settings.
+                            Enter your existing Arth password. If you do not have one, choose a separate PDF password below.
                           </div>
                         )}
 
                         {/* Account password input */}
-                        {hasPassword && passwordOption === 'account' && (
+                        {passwordOption === 'account' && (
                           <div className="mt-2.5 space-y-2">
                             <div className="relative">
                               <input

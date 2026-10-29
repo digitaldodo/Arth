@@ -163,7 +163,7 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       );
     });
 
-    test('TransactionAppShell manages dynamic hasPassword state and updates after modal success', () => {
+    test('TransactionAppShell keeps configured, unconfigured, and unknown password states distinct', () => {
       const shellPath = path.resolve(
         __dirname,
         '../src/features/transactions/TransactionAppShell.tsx'
@@ -171,16 +171,16 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       const content = fs.readFileSync(shellPath, 'utf8');
 
       assert.ok(
-        content.includes('const [hasPassword, setHasPassword] = useState<boolean>'),
-        'Must use stateful hasPassword in AppShell'
+        content.includes("useState<PasswordStatus>(user?.passwordStatus ?? 'unknown')"),
+        'Must preserve unknown password status in AppShell'
       );
       assert.ok(
-        content.includes('setHasPassword(true)'),
-        'Must update hasPassword to true upon password set/change success'
+        content.includes("setPasswordStatus('configured')"),
+        'Must update status after password set/change/verification success'
       );
       assert.ok(
-        content.includes("hasPassword ? 'Change Password' : 'Set Password'"),
-        'Button label must dynamically show Change Password or Set Password'
+        content.includes("'Password Settings'"),
+        'Unknown password state must use a neutral Settings action'
       );
     });
   });
@@ -236,8 +236,8 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       const content = fs.readFileSync(dialogPath, 'utf8');
 
       assert.ok(
-        content.includes('Your account is authenticated via Google or does not have a password configured yet'),
-        'Must display clear explanation when OAuth user selects account password option'
+        content.includes('Enter your existing Arth password. If you do not have one'),
+        'Must allow real verification even when status metadata is missing'
       );
     });
 

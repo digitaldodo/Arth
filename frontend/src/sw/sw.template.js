@@ -26,7 +26,10 @@ self.addEventListener('install', (event) => {
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(PRECACHE_ASSETS))
       .catch((err) => {
-        console.warn('[ServiceWorker] Precaching failed during install:', err);
+        // Re-throw so the browser marks this worker as 'redundant'.
+        // The existing active worker continues serving until a future install succeeds.
+        console.error('[ServiceWorker] Precaching failed — aborting install to preserve working cache:', err);
+        throw err;
       })
   );
   // Important: We do NOT call self.skipWaiting() here directly.

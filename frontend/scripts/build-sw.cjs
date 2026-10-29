@@ -23,14 +23,16 @@ const swVersion = `${shortSha}-${timestamp}`;
 const builtAt = new Date().toISOString();
 
 // 1. Generate public/sw.js from template
-if (fs.existsSync(templatePath)) {
-  let template = fs.readFileSync(templatePath, 'utf8');
-  template = template.replace(/__SW_VERSION__/g, swVersion);
-  fs.writeFileSync(targetSwPath, template, 'utf8');
-  console.log(`[build-sw] Generated public/sw.js with version: ${swVersion}`);
-} else {
-  console.warn(`[build-sw] Template not found at ${templatePath}`);
+if (!fs.existsSync(templatePath)) {
+  throw new Error(`[build-sw] Required service-worker template not found at ${templatePath}`);
 }
+let template = fs.readFileSync(templatePath, 'utf8');
+template = template.replace(/__SW_VERSION__/g, swVersion);
+if (template.includes('__SW_VERSION__')) {
+  throw new Error('[build-sw] Service-worker version placeholder was not fully replaced');
+}
+fs.writeFileSync(targetSwPath, template, 'utf8');
+console.log(`[build-sw] Generated public/sw.js with version: ${swVersion}`);
 
 // 2. Generate public/version.json for client update polling
 const versionInfo = {

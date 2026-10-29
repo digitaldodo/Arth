@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useTransition, useEffect } from 'react';
+import React, { useState, useTransition, useEffect, useCallback } from 'react';
 import { changePasswordAction } from '@/app/login/actions';
+import type { PasswordStatus } from '@/lib/auth/password-status';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
   userEmail?: string;
   hasPassword?: boolean;
+  passwordStatus?: PasswordStatus;
   onSuccess?: (message: string) => void;
 }
 
@@ -16,9 +18,11 @@ export function ChangePasswordModal({
   onClose,
   userEmail,
   hasPassword = true,
+  passwordStatus,
   onSuccess,
 }: ChangePasswordModalProps) {
   const [currentPassword, setCurrentPassword] = useState('');
+  const [settingWithoutExistingPassword, setSettingWithoutExistingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -28,33 +32,36 @@ export function ChangePasswordModal({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Reset form state when modal opens or closes
-  useEffect(() => {
-    if (!isOpen) {
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowCurrentPassword(false);
-      setShowNewPassword(false);
-      setShowConfirmPassword(false);
-      setErrorMessage(null);
-      setSuccessMessage(null);
-    }
-  }, [isOpen]);
+  const handleClose = useCallback(() => {
+    setCurrentPassword('');
+    setSettingWithoutExistingPassword(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    onClose();
+  }, [onClose]);
 
   // Handle escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isPending) {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isPending, onClose]);
+  }, [isOpen, isPending, handleClose]);
 
   if (!isOpen) return null;
+
+  const resolvedPasswordStatus = passwordStatus ?? (hasPassword ? 'configured' : 'not_configured');
+  const requiresCurrentPassword = resolvedPasswordStatus === 'configured' ||
+    (resolvedPasswordStatus === 'unknown' && !settingWithoutExistingPassword);
 
   const isPasswordLongEnough = newPassword.trim().length >= 8;
   const isPasswordMatch =
@@ -72,7 +79,7 @@ export function ChangePasswordModal({
     isPasswordLongEnough &&
     isPasswordMatch &&
     !hasLeadingOrTrailingSpace &&
-    (!hasPassword || currentPassword.length > 0);
+    (!requiresCurrentPassword || currentPassword.length > 0);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -96,13 +103,13 @@ export function ChangePasswordModal({
       return;
     }
 
-    if (hasPassword && !currentPassword) {
+    if (requiresCurrentPassword && !currentPassword) {
       setErrorMessage('Please enter your current password.');
       return;
     }
 
     const formData = new FormData();
-    if (hasPassword) {
+    if (requiresCurrentPassword) {
       formData.set('currentPassword', currentPassword);
     }
     formData.set('newPassword', newPassword.trim());
@@ -123,7 +130,7 @@ export function ChangePasswordModal({
         setNewPassword('');
         setConfirmPassword('');
         setTimeout(() => {
-          onClose();
+          handleClose();
           onSuccess?.(msg);
         }, 1200);
       }
@@ -137,7 +144,7 @@ export function ChangePasswordModal({
       aria-labelledby="password-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={() => {
-        if (!isPending) onClose();
+        if (!isPending) handleClose();
       }}
     >
       <div
@@ -158,10 +165,12 @@ export function ChangePasswordModal({
                 id="password-modal-title"
                 className="text-sm sm:text-base font-bold text-[var(--text-primary)]"
               >
-                {hasPassword ? 'Change Password' : 'Set Account Password'}
+                {resolvedPasswordStatus === 'unknown' ? 'Password Settings' : hasPassword ? 'Change Password' : 'Set Account Password'}
               </h2>
               <p className="text-xs text-[var(--text-muted)]">
-                {hasPassword
+                {resolvedPasswordStatus === 'unknown'
+                  ? 'Verify an existing password or set one if this account does not have one'
+                  : hasPassword
                   ? 'Update your credentials for email and username sign-in'
                   : 'Add password sign-in to your Google-authenticated account'}
               </p>
@@ -169,7 +178,7 @@ export function ChangePasswordModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isPending}
             aria-label="Close dialog"
             className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 rounded-md cursor-pointer disabled:opacity-50"
@@ -179,7 +188,7 @@ export function ChangePasswordModal({
         </div>
 
         {/* Informative Callout for Google OAuth accounts without password */}
-        {!hasPassword && (
+        {resolvedPasswordStatus === 'not_configured' && (
           <div className="p-3 text-xs rounded-lg bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-secondary)] space-y-1">
             <div className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
               <span>Google Account Linked</span>
@@ -230,8 +239,20 @@ export function ChangePasswordModal({
             </div>
           )}
 
-          {/* Current Password Field (Only when user already has an existing password) */}
-          {hasPassword && (
+          {resolvedPasswordStatus === 'unknown' && (
+            <label className="flex items-start gap-2 text-[11px] text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={settingWithoutExistingPassword}
+                onChange={(event) => setSettingWithoutExistingPassword(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I do not have an existing Arth password; set one for this account.</span>
+            </label>
+          )}
+
+          {/* Require verification for configured accounts and let unknown accounts verify if they have a password. */}
+          {requiresCurrentPassword && (
             <div className="space-y-1.5">
               <label
                 htmlFor="current-password-input"

@@ -6,12 +6,14 @@ import { setAccountPasswordAction } from '@/app/login/actions';
 interface SetPasswordFormProps {
   userEmail?: string;
   providers?: string[];
+  passwordStatus?: 'configured' | 'not_configured' | 'unknown';
   onPasswordSet?: () => void;
 }
 
 export function SetPasswordForm({
   userEmail,
   providers = [],
+  passwordStatus = 'unknown',
   onPasswordSet,
 }: SetPasswordFormProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -24,7 +26,7 @@ export function SetPasswordForm({
   const [isPending, startTransition] = useTransition();
 
   const isGoogleUser = providers.includes('google');
-  const hasEmailProvider = providers.includes('email');
+  const isPasswordConfigured = passwordStatus === 'configured';
 
   const isPasswordLongEnough = password.length >= 8;
   const isPasswordMatch = password.length > 0 && password === confirmPassword;
@@ -85,21 +87,21 @@ export function SetPasswordForm({
           <div>
             <div className="flex items-center gap-2">
               <h4 className="text-xs font-semibold text-[var(--text-primary)]">
-                {hasEmailProvider ? 'Account Password' : 'Set Account Password'}
+                {isPasswordConfigured ? 'Account Password' : passwordStatus === 'unknown' ? 'Password Settings' : 'Set Account Password'}
               </h4>
-              {isGoogleUser && !hasEmailProvider && (
+              {isGoogleUser && (
                 <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-1.5 py-0.2 rounded-xs font-medium">
                   Google Account
                 </span>
               )}
-              {hasEmailProvider && (
+              {isPasswordConfigured && (
                 <span className="text-[10px] text-[var(--income-fg)] bg-[var(--income-bg)] border border-[var(--income-border)] px-1.5 py-0.2 rounded-xs font-medium">
                   Active
                 </span>
               )}
             </div>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5 max-w-md">
-              {isGoogleUser && !hasEmailProvider
+              {isGoogleUser && passwordStatus === 'not_configured'
                 ? 'Add email and password sign-in to your account so you can log in directly without Google.'
                 : 'Set or update your account password for email and username sign-in.'}
             </p>
@@ -116,7 +118,7 @@ export function SetPasswordForm({
             }}
             className="px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md transition-colors cursor-pointer shrink-0"
           >
-            {hasEmailProvider ? 'Change Password' : 'Set Password'}
+            {isPasswordConfigured ? 'Change Password' : passwordStatus === 'unknown' ? 'Password Settings' : 'Set Password'}
           </button>
         )}
       </div>
@@ -152,7 +154,7 @@ export function SetPasswordForm({
         >
           <div className="space-y-1">
             <h5 className="text-xs font-semibold text-[var(--text-primary)]">
-              {hasEmailProvider ? 'Update Account Password' : 'Create Account Password'}
+              {isPasswordConfigured ? 'Update Account Password' : 'Create Account Password'}
             </h5>
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
               {userEmail && (
@@ -293,7 +295,7 @@ export function SetPasswordForm({
             >
               {isPending
                 ? 'Setting Password…'
-                : hasEmailProvider
+                : isPasswordConfigured
                   ? 'Update Password'
                   : 'Save Password'}
             </button>

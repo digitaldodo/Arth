@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { TransactionDTO, CategoryDTO } from '@arth/contracts';
 import { generateTransactionsCSV, downloadCSV } from '@/lib/export/csv-export';
 import { generateBackupJSON, downloadJSON, type ExportUserMetadata } from '@/lib/export/json-export';
+import { fetchAllExportData } from '@/lib/export/export-data';
 
 interface DataExportCardProps {
   user: ExportUserMetadata;
@@ -15,51 +15,6 @@ export function DataExportCard({ user }: DataExportCardProps) {
   const [progressText, setProgressText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  /**
-   * Fetches every transaction across all paginated pages from the backend proxy.
-   */
-  const fetchAllTransactions = async (): Promise<{
-    transactions: TransactionDTO[];
-    categories: CategoryDTO[];
-  }> => {
-    // 1. Fetch categories
-    const catRes = await fetch('/api/backend/categories');
-    if (!catRes.ok) {
-      throw new Error(`Failed to load category taxonomy (${catRes.status})`);
-    }
-    const catData = await catRes.json();
-    const categories: CategoryDTO[] = catData.categories || [];
-
-    // 2. Paginate transactions
-    const allTransactions: TransactionDTO[] = [];
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
-
-    while (hasMore) {
-      setProgressText(`Fetching records (page ${page})...`);
-      const txRes = await fetch(
-        `/api/backend/transactions?page=${page}&limit=${limit}`
-      );
-      if (!txRes.ok) {
-        throw new Error(
-          `Failed to load transactions on page ${page} (${txRes.status}). Export halted to prevent partial output.`
-        );
-      }
-      const txData = await txRes.json();
-      const records: TransactionDTO[] = txData.transactions || [];
-      allTransactions.push(...records);
-
-      if (records.length < limit || !txData.pagination?.hasMore) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    }
-
-    return { transactions: allTransactions, categories };
-  };
 
   const getTodayDateString = () => {
     try {
@@ -85,7 +40,9 @@ export function DataExportCard({ user }: DataExportCardProps) {
     setProgressText('Preparing CSV export...');
 
     try {
-      const { transactions, categories } = await fetchAllTransactions();
+      const { transactions, categories } = await fetchAllExportData((page) => {
+        setProgressText(`Fetching records (page ${page})...`);
+      });
       setProgressText(`Formatting ${transactions.length} transactions...`);
       const csv = generateTransactionsCSV(transactions, categories);
       const filename = `Arth-Transactions-${getTodayDateString()}.csv`;
@@ -110,7 +67,9 @@ export function DataExportCard({ user }: DataExportCardProps) {
     setProgressText('Preparing JSON backup...');
 
     try {
-      const { transactions, categories } = await fetchAllTransactions();
+      const { transactions, categories } = await fetchAllExportData((page) => {
+        setProgressText(`Fetching records (page ${page})...`);
+      });
       setProgressText(`Formatting JSON data structure...`);
       const json = generateBackupJSON(transactions, categories, user);
       const filename = `Arth-Backup-${getTodayDateString()}.json`;

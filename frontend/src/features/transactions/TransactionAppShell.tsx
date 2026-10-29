@@ -36,6 +36,7 @@ import {
 } from '@/lib/offline-db';
 import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
+import type { PasswordStatus } from '@/lib/auth/password-status';
 
 interface TransactionAppShellProps {
   user: {
@@ -44,16 +45,15 @@ interface TransactionAppShellProps {
     displayName?: string;
     username?: string;
     providers?: string[];
-    hasPassword?: boolean;
+    passwordStatus?: PasswordStatus;
   } | null;
 }
 
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
-  const [hasPassword, setHasPassword] = useState<boolean>(
-    Boolean(user?.hasPassword ?? user?.providers?.includes('email'))
-  );
+  const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
+  const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -341,6 +341,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   email: user?.email,
                 }}
                 hasPassword={hasPassword}
+                onAccountPasswordVerified={() => setPasswordStatus('configured')}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
@@ -445,7 +446,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                         </p>
                       </div>
                     </div>
-                    <ThemeToggle />
+                    <ThemeToggle className="sm:w-64" />
                   </div>
 
                   {/* Security: Password Management */}
@@ -457,9 +458,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                           Security &amp; Password
                         </h3>
                         <p className="text-[11px] text-[var(--text-muted)]">
-                          {hasPassword
+                          {passwordStatus === 'configured'
                             ? 'Update your account password or credentials'
-                            : 'Set a password to enable email & username sign-in'}
+                            : passwordStatus === 'not_configured'
+                              ? 'Set a password to enable email & username sign-in'
+                              : 'Check or update your account password settings'}
                         </p>
                       </div>
                     </div>
@@ -468,7 +471,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                       onClick={() => setIsPasswordModalOpen(true)}
                       className="px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] bg-[var(--bg-surface-subtle)] hover:bg-[var(--bg-surface-active)] border border-[var(--border-hairline)] rounded-md transition-colors cursor-pointer shrink-0"
                     >
-                      {hasPassword ? 'Change Password' : 'Set Password'}
+                      {passwordStatus === 'configured'
+                        ? 'Change Password'
+                        : passwordStatus === 'not_configured'
+                          ? 'Set Password'
+                          : 'Password Settings'}
                     </button>
                   </div>
 
@@ -651,8 +658,9 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsPasswordModalOpen(false)}
           userEmail={user.email}
           hasPassword={hasPassword}
+          passwordStatus={passwordStatus}
           onSuccess={(msg) => {
-            setHasPassword(true);
+            setPasswordStatus('configured');
             setSaveSuccessBanner(msg);
           }}
         />

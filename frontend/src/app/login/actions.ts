@@ -15,6 +15,7 @@ import {
   generateRandomCandidateUsername,
   generateUsernameSuggestions,
 } from '@/lib/username';
+import { getPasswordStatus } from '@/lib/auth/password-status';
 
 export interface AuthActionResult {
   success?: boolean;
@@ -36,6 +37,21 @@ function isValidEmail(email: string): boolean {
  */
 function isValidPassword(password: string): boolean {
   return typeof password === 'string' && password.length >= 8;
+}
+
+type AuthClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Persist the status marker only after Supabase has confirmed password authentication or update. */
+async function markPasswordConfigured(supabase: AuthClient, recordSetAt = false): Promise<boolean> {
+  const data = recordSetAt
+    ? { has_password: true, password_set_at: new Date().toISOString() }
+    : { has_password: true };
+  try {
+    const { error } = await supabase.auth.updateUser({ data });
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 function getServiceRoleKey(): string | undefined {
@@ -188,6 +204,11 @@ export async function signInWithEmailAction(
       return {
         error: error.message || 'Unable to sign in. Please try again.',
       };
+    }
+
+    if (data.user && getPasswordStatus(data.user.user_metadata) !== 'configured') {
+      // Successful credential authentication is authoritative; repair legacy markers.
+      await markPasswordConfigured(supabase).catch(() => false);
     }
 
     if (data.session) {
@@ -505,19 +526,15 @@ export async function updatePasswordAction(
       };
     }
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-      data: {
-        has_password: true,
-        password_set_at: new Date().toISOString(),
-      },
-    });
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
       return {
         error: error.message || 'Failed to update password. Please try again.',
       };
     }
+
+    await markPasswordConfigured(supabase, true);
 
     return {
       success: true,
@@ -605,16 +622,13 @@ export async function changePasswordAction(
       };
     }
 
-    // Determine if account has an existing password (email provider identity)
-    const hasPassword = Boolean(
-      user.user_metadata?.has_password === true ||
-      user.app_metadata?.provider === 'email' ||
-      (Array.isArray(user.app_metadata?.providers) &&
-        user.app_metadata.providers.includes('email')) ||
-      user.identities?.some((id) => id.provider === 'email')
-    );
+    // Use only the explicit password marker; an email identity is not proof of a working password.
+    const passwordStatus = getPasswordStatus(user.user_metadata);
+    const hasPassword = passwordStatus === 'configured';
+    const mustVerifyExisting = hasPassword ||
+      (passwordStatus === 'unknown' && currentPassword.length > 0);
 
-    if (hasPassword) {
+    if (mustVerifyExisting) {
       if (!currentPassword) {
         return {
           error: 'Current password is required to change your password.',
@@ -641,13 +655,7 @@ export async function changePasswordAction(
     }
 
     // Update password in Supabase Auth and persist has_password metadata
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-      data: {
-        has_password: true,
-        password_set_at: new Date().toISOString(),
-      },
-    });
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
 
     if (updateError) {
       const errMsg = updateError.message?.toLowerCase() || '';
@@ -678,9 +686,11 @@ export async function changePasswordAction(
       };
     }
 
+    await markPasswordConfigured(supabase, true);
+
     return {
       success: true,
-      message: hasPassword
+      message: mustVerifyExisting
         ? 'Your password has been successfully updated.'
         : 'Password successfully set! You can now sign in using your email or username and password, or continue using Google sign-in.',
     };
@@ -759,6 +769,8 @@ export async function setAccountPasswordAction(
         error: error.message || 'Failed to set password. Please try again.',
       };
     }
+
+    await markPasswordConfigured(supabase, true);
 
     return {
       success: true,
@@ -1151,21 +1163,6 @@ export async function verifyCurrentPasswordAction(
       };
     }
 
-    const hasPassword = Boolean(
-      user.user_metadata?.has_password === true ||
-      user.app_metadata?.provider === 'email' ||
-      (Array.isArray(user.app_metadata?.providers) &&
-        user.app_metadata.providers.includes('email')) ||
-      user.identities?.some((id) => id.provider === 'email')
-    );
-
-    if (!hasPassword) {
-      return {
-        valid: false,
-        error: 'Your account does not have a password configured yet. Please set an account password in Settings or use a separate PDF password.',
-      };
-    }
-
     const { error: verifyError } = await supabase.auth.signInWithPassword({
       email: user.email,
       password: trimmed,
@@ -1177,6 +1174,8 @@ export async function verifyCurrentPasswordAction(
         error: 'Incorrect account password. Please try again.',
       };
     }
+
+    await markPasswordConfigured(supabase);
 
     return { valid: true };
   } catch (err: unknown) {

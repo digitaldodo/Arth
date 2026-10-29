@@ -54,6 +54,7 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
     assert.ok(fs.existsSync(swScriptPath), 'public/sw.js must exist');
 
     const swContent = fs.readFileSync(swScriptPath, 'utf8');
+    const version = JSON.parse(fs.readFileSync(path.join(rootDir, 'frontend/public/version.json'), 'utf8')) as { buildId: string };
     assert.ok(
       !swContent.includes('__SW_VERSION__'),
       'public/sw.js must have __SW_VERSION__ placeholder replaced with actual build hash'
@@ -61,6 +62,10 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
     assert.ok(
       swContent.includes('const CACHE_NAME = \'arth-shell-'),
       'public/sw.js must contain versioned CACHE_NAME'
+    );
+    assert.ok(
+      swContent.includes(`const SW_VERSION = '${version.buildId}'`),
+      'Generated public/sw.js and version.json must report the same deployment build ID'
     );
   });
 
@@ -167,6 +172,9 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
       hookContent.includes('isCriticalOperationActive()'),
       'Must check isCriticalOperationActive() before sending SKIP_WAITING'
     );
+    assert.ok(hookContent.includes("localStorage.setItem('arth_build_id'"), 'Must retain build ID across reloads');
+    assert.ok(hookContent.includes('activationRequestedRef'), 'Must request activation only once per waiting worker');
+    assert.ok(hookContent.includes('void checkForUpdate()'), 'Must check deployment version on launch');
     assert.ok(
       hookContent.includes('onCriticalOperationChange'),
       'Must wait for critical operations to complete before activating update'

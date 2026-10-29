@@ -4,6 +4,7 @@ import { TransactionAppShell } from '@/features/transactions/TransactionAppShell
 import { UnauthenticatedHome } from '@/app/UnauthenticatedHome';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 import { generateRandomCandidateUsername } from '@/lib/username';
+import { getPasswordStatus } from '@/lib/auth/password-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ export default async function HomePage({
     displayName?: string;
     username?: string;
     providers?: string[];
-    hasPassword?: boolean;
+    passwordStatus?: 'configured' | 'not_configured' | 'unknown';
   } | null = null;
 
   try {
@@ -93,13 +94,7 @@ export default async function HomePage({
           ? [user.app_metadata.provider as string]
           : [];
 
-      const hasPassword = Boolean(
-        user.user_metadata?.has_password === true ||
-        user.app_metadata?.provider === 'email' ||
-        (Array.isArray(user.app_metadata?.providers) &&
-          user.app_metadata.providers.includes('email')) ||
-        user.identities?.some((id) => id.provider === 'email')
-      );
+      const passwordStatus = getPasswordStatus(user.user_metadata);
 
       authenticatedUser = {
         id: user.id,
@@ -107,7 +102,7 @@ export default async function HomePage({
         displayName: displayName || undefined,
         username: username || undefined,
         providers,
-        hasPassword,
+        passwordStatus,
       };
     }
   } catch {

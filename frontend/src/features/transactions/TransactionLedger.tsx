@@ -21,6 +21,7 @@ import { type UserProfileSummary } from './ledger-pdf-exporter';
 import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
+import { useCriticalOperation } from '@/features/pwa/critical-operation';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year';
 export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
@@ -31,6 +32,7 @@ export interface TransactionLedgerProps {
   onOpenQuickAdd: () => void;
   refreshTrigger: number;
   onTransactionMutated?: () => void;
+  onAccountPasswordVerified?: () => void;
 }
 
 // In-memory query cache for recent filter queries to make back-and-forth filtering instantaneous
@@ -46,6 +48,7 @@ export function TransactionLedger({
   onOpenQuickAdd,
   refreshTrigger,
   onTransactionMutated,
+  onAccountPasswordVerified,
 }: TransactionLedgerProps) {
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -64,6 +67,7 @@ export function TransactionLedger({
   // Interactive transaction details & mutations state
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionDTO | null>(null);
+  useCriticalOperation(editingTransaction !== null);
   const [deletingTransaction, setDeletingTransaction] = useState<TransactionDTO | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -752,6 +756,7 @@ export function TransactionLedger({
         initialNecessity={selectedNecessity}
         userProfile={userProfile}
         hasPassword={hasPassword}
+        onAccountPasswordVerified={onAccountPasswordVerified}
       />
     </div>
   );

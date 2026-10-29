@@ -17,9 +17,65 @@ import {
   setUsernameAction,
   checkUsernameAvailabilityAction,
   deleteAccountAction,
+  verifyCurrentPasswordAction,
 } from '../src/app/login/actions.js';
 
 describe('Frontend Authentication Server Actions & Validation', () => {
+  test('verified legacy account password repairs the marker after real credential verification', async () => {
+    const originalFetch = globalThis.fetch;
+    const cookieGlobal = globalThis as unknown as { __mockCookies?: { name: string; value: string }[] };
+    cookieGlobal.__mockCookies = [{
+      name: 'sb-127-auth-token',
+      value: JSON.stringify({
+        access_token: 'legacy-session-token',
+        refresh_token: 'mock-refresh-token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'legacy-user', email: 'legacy@example.com' },
+      }),
+    }];
+    let repaired = false;
+    try {
+      globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/auth/v1/user') && opts?.method === 'PUT') {
+          const body = JSON.parse((opts.body as string) || '{}');
+          repaired = body.data?.has_password === true;
+          return Response.json({ id: 'legacy-user', email: 'legacy@example.com', user_metadata: { has_password: true } });
+        }
+        if (urlStr.includes('/auth/v1/user')) {
+          return Response.json({
+            id: 'legacy-user', email: 'legacy@example.com', user_metadata: { has_password: false },
+            app_metadata: { provider: 'google', providers: ['google'] },
+          });
+        }
+        if (urlStr.includes('/auth/v1/token')) {
+          const body = JSON.parse((opts?.body as string) || '{}');
+          if (body.password !== 'WorkingPass123!') {
+            return Response.json({ message: 'Invalid login credentials' }, { status: 400 });
+          }
+          return Response.json({
+            access_token: 'verified-access-token', token_type: 'bearer', expires_in: 3600,
+            refresh_token: 'verified-refresh-token',
+            user: { id: 'legacy-user', email: 'legacy@example.com', user_metadata: { has_password: false } },
+          });
+        }
+        return originalFetch(url, opts);
+      };
+
+      assert.deepEqual(await verifyCurrentPasswordAction('WrongPass123!'), {
+        valid: false,
+        error: 'Incorrect account password. Please try again.',
+      });
+      assert.equal(repaired, false, 'a failed password check must not set the marker');
+      const valid = await verifyCurrentPasswordAction('WorkingPass123!');
+      assert.equal(valid.valid, true);
+      assert.equal(repaired, true, 'a verified legacy password repairs a false marker');
+    } finally {
+      delete cookieGlobal.__mockCookies;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   // 1. Sign In Action Validation
   describe('signInWithEmailAction validation & identifier handling', () => {
     test('signInAction is alias of signInWithEmailAction', () => {
@@ -69,8 +125,18 @@ describe('Frontend Authentication Server Actions & Validation', () => {
     test('login with valid email and password succeeds', async () => {
       const originalFetch = globalThis.fetch;
       try {
+        let repairedPasswordMarker = false;
         globalThis.fetch = async (url: RequestInfo | URL, opts?: RequestInit) => {
           const urlStr = url.toString();
+          if (urlStr.includes('/auth/v1/user') && opts?.method === 'PUT') {
+            const body = JSON.parse((opts.body as string) || '{}');
+            repairedPasswordMarker = body.data?.has_password === true;
+            return new Response(JSON.stringify({
+              id: '00000000-0000-7000-8000-000000000001',
+              email: 'user@example.com',
+              user_metadata: { has_password: true },
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
           if (urlStr.includes('/auth/v1/token')) {
             return new Response(
               JSON.stringify({
@@ -96,6 +162,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
         const res = await signInWithEmailAction(formData);
         assert.equal(res.success, true);
         assert.equal(res.redirectUrl, '/');
+        assert.equal(repairedPasswordMarker, true, 'successful password sign-in should repair a missing marker');
       } finally {
         delete (globalThis as unknown as { __mockCookies?: unknown }).__mockCookies;
         globalThis.fetch = originalFetch;
@@ -1011,7 +1078,7 @@ describe('Frontend Authentication Server Actions & Validation', () => {
             if (opts?.method === 'PUT') {
               updateUserCalled = true;
               const body = JSON.parse((opts?.body as string) || '{}');
-              submittedPassword = body.password;
+              if (body.password) submittedPassword = body.password;
               return new Response(
                 JSON.stringify({
                   id: 'google-user-12345',
