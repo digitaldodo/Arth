@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { QuickAddModal } from './QuickAddModal';
@@ -15,6 +16,10 @@ import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
+import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
+import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
+import { useAppLock } from '@/features/app-lock/useAppLock';
+import { unlockAfterVerification } from '@/features/app-lock/verification';
 import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
 import {
   type CreateTransactionResponse,
@@ -52,6 +57,9 @@ interface TransactionAppShellProps {
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
+  const router = useRouter();
+  const appLock = useAppLock(user?.id ?? 'anonymous');
+  const isAppLocked = Boolean(user) && (!appLock.isReady || appLock.isLocked);
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
@@ -161,7 +169,25 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     setCategoryVersion((prev) => prev + 1);
   };
 
+  const handleLockRecovery = async () => {
+    const response = await fetch('/api/app-lock/recover', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string; signedOut?: boolean };
+    if (!response.ok || result.signedOut !== true) {
+      throw new Error(result.error || 'Sign out could not be completed. Arth remains locked.');
+    }
+    appLock.recoverBySigningIn();
+    router.replace('/login');
+  };
+
   return (
+    <>
+    <div hidden={isAppLocked} aria-hidden={isAppLocked} inert={isAppLocked} className="min-h-screen">
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-12">
       {/* Top Application Header */}
       <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3 sm:py-3.5">
@@ -479,6 +505,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     </button>
                   </div>
 
+                  <AppLockSettings appLock={appLock} passwordStatus={passwordStatus} />
+
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">👤</span>
@@ -690,5 +718,21 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       )}
 
     </div>
+    </div>
+    {isAppLocked && user && (
+      <AppLockScreen
+        isInitializing={!appLock.isReady}
+        hasPassword={passwordStatus === 'configured'}
+        deviceConfigured={appLock.isConfigured}
+        supportsPlatformAuth={appLock.supportsPlatformAuth}
+        isCheckingPlatformAuth={appLock.isCheckingPlatformAuth}
+        onUnlock={async () => {
+          await unlockAfterVerification(appLock.verifyDevice, appLock.unlockAfterVerification);
+        }}
+        onPasswordVerified={appLock.unlockAfterVerification}
+        onRecoverBySigningIn={handleLockRecovery}
+      />
+    )}
+    </>
   );
 }
