@@ -18,6 +18,7 @@ import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
 import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
+import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
 import { useAppLock } from '@/features/app-lock/useAppLock';
 import { unlockAfterVerification } from '@/features/app-lock/verification';
 import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
@@ -435,6 +436,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 </div>
 
                 <InstallPromptCard />
+
+                <AutomaticDetectionSettings />
 
                 <SheetsConnectionCard />
 

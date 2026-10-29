@@ -1,6 +1,12 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
+
+def gradleValue = { String name, String fallback = '' ->
+    providers.gradleProperty(name).orElse(providers.environmentVariable(name)).getOrElse(fallback)
+}
+def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 
 def keystoreFilePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE") ?: "release.keystore"
 def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
@@ -10,14 +16,17 @@ def certFingerprint = System.getenv("ANDROID_CERT_SHA256") ?: "CERT_FINGERPRINT_
 
 android {
     namespace 'com.digitaldodo.arth'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.digitaldodo.arth"
-        minSdk 21
-        targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        minSdk 23
+        targetSdk 36
+        versionCode 2
+        versionName "1.1.0"
+        buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL'))
+        buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY'))
+        buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL'))
 
         resValue "string", "appName", "Arth"
         resValue "string", "defaultUrl", "https://arth-9h3f.vercel.app/"
@@ -54,9 +63,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    buildFeatures { buildConfig true }
 }
 
 dependencies {
     implementation 'androidx.browser:browser:1.8.0'
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
+    testImplementation 'junit:junit:4.13.2'
 }

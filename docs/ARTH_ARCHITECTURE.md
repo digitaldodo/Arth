@@ -510,6 +510,14 @@ db.version(1).stores({
 
 ---
 
+### 6.4 Native Android notification companion
+
+The `android/` project includes a native notification-listener companion next to the Trusted Web Activity. It inspects notifications only from user-selected packages, parses supported financial events locally, and stores structured review candidates in app-private SQLite. Unconfirmed candidates are not ledger transactions and expire locally.
+
+The companion signs in with Supabase Auth and stores the session using Android Keystore-backed encrypted preferences. Native requests use `GET /api/native/categories`, a bounded `GET /api/native/transactions` same-day lookup, and `POST /api/native/transactions`; these BFF routes validate the Supabase bearer token, derive ownership from the verified user, and proxy to existing Fastify APIs. A confirmed transaction uses the standard UUID v7 create contract and PostgreSQL outbox trigger. The native transaction proxy also requests the established best-effort Sheets outbox drain. The companion never has a service-role key and never writes application tables directly.
+
+Android’s candidate/sync queue is private and separate from the web PWA’s IndexedDB queue. Only user-confirmed payloads are queued for server sync; pending notification detections are never synchronized. The manifest does not request SMS inbox permissions: SMS content is eligible only when its app displays it in a notification. See `android/README.md` for build configuration, setup, and device limitations.
+
 ## 7. Backup and export strategy
 
 ### 7.1 Data export (Phase 02)
