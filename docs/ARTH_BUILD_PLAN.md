@@ -253,7 +253,7 @@
 | Shared Contracts | Defined `DashboardSummaryResponse`, `DashboardSummaryQuery`, `CategorySpendingDTO`, `DashboardDateRangePreset`, and `resolveDateRangePreset` in `@arth/contracts` | Complete ✅ |
 | Fastify Backend Module | Implemented `backend/src/modules/dashboard/` with `dashboard.validation.ts` (strict YYYY-MM-DD validation, `start_date <= end_date`), `dashboard.service.ts` (`SupabaseDashboardService` and `InMemoryDashboardService`), and `dashboard.routes.ts` (`GET /api/v1/dashboard/summary`) | Complete ✅ |
 | Backend Automated Tests | 12 automated tests in `backend/tests/dashboard.test.ts` covering totals, negative net cash flow, category grouping without double-counting, soft-deleted exclusion, date bounds, calendar edge cases, empty datasets, People isolation, 401 unauthenticated protection, tenant isolation, and bounded recent activity | Complete ✅ |
-| Database Schema Audit | Updated `backend/tests/database-schema-audit.test.ts` to assert all 12 numbered migrations and Migration 0012 rules (13 test suites passing) | Complete ✅ |
+| Database Schema Audit | Updated `backend/tests/database-schema-audit.test.ts` to assert the numbered migration sequence through Migration 0022 and current schema invariants | Complete ✅ |
 | Frontend BFF Proxy | Next.js route handler in `frontend/src/app/api/backend/dashboard/route.ts` with session authentication and parameter forwarding | Complete ✅ |
 | Frontend API Client | Added `fetchDashboardSummary(query)` to `frontend/src/lib/api-client/index.ts` | Complete ✅ |
 | Frontend Dashboard UI | Responsive Ledger Minimal dashboard in `frontend/src/features/dashboard/` featuring `DateRangeSelector`, `SummaryCards` (Income, Expenses, Net Cash Flow), `SpendingComposition` (horizontal segmented bar + category table), `RecentActivity`, and `DashboardSkeleton` | Complete ✅ |
@@ -466,6 +466,12 @@
 | Component | Vitest + @testing-library/react | Form validation, conditional fields |
 | Integration | Vitest + Supabase local | DB constraints, RLS policies |
 | E2E | Playwright | Full login → enter transaction → verify dashboard flow |
+
+## Financial planning tools (implemented)
+
+`FinancialToolsPage` adds Safe to Spend and EMI stress testing from the Dashboard and Planning navigation. It reuses authenticated paginated transaction, balance, and movement APIs. The calculation engine is isolated in `frontend/src/features/financial-tools/financial-engine.ts` and tested with synthetic records.
+
+No ML service is configured or needed: each user's weekly essential-expense history is fit and evaluated locally with a small regression tree, chronological holdout, and a trailing-average baseline. The model is used only after meeting the 52-week / 40-active-week readiness check and beating baseline MAE by at least 10%; otherwise a conservative historical baseline or a user-entered estimate is used. Browser-local assumptions are per user and device. These calculations do not create transactions or liabilities.
 
 ---
 

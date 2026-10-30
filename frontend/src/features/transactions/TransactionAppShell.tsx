@@ -10,6 +10,7 @@ import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { FinancialToolsPage } from '@/features/financial-tools/FinancialToolsPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
@@ -55,7 +56,7 @@ interface TransactionAppShellProps {
   } | null;
 }
 
-export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
+export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more' | 'financial-tools';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const router = useRouter();
@@ -64,6 +65,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
+  const [financialToolMode, setFinancialToolMode] = useState<'safe' | 'emi'>('safe');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
@@ -242,6 +244,13 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setActiveView('financial-tools')}
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${activeView === 'financial-tools' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                >
+                  Planning
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveView('categories')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'categories'
@@ -354,6 +363,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <DashboardPage
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
+                onNavigateToFinancialTools={(mode) => { setFinancialToolMode(mode); setActiveView('financial-tools'); }}
                 refreshTrigger={refreshTrigger}
                 initialBalances={shellBalances}
                 onBalancesLoaded={(b) => setShellBalances(b)}
@@ -385,6 +395,15 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <CategoryManager onCategoryChange={handleCategoryChanged} />
             </div>
 
+            <div className={activeView === 'financial-tools' ? 'block' : 'hidden'}>
+              {activeView === 'financial-tools' && <FinancialToolsPage
+                  userId={user.id}
+                  initialMode={financialToolMode}
+                  initialBalances={shellBalances}
+                  onBack={() => setActiveView('home')}
+                />}
+            </div>
+
             <div className={activeView === 'more' ? 'block' : 'hidden'}>
               <div className="space-y-5">
                 <div>
@@ -394,6 +413,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     Application settings, category customization, and account details
                   </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button type="button" onClick={() => { setFinancialToolMode('safe'); setActiveView('financial-tools'); }} className="min-h-16 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left text-sm font-semibold hover:bg-[var(--bg-surface-subtle)]">Safe to Spend <span className="float-right">→</span></button>
+                  <button type="button" onClick={() => { setFinancialToolMode('emi'); setActiveView('financial-tools'); }} className="min-h-16 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left text-sm font-semibold hover:bg-[var(--bg-surface-subtle)]">EMI stress test <span className="float-right">→</span></button>
                 </div>
 
                 {/* Account Balances Card in Settings */}

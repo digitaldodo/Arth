@@ -82,6 +82,7 @@ Modules are located under `src/modules/<ModuleName>/`. Each module owns its comp
 | `FinancialGoals` | Planned | Phase 05 |
 | `RecurringTransactions` | Planned | Phase 05 |
 | `SubscriptionTracker` | Planned | Phase 05 |
+| `FinancialTools` (Safe to Spend & EMI Stress Test) | ✅ Active | Phase 06 |
 | `FinancialHealth` | Planned | Phase 06 |
 | `AIAdvisor` | Planned | Phase 06 |
 
@@ -151,7 +152,7 @@ Supabase
 | 03 | Offline & PWA | Service worker, IndexedDB, sync reconciliation |
 | 04 | Budget & Insights | BudgetManager, SpendingInsights |
 | 05 | Goals & Recurring | FinancialGoals, RecurringTransactions, SubscriptionTracker |
-| 06 | AI & Health | FinancialHealth, AIAdvisor |
+| 06 | Financial Tools, AI & Health | FinancialTools, FinancialHealth, AIAdvisor |
 
 ---
 *Last updated: Phase 00 — 2026-10-25*

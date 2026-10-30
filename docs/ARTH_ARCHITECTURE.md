@@ -689,7 +689,7 @@ CSV and JSON export. JSON import for recovery. No bulk bank-statement import in 
 
 1. **Supabase Project**:
    - Create/link project at supabase.com.
-   - Apply numbered migrations `0001` through `0012` via `supabase db push`.
+   - Apply all numbered migrations in `supabase/migrations/` via `supabase db push`.
    - Never run `supabase db reset` on remote environments.
    - Configure automatic daily backups (and PITR on Pro).
 2. **Supabase Auth (Google OAuth & Site URL)**:
@@ -722,6 +722,18 @@ CSV and JSON export. JSON import for recovery. No bulk bank-statement import in 
 1. **Google Cloud Service Account**: Enable Google Sheets API; create service account and JSON key for the background outbox worker.
 2. **Google Sheet Spreadsheet**: Create spreadsheet; share with service account email; configure ID.
 3. **Outbox Worker / Cron**: Configure background processing worker.
+
+## 13. Financial Tools (Safe to Spend & EMI Stress Test)
+
+These tools are planning simulations, not ledger mutations or account-balance authorities. They read the signed-in user's existing transaction pages, balances, and balance movements through the authenticated frontend BFF; calculations and personalized model fitting run in that user's browser. No raw transaction history is sent to a model service, and no forecast or EMI scenario is written to the ledger.
+
+Safe to Spend uses configured current cash and online balances, corrected for future-dated ledger transactions and future balance adjustments that the current balance RPC includes. Future income is included in its date range. Future-dated essential expenses floor (and are included in) the essential-spend forecast; other future expenses are commitments. This avoids adding scheduled essential entries on top of a forecast that may already include their historical pattern. Additional income, commitments, savings, and the minimum reserve are browser-local assumptions scoped to the signed-in user. Without configured starting balances or any historical, scheduled, or user-entered essential-spend estimate, the amount is withheld.
+
+Essential variable spending is grouped into IST-calendar weeks. The per-user regression-tree model uses up to 260 (five years of) lagged and trailing weekly essential-spend periods. It requires at least 52 weekly periods and activity in at least 40, evaluates the last eight periods chronologically against a trailing-four-week mean, and is selected only when its MAE is at least 10% lower. The selected four-week iterative forecast is floored at the higher recent/trailing mean and active-week median for conservative Safe-to-Spend use. Otherwise the tool uses that statistical baseline; insufficient history requires a user-entered period estimate. Manual transaction data completeness cannot be independently verified.
+
+The EMI engine uses paise integers and fixed-point `bigint` interest arithmetic, with half-up paise rounding. Its reducing-balance amortization and stress scenarios are hypothetical, remain in browser state, and do not create a liability or transaction. The income prefill is the median of positive recorded monthly income totals across up to six recent months when at least three such months exist; it is an editable historical estimate, not a confirmed future inflow. Essential expense prefill uses the trailing 90 recorded days. EMI overlap can be subtracted from that expense estimate before adding the current EMI commitment. Liquid balances and an optional emergency-fund amount are editable; the latter is considered only in EMI scenarios. No goal, recurring-income, bill, or liability tables exist in the current schema, so these commitments must be supplied as assumptions.
+
+No database migration or new environment variable is required. Assumptions are stored in browser `localStorage` per authenticated user and device; they do not sync between browsers.
 
 ---
 

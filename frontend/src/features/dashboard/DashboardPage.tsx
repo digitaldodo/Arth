@@ -26,6 +26,7 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 interface DashboardPageProps {
   onOpenQuickAdd: () => void;
   onNavigateToLedger: () => void;
+  onNavigateToFinancialTools?: (mode: 'safe' | 'emi') => void;
   refreshTrigger?: number;
   onInitialReady?: (error?: string) => void;
   initialBalances?: AccountBalancesDTO | null;
@@ -40,6 +41,7 @@ interface DashboardError {
 export function DashboardPage({
   onOpenQuickAdd,
   onNavigateToLedger,
+  onNavigateToFinancialTools,
   refreshTrigger = 0,
   onInitialReady,
   initialBalances = null,
@@ -481,6 +483,17 @@ export function DashboardPage({
             formattedExpenses={summary.formatted_expenses}
             formattedNetCashFlow={summary.formatted_net_cash_flow}
           />
+
+          {onNavigateToFinancialTools && (
+            <section className="grid gap-4 sm:grid-cols-2" aria-label="Financial planning tools">
+              <button type="button" onClick={() => onNavigateToFinancialTools('safe')} className="flex min-h-24 items-center justify-between gap-4 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left transition-colors hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
+                <span><span className="block text-sm font-semibold text-[var(--text-primary)]">Safe to Spend</span><span className="mt-1 block text-xs text-[var(--text-secondary)]">Estimate discretionary capacity from your recorded balances and spending.</span></span><span aria-hidden="true" className="text-lg text-[var(--text-muted)]">→</span>
+              </button>
+              <button type="button" onClick={() => onNavigateToFinancialTools('emi')} className="flex min-h-24 items-center justify-between gap-4 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left transition-colors hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">
+                <span><span className="block text-sm font-semibold text-[var(--text-primary)]">EMI stress test</span><span className="mt-1 block text-xs text-[var(--text-secondary)]">Explore a loan payment and test different cash-flow assumptions.</span></span><span aria-hidden="true" className="text-lg text-[var(--text-muted)]">→</span>
+              </button>
+            </section>
+          )}
 
           {/* Empty Range Notice if user has transactions elsewhere in their ledger, but none in this period */}
           {summary.total_active_transaction_count > 0 && !summary.has_activity_in_range && (

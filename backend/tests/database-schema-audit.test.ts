@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 12 numbered migration files exist in sequential order', () => {
+  test('All 22 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -31,10 +31,20 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0018_account_balances_and_transfers.sql',
       '0019_username_system_enhancements.sql',
       '0020_supabase_cron_schedules.sql',
-      '0021_dashboard_necessity_spending.sql'
+      '0021_dashboard_necessity_spending.sql',
+      '0022_app_lock_webauthn.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  test('0022_app_lock_webauthn.sql keeps WebAuthn credentials and challenges server-only', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0022_app_lock_webauthn.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TABLE public.app_lock_credentials'), 'Must store app lock credentials');
+    assert.ok(sql.includes('CREATE TABLE public.app_lock_challenges'), 'Must store expiring ceremony challenges');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Both tables must enable RLS');
+    assert.ok(sql.includes('REVOKE ALL ON public.app_lock_credentials FROM anon, authenticated'), 'Browser roles must not access credentials');
+    assert.ok(sql.includes('REVOKE ALL ON public.app_lock_challenges FROM anon, authenticated'), 'Browser roles must not access challenges');
   });
 
   test('0020_supabase_cron_schedules.sql configures pg_cron, outbox recovery and idempotent schedules', () => {
