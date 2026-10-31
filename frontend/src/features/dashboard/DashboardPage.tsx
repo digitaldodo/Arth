@@ -63,6 +63,7 @@ export function DashboardPage({
 
   const [balances, setBalances] = useState<AccountBalancesDTO | null>(initialBalances);
   const [balancesLoading, setBalancesLoading] = useState(!initialBalances);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
 
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,19 +77,59 @@ export function DashboardPage({
   useEffect(() => {
     let isMounted = true;
     if (!isPwa) {
-      void Promise.all([fetchDashboardSummary(dateRange), fetchBalances()]).then(([data, currentBalances]) => {
+      const summaryPromise = fetchDashboardSummary(dateRange);
+      const balancesPromise = fetchBalances();
+
+      void Promise.allSettled([summaryPromise, balancesPromise]).then(([summaryResult, balancesResult]) => {
         if (!isMounted) return;
-        setSummary(data); setBalances(currentBalances); setError(null);
-        setLoading(false); setBalancesLoading(false); setIsRefreshing(false);
-        onBalancesLoaded?.(currentBalances); onInitialReady?.();
-      }).catch((err: unknown) => {
-        if (!isMounted) return;
-        const message = err instanceof Error ? err.message : 'Could not load dashboard. Check your connection.';
-        const statusCode = (err as { statusCode?: number })?.statusCode;
-        setError({ message, statusCode }); setLoading(false); setBalancesLoading(false); setIsRefreshing(false);
-        onInitialReady?.(message);
+
+        let hasAnySuccess = false;
+        let firstErrorMessage: string | undefined;
+
+        if (summaryResult.status === 'fulfilled') {
+          setSummary(summaryResult.value);
+          setError(null);
+          hasAnySuccess = true;
+        } else {
+          const message =
+            summaryResult.reason instanceof Error
+              ? summaryResult.reason.message
+              : 'Could not load dashboard summary. Check your connection.';
+          const statusCode = (summaryResult.reason as { statusCode?: number })?.statusCode;
+          setError({ message, statusCode });
+          firstErrorMessage = message;
+        }
+
+        if (balancesResult.status === 'fulfilled') {
+          setBalances(balancesResult.value);
+          setBalancesError(null);
+          onBalancesLoaded?.(balancesResult.value);
+          hasAnySuccess = true;
+        } else {
+          const message =
+            balancesResult.reason instanceof Error
+              ? balancesResult.reason.message
+              : 'Could not calculate account balances.';
+          setBalances(null);
+          setBalancesError(message);
+          if (!firstErrorMessage) {
+            firstErrorMessage = message;
+          }
+        }
+
+        setLoading(false);
+        setBalancesLoading(false);
+        setIsRefreshing(false);
+
+        if (hasAnySuccess) {
+          onInitialReady?.();
+        } else {
+          onInitialReady?.(firstErrorMessage);
+        }
       });
-      return () => { isMounted = false; };
+      return () => {
+        isMounted = false;
+      };
     }
     Promise.all([getCachedTransactions(userId), getCachedCategories(userId), initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId), getSyncMeta(userId)])
       .then(([transactions, categories, cachedBalances, syncMeta]) => {
@@ -136,7 +177,27 @@ export function DashboardPage({
     setLoading(true);
     setError(null);
     setBalancesLoading(true);
+    setBalancesError(null);
     setDateRange({ ...dateRange });
+  };
+
+  const handleRetryBalances = () => {
+    setBalancesLoading(true);
+    setBalancesError(null);
+    void fetchBalances()
+      .then((currentBalances) => {
+        setBalances(currentBalances);
+        setBalancesError(null);
+        onBalancesLoaded?.(currentBalances);
+      })
+      .catch((err: unknown) => {
+        const message =
+          err instanceof Error ? err.message : 'Failed to calculate account balances';
+        setBalancesError(message);
+      })
+      .finally(() => {
+        setBalancesLoading(false);
+      });
   };
 
   const handleSelectPreset = (newPreset: DashboardDateRangePreset) => {
@@ -185,8 +246,12 @@ export function DashboardPage({
       <BalanceCard
         balances={balances}
         loading={balancesLoading}
+        error={balancesError}
+        isOffline={typeof navigator !== 'undefined' && !navigator.onLine}
+        onRetry={handleRetryBalances}
         onBalancesUpdated={(updated) => {
           setBalances(updated);
+          setBalancesError(null);
           if (userId) void setCachedBalances(updated, userId);
         }}
       />

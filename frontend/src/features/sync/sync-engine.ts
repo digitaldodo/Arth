@@ -104,10 +104,9 @@ class SyncEngine {
       this.lastSyncedAt = null;
       this.lastError = null;
       if (userId) {
-        // Load initial sync metadata
+        // Load initial sync metadata without restoring old error as active error
         void getSyncMeta(userId).then((meta) => {
           this.lastSyncedAt = meta.lastSyncedAt;
-          this.lastError = meta.lastError;
           this.updatePendingCount(userId);
           this.notify();
         });
@@ -491,9 +490,6 @@ class SyncEngine {
           this.lastSyncedAt = Date.now();
           this.lastError = null;
           await setSyncMeta(userId, { lastSyncedAt: this.lastSyncedAt, lastError: null });
-        } else if (!this.lastError) {
-          this.lastError = 'Some server data could not be refreshed; showing the saved local copy.';
-          await setSyncMeta(userId, { lastError: this.lastError });
         }
       }
     } catch (err) {
@@ -591,24 +587,38 @@ class SyncEngine {
    * Reconciles server state into local IndexedDB cache:
    * - Pulls server transactions, balances, and categories.
    * - Preserves pending local mutations so un-synced local edits are not overwritten.
+   * - Identifies specific failing resources instead of returning generic errors.
    */
   private async reconcileServerState(userId: string): Promise<boolean> {
-    const [serverBalances, serverCategories] = await Promise.allSettled([
-      apiFetchBalances(), apiFetchCategories({ include_archived: true }),
-    ]);
-    let transactionsRefreshed = false;
-    if (serverBalances.status === 'fulfilled') {
+    const failedResources: string[] = [];
+
+    // 1. Refresh account balances
+    try {
+      const serverBalances = await apiFetchBalances();
       const pending = await getPendingMutations(userId);
-      const hasBalanceMutations = pending.some((m) => ['configure_starting_balances', 'create_transfer', 'create_adjustment'].includes(m.type));
+      const hasBalanceMutations = pending.some((m) =>
+        ['configure_starting_balances', 'create_transfer', 'create_adjustment'].includes(m.type)
+      );
       if (!hasBalanceMutations) {
-        await setCachedBalances(serverBalances.value, userId);
+        await setCachedBalances(serverBalances, userId);
         await setSyncMeta(userId, { balancesCachedAt: Date.now() });
       }
+    } catch (err) {
+      console.warn('[SyncEngine] Failed to refresh account balances:', err);
+      failedResources.push('Account balances');
     }
-    if (serverCategories.status === 'fulfilled') {
-      await setCachedCategories(serverCategories.value.categories, userId);
+
+    // 2. Refresh categories
+    try {
+      const serverCategories = await apiFetchCategories({ include_archived: true });
+      await setCachedCategories(serverCategories.categories, userId);
       await setSyncMeta(userId, { categoriesSnapshotComplete: true });
+    } catch (err) {
+      console.warn('[SyncEngine] Failed to refresh categories:', err);
+      failedResources.push('Categories');
     }
+
+    // 3. Refresh transactions
     try {
       const all: TransactionDTO[] = [];
       let page = 1;
@@ -622,11 +632,25 @@ class SyncEngine {
       }
       await replaceCachedTransactions(all, userId);
       await setSyncMeta(userId, { transactionsSnapshotComplete: true });
-      transactionsRefreshed = true;
-    } catch {
-      // A partial page sequence is not a complete snapshot; keep the existing cache intact.
+    } catch (err) {
+      console.warn('[SyncEngine] Failed to refresh transactions:', err);
+      failedResources.push('Transaction history');
     }
-    return transactionsRefreshed && serverBalances.status === 'fulfilled' && serverCategories.status === 'fulfilled';
+
+    if (failedResources.length === 0) {
+      this.lastError = null;
+      this.lastSyncedAt = Date.now();
+      await setSyncMeta(userId, {
+        lastSyncedAt: this.lastSyncedAt,
+        lastError: null,
+      });
+      return true;
+    }
+
+    const failedList = failedResources.join(' and ');
+    this.lastError = `${failedList} could not be refreshed; showing the saved local copy.`;
+    await setSyncMeta(userId, { lastError: this.lastError });
+    return false;
   }
 
   private async applyLocalTransactionBalanceDelta(

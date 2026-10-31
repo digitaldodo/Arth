@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 23 numbered migration files exist in sequential order', () => {
+  test('All 24 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -33,13 +33,26 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0020_supabase_cron_schedules.sql',
       '0021_dashboard_necessity_spending.sql',
       '0022_app_lock_webauthn.sql',
-      '0023_fix_profiles_balances_configured.sql'
+      '0023_fix_profiles_balances_configured.sql',
+      '0024_account_balances_rpc_hardening.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
   });
 
 
+  test('0024_account_balances_rpc_hardening.sql ensures fn_account_balances, execute grants, balance_movements, and schema reload', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0024_account_balances_rpc_hardening.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.balance_movements'), 'Must ensure balance_movements table exists');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Must enable RLS on balance_movements');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_account_balances()'), 'Must define fn_account_balances function');
+    assert.ok(sql.includes('SECURITY INVOKER'), 'Must execute with SECURITY INVOKER');
+    assert.ok(sql.includes('SET search_path = public, auth'), 'Must restrict search_path');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_account_balances() FROM PUBLIC;'), 'Must revoke from PUBLIC');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_account_balances() FROM anon;'), 'Must revoke from anon');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_account_balances() TO authenticated;'), 'Must grant execute to authenticated role');
+    assert.ok(sql.includes("NOTIFY pgrst, 'reload schema'"), 'Must notify PostgREST to reload schema cache');
+  });
   test('0023_fix_profiles_balances_configured.sql ensures starting balance columns and atomic RPC', () => {
     const sql = fs.readFileSync(path.join(migrationsDir, '0023_fix_profiles_balances_configured.sql'), 'utf-8');
     assert.ok(sql.includes('ALTER TABLE public.profiles'), 'Must alter public.profiles');

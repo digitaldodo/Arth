@@ -11,12 +11,18 @@ import { useCriticalOperation } from '@/features/pwa/critical-operation';
 interface BalanceCardProps {
   balances: AccountBalancesDTO | null;
   loading?: boolean;
+  error?: string | null;
+  isOffline?: boolean;
+  onRetry?: () => void;
   onBalancesUpdated: (updated: AccountBalancesDTO) => void;
 }
 
 export function BalanceCard({
   balances,
   loading = false,
+  error = null,
+  isOffline = false,
+  onRetry,
   onBalancesUpdated,
 }: BalanceCardProps) {
   const [isConfigureOpen, setIsConfigureOpen] = useState(false);
@@ -36,17 +42,30 @@ export function BalanceCard({
               <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-[var(--text-secondary)]">
                 Total Available Balance
               </span>
-              {!isConfigured && !loading && (
+              {!isConfigured && !loading && !error && (
                 <Badge variant="warning" size="xs">
                   Not Configured
+                </Badge>
+              )}
+              {error && !balances && (
+                <Badge variant="error" size="xs">
+                  Unavailable
                 </Badge>
               )}
             </div>
             <div className="text-2xl sm:text-3xl lg:text-4xl font-mono font-bold tracking-tight text-[var(--text-primary)]">
               {loading && !balances ? (
                 <div className="h-9 w-44 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
+              ) : balances ? (
+                balances.formatted_total_available
+              ) : error ? (
+                <span className="text-base sm:text-lg font-sans font-medium text-rose-700 dark:text-rose-400">
+                  Calculation error
+                </span>
+              ) : isOffline ? (
+                'Unavailable offline'
               ) : (
-                balances?.formatted_total_available || 'Unavailable offline'
+                '—'
               )}
             </div>
           </div>
@@ -55,16 +74,20 @@ export function BalanceCard({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
+              disabled={!balances || loading}
               onClick={() => setIsTransferOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+              title={!balances ? 'Balances unavailable' : undefined}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⇄</span>
               <span>Transfer</span>
             </button>
             <button
               type="button"
+              disabled={!balances || loading}
               onClick={() => setIsAdjustOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+              title={!balances ? 'Balances unavailable' : undefined}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⚙</span>
               <span>Adjust</span>
@@ -78,6 +101,28 @@ export function BalanceCard({
             </button>
           </div>
         </div>
+
+        {/* Balance-specific error notice */}
+        {error && !balances && (
+          <div
+            role="alert"
+            className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg text-xs text-rose-800 dark:text-rose-300 flex items-center justify-between gap-3"
+          >
+            <div className="space-y-0.5">
+              <span className="font-semibold block">Failed to calculate account balances</span>
+              <span className="text-[11px] opacity-90">{error}</span>
+            </div>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="px-2.5 py-1 text-xs font-semibold bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors shrink-0 cursor-pointer"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Breakdown: Cash vs Online Balances */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--border-hairline)]">
@@ -127,7 +172,7 @@ export function BalanceCard({
         </div>
 
         {/* Setup Prompt Banner if unconfigured */}
-        {!isConfigured && !loading && (
+        {!isConfigured && !loading && !error && (
           <div className="p-4 bg-[var(--status-warning-bg)] border border-[var(--status-warning-border)] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-2xs">
             <div className="space-y-1">
               <span className="font-semibold text-[var(--text-primary)] block text-xs">
