@@ -18,12 +18,14 @@ import {
   recordSettlement,
 } from '@/lib/api-client';
 import { getTodayIST, formatPaiseToINR } from '@/lib/format';
+import { getCachedPeople, setCachedPeople, getCachedPersonDetail, setCachedPersonDetail } from '@/lib/offline-db';
 
 interface PeoplePageProps {
+  userId: string;
   onRefreshShell?: () => void;
 }
 
-export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
+export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
   const [people, setPeople] = useState<PersonDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -83,6 +85,10 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
   useEffect(() => {
     let isMounted = true;
 
+    void getCachedPeople(userId).then((cached) => {
+      if (isMounted && cached.length) { setPeople(cached); setIsLoading(false); }
+    });
+
     fetchPeople({
       include_archived: showArchived,
       direction: directionFilter === 'all' ? undefined : directionFilter,
@@ -90,19 +96,23 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
       .then((res) => {
         if (!isMounted) return;
         setPeople(res.people || []);
+        void setCachedPeople(userId, res.people || []);
         setIsLoading(false);
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : 'Failed to load people';
-        setErrorMessage(msg);
+        void getCachedPeople(userId).then((cached) => {
+          if (!isMounted || cached.length) return;
+          setErrorMessage(`${msg}. No saved offline copy is available.`);
+        });
         setIsLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [directionFilter, showArchived, loadTrigger]);
+  }, [directionFilter, showArchived, loadTrigger, userId]);
 
   // Load single person details when selected
   useEffect(() => {
@@ -110,23 +120,30 @@ export function PeoplePage({ onRefreshShell }: PeoplePageProps) {
 
     let isMounted = true;
 
+    void getCachedPersonDetail(userId, selectedPersonId).then((cached) => {
+      if (isMounted && cached) { setPersonDetail(cached); setIsDetailLoading(false); }
+    });
     fetchPersonDetail(selectedPersonId)
       .then((res) => {
         if (!isMounted) return;
         setPersonDetail(res.person);
+        void setCachedPersonDetail(userId, selectedPersonId, res.person);
         setIsDetailLoading(false);
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : 'Failed to load person details';
-        setErrorMessage(msg);
+        void getCachedPersonDetail(userId, selectedPersonId).then((cached) => {
+          if (!isMounted || cached) return;
+          setErrorMessage(`${msg}. No saved offline copy is available.`);
+        });
         setIsDetailLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedPersonId, loadTrigger]);
+  }, [selectedPersonId, loadTrigger, userId]);
 
   const showNotification = (msg: string) => {
     setSuccessBanner(msg);

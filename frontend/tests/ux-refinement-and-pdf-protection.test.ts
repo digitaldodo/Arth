@@ -104,25 +104,15 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       );
     });
 
-    test('DashboardPage offline cached banner eliminates low-contrast amber-200 text in light mode', () => {
+    test('DashboardPage uses local ledger data without a misleading server error banner', () => {
       const dashboardPath = path.resolve(
         __dirname,
         '../src/features/dashboard/DashboardPage.tsx'
       );
       const content = fs.readFileSync(dashboardPath, 'utf8');
 
-      assert.ok(
-        content.includes('text-amber-900 dark:text-amber-200'),
-        'Offline banner must use text-amber-900 in light mode and dark:text-amber-200'
-      );
-      assert.ok(
-        content.includes('bg-amber-50 dark:bg-amber-950/30'),
-        'Offline banner must use bg-amber-50 in light mode'
-      );
-      assert.ok(
-        content.includes('text-amber-800 dark:text-amber-300'),
-        'Retry button must use text-amber-800 in light mode'
-      );
+      assert.ok(content.includes('getCachedTransactions(userId)'));
+      assert.doesNotMatch(content, /Unable to refresh from server/);
     });
   });
 

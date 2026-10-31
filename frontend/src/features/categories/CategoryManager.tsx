@@ -14,11 +14,12 @@ import {
 } from '@/lib/api-client';
 import {
   PRESET_CATEGORY_ICONS,
-  getDefaultCategoryIcon,
   resolveCategoryIcon,
 } from './category-icons';
+import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 
 interface CategoryManagerProps {
+  userId: string;
   onCategoryChange?: () => void;
 }
 
@@ -33,7 +34,7 @@ const PRESET_COLORS = [
   '#64748B', // Slate
 ];
 
-export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
+export function CategoryManager({ userId, onCategoryChange }: CategoryManagerProps) {
   const [activeTab, setActiveTab] = useState<TransactionType>('expense');
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [archivedCategories, setArchivedCategories] = useState<CategoryDTO[]>([]);
@@ -70,11 +71,18 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
 
   useEffect(() => {
     let isMounted = true;
-
+    void getCachedCategories(userId).then((cached) => {
+      if (!isMounted || !cached.length) return;
+      const matching = cached.filter((category) => category.type === activeTab);
+      setCategories(matching.filter((c) => !c.archived_at));
+      setArchivedCategories(matching.filter((c) => !!c.archived_at));
+      setIsLoading(false);
+    });
     fetchCategories({ type: activeTab, include_archived: true })
       .then((res) => {
         if (!isMounted) return;
         const all = res.categories || [];
+        void setCachedCategories(all, userId);
         setCategories(all.filter((c) => !c.archived_at));
         setArchivedCategories(all.filter((c) => !!c.archived_at));
         setIsLoading(false);
@@ -82,14 +90,17 @@ export function CategoryManager({ onCategoryChange }: CategoryManagerProps) {
       .catch((err: unknown) => {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : 'Failed to load categories';
-        setErrorMessage(msg);
+        void getCachedCategories(userId).then((cached) => {
+          if (!isMounted || cached.length) return;
+          setErrorMessage(`${msg}. No saved offline copy is available.`);
+        });
         setIsLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [activeTab, loadTrigger]);
+  }, [activeTab, loadTrigger, userId]);
 
   const showNotification = (msg: string) => {
     setSuccessBanner(msg);

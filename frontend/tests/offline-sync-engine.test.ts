@@ -15,12 +15,12 @@ describe('Arth Offline-First Functionality & Durable Sync Engine', () => {
   const installCardPath = path.join(projectRoot, 'src', 'features', 'pwa', 'InstallPromptCard.tsx');
 
   describe('1. IndexedDB User Isolation & Schema Version 3', () => {
-    test('offline-db.ts defines DB_VERSION 3 and creates stores with user_id indexes', () => {
+    test('offline-db.ts defines DB_VERSION 5 and creates stores with user_id indexes', () => {
       assert.ok(fs.existsSync(offlineDbPath), 'offline-db.ts must exist');
       const content = fs.readFileSync(offlineDbPath, 'utf8');
 
       // Schema version check
-      assert.match(content, /const DB_VERSION = 3;/, 'offline-db must be version 3');
+      assert.match(content, /const DB_VERSION = 5;/, 'offline-db must include snapshot coverage metadata and people stores');
 
       // Stores check
       assert.ok(content.includes("'transactions'"), 'Must contain transactions store');

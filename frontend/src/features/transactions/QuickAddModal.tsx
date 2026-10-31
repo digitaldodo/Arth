@@ -11,9 +11,8 @@ import {
   type CreateTransactionResponse,
   type UpdateTransactionResponse,
   parseINRToPaise,
-  formatPaiseToINR,
 } from '@arth/contracts';
-import { createTransaction, updateTransaction, fetchCategories } from '@/lib/api-client';
+import { fetchCategories } from '@/lib/api-client';
 import { getTodayIST, formatDateHuman } from '@/lib/format';
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
@@ -142,36 +141,28 @@ export function QuickAddModal({
       if (isMounted) setCategoriesLoading(true);
     }, 0);
 
+    const applyCategories = (cats: CategoryDTO[]) => {
+        setCategories(cats);
+        setCategoryId((prev) => {
+          if (prev && cats.some((c) => c.id === prev)) return prev;
+          if (editingTransaction?.type === type && cats.some((c) => c.id === editingTransaction.category_id)) return editingTransaction.category_id;
+          const saved = typeof window !== 'undefined' ? localStorage.getItem(`arth_last_category_${type}`) : null;
+          return saved && cats.some((c) => c.id === saved) ? saved : (cats[0]?.id || '');
+        });
+        setCategoriesLoading(false);
+    };
+    if (userId) void getCachedCategories(userId).then((cached) => {
+      if (isMounted && cached.length) applyCategories(cached.filter((category) => category.type === type));
+    });
     fetchCategories({ type })
       .then((res) => {
         if (!isMounted) return;
         const cats = res.categories || [];
-        setCategories(cats);
-
-        setCategoryId((prev) => {
-          if (prev && cats.some((c) => c.id === prev)) {
-            return prev;
-          }
-          if (
-            editingTransaction &&
-            editingTransaction.type === type &&
-            cats.some((c) => c.id === editingTransaction.category_id)
-          ) {
-            return editingTransaction.category_id;
-          }
-          if (typeof window !== 'undefined') {
-            const savedCat = localStorage.getItem(`arth_last_category_${type}`);
-            if (savedCat && cats.some((c) => c.id === savedCat)) {
-              return savedCat;
-            }
-          }
-          return cats.length > 0 ? cats[0].id : '';
-        });
-        setCategoriesLoading(false);
+        applyCategories(cats);
+        if (userId) void setCachedCategories(cats, userId);
       })
       .catch(() => {
         if (isMounted) {
-          setCategories([]);
           setCategoriesLoading(false);
         }
       });
@@ -180,7 +171,7 @@ export function QuickAddModal({
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isOpen, type, categoryVersion, editingTransaction]);
+  }, [isOpen, type, categoryVersion, editingTransaction, userId]);
 
   // Handle Escape key to close modal
   useEffect(() => {

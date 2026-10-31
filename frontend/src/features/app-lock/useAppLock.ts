@@ -10,10 +10,6 @@ import {
   type AutoLockTimeout,
 } from './storage';
 import {
-  derivePasscodeHash,
-  verifyPasscode,
-} from './passcode-crypto';
-import {
   canUsePlatformAuthenticator,
   registerPlatformCredential,
   verifyPlatformCredential,
@@ -172,76 +168,7 @@ export function useAppLock(userId: string) {
     };
   }, [isReady, isLocked, lockNow, preferences?.enabled, preferences?.autoLockTimeout, preferences?.lockOnBackground]);
 
-  // 1. Set / Configure Passcode (Works 100% Offline)
-  const setPasscode = useCallback(
-    async (passcode: string) => {
-      if (passcode.length < 4) {
-        throw new Error('App passcode must be at least 4 digits or characters.');
-      }
-      const current = preferencesRef.current || newAppLockPreferences();
-      const { saltHex, hashHex } = await derivePasscodeHash(passcode);
-
-      const updated: AppLockPreferences = {
-        ...current,
-        enabled: true,
-        configured: true,
-        passcodeSalt: saltHex,
-        passcodeHash: hashHex,
-      };
-
-      updatePreferences(updated);
-      setIsLocked(false);
-      try {
-        channelRef.current?.postMessage({ type: 'ENABLED' });
-      } catch {
-        /* best effort */
-      }
-    },
-    [updatePreferences]
-  );
-
-  // 2. Change Passcode (Requires current passcode)
-  const changePasscode = useCallback(
-    async (currentPasscode: string, newPasscode: string) => {
-      const current = preferencesRef.current;
-      if (!current?.passcodeHash || !current?.passcodeSalt) {
-        throw new Error('No existing passcode configured on this device.');
-      }
-      const isValid = await verifyPasscode(
-        currentPasscode,
-        current.passcodeSalt,
-        current.passcodeHash
-      );
-      if (!isValid) {
-        throw new Error('Incorrect current passcode. Please try again.');
-      }
-      await setPasscode(newPasscode);
-    },
-    [setPasscode]
-  );
-
-  // 3. Verify Passcode for Unlock (100% Offline)
-  const verifyPasscodeUnlock = useCallback(
-    async (enteredPasscode: string): Promise<boolean> => {
-      const current = preferencesRef.current;
-      if (!current?.passcodeHash || !current?.passcodeSalt) {
-        throw new Error('No passcode configured on this device.');
-      }
-      const isValid = await verifyPasscode(
-        enteredPasscode,
-        current.passcodeSalt,
-        current.passcodeHash
-      );
-      if (isValid) {
-        setIsLocked(false);
-        return true;
-      }
-      return false;
-    },
-    []
-  );
-
-  // 4. Update Auto-Lock Settings
+  // Update auto-lock settings.
   const updateAutoLockSettings = useCallback(
     (timeout: AutoLockTimeout, lockOnBackground: boolean) => {
       const current = preferencesRef.current || newAppLockPreferences();
@@ -262,13 +189,15 @@ export function useAppLock(userId: string) {
       const updated: AppLockPreferences = {
         ...current,
         biometricsEnabled: enabled,
+        configured: enabled,
+        enabled,
       };
       updatePreferences(updated);
     },
     [updatePreferences]
   );
 
-  // 6. Disable App Lock after authentication
+  // Disable biometric lock from the authenticated settings screen.
   const disableAfterVerification = useCallback(() => {
     const current = preferencesRef.current;
     if (!current) return;
@@ -285,15 +214,13 @@ export function useAppLock(userId: string) {
     }
   }, [updatePreferences]);
 
-  // 7. Reset / Recover App Lock (After reauthentication)
+  // Reset / recover app lock after account authentication.
   const resetAppLock = useCallback(() => {
     const current = preferencesRef.current || newAppLockPreferences();
     const updated: AppLockPreferences = {
       ...current,
       enabled: false,
       configured: false,
-      passcodeSalt: undefined,
-      passcodeHash: undefined,
       biometricsEnabled: false,
     };
     updatePreferences(updated);
@@ -344,16 +271,12 @@ export function useAppLock(userId: string) {
     isLocked,
     isEnabled: preferences?.enabled ?? false,
     isConfigured: preferences?.configured ?? false,
-    hasLocalPasscode: Boolean(preferences?.passcodeHash),
     autoLockTimeout: preferences?.autoLockTimeout ?? '5m',
     lockOnBackground: preferences?.lockOnBackground !== false,
     biometricsEnabled: preferences?.biometricsEnabled === true,
     deviceId: preferences?.deviceId ?? '',
     supportsPlatformAuth,
     isCheckingPlatformAuth,
-    setPasscode,
-    changePasscode,
-    verifyPasscodeUnlock,
     updateAutoLockSettings,
     updateBiometricsEnabled,
     registerDevice,

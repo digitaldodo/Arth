@@ -7,8 +7,6 @@ export interface AppLockPreferences {
   deviceId: string;
   enabled: boolean;
   configured: boolean;
-  passcodeSalt?: string;
-  passcodeHash?: string;
   autoLockTimeout?: AutoLockTimeout;
   lockOnBackground?: boolean;
   biometricsEnabled?: boolean;
@@ -71,16 +69,18 @@ export function readAppLockPreferences(userId: string): AppLockPreferences {
         ? value.autoLockTimeout
         : '5m';
 
-    return {
+    const migrated: AppLockPreferences = {
       deviceId,
-      enabled: value.enabled === true,
-      configured: value.configured === true || Boolean(value.passcodeHash),
-      passcodeSalt: typeof value.passcodeSalt === 'string' ? value.passcodeSalt : undefined,
-      passcodeHash: typeof value.passcodeHash === 'string' ? value.passcodeHash : undefined,
+      enabled: value.enabled === true && value.biometricsEnabled === true,
+      configured: value.configured === true && value.biometricsEnabled === true,
       autoLockTimeout: timeout,
       lockOnBackground: value.lockOnBackground !== false,
       biometricsEnabled: value.biometricsEnabled === true,
     };
+    // Drop obsolete locally stored passcode hashes and salts during migration.
+    localStorage.setItem(storageKey(userId), JSON.stringify(migrated));
+    localStorage.removeItem(legacyStorageKey(userId));
+    return migrated;
   } catch {
     return fallback;
   }

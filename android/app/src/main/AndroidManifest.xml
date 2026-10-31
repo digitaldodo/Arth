@@ -26,7 +26,7 @@
             android:value="@string/assetStatements" />
 
         <activity
-            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:name=".BiometricGateActivity"
             android:label="@string/appName"
             android:exported="true"
             android:launchMode="singleTask">
@@ -59,6 +59,16 @@
                     android:host="arth-9h3f.vercel.app"
                     android:pathPrefix="/" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:exported="false"
+            android:label="@string/appName"
+            android:launchMode="singleTask">
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="@string/defaultUrl" />
+            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/colorPrimary" />
+            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/colorPrimary" />
         </activity>
 
         <activity android:name=".DetectionActivity" android:exported="true" android:label="@string/appName" android:theme="@style/Theme.ArthCompanion">

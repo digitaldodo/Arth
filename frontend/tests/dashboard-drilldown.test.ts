@@ -84,9 +84,9 @@ describe('dashboard spending drill-down', () => {
     assert.match(dashboard, /startDate: dateRange\.start_date/);
     assert.match(dashboard, /endDate: dateRange\.end_date/);
     assert.match(shell, /setLedgerInitialFilter\(filter\)/);
-    assert.match(ledger, /category_id: selectedCategory === 'all' \? undefined : selectedCategory/);
-    assert.match(ledger, /selectedType !== 'income' && selectedNecessity !== 'all' \? selectedNecessity : undefined/);
-    assert.match(ledger, /fetchTransactions\(queryParams\)/);
+    assert.match(ledger, /selectedCategory === 'all' \|\| t\.category_id === selectedCategory/);
+    assert.match(ledger, /selectedType === 'income' \|\| selectedNecessity === 'all' \|\| t\.necessity === selectedNecessity/);
+    assert.match(ledger, /getCachedTransactions\(userId\)/);
     assert.match(transactionService, /getScopedClient\(token\)/);
     assert.match(transactionService, /\.from\('transactions'\)/);
   });

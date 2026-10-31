@@ -46,7 +46,7 @@ export function BalanceCard({
               {loading && !balances ? (
                 <div className="h-9 w-44 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
               ) : (
-                balances?.formatted_total_available || '₹0.00'
+                balances?.formatted_total_available || 'Unavailable offline'
               )}
             </div>
           </div>
@@ -98,7 +98,7 @@ export function BalanceCard({
               {loading && !balances ? (
                 <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
               ) : (
-                balances?.formatted_current_cash || '₹0.00'
+                balances?.formatted_current_cash || '—'
               )}
             </div>
           </div>
@@ -120,7 +120,7 @@ export function BalanceCard({
               {loading && !balances ? (
                 <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
               ) : (
-                balances?.formatted_current_online || '₹0.00'
+                balances?.formatted_current_online || '—'
               )}
             </div>
           </div>

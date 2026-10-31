@@ -98,8 +98,8 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
       );
       const content = fs.readFileSync(dashboardPath, 'utf8');
       assert.ok(content.includes('<BalanceCard'), 'DashboardPage must render BalanceCard');
-      assert.ok(content.includes('fetchBalances'), 'DashboardPage must fetch balances');
       assert.ok(content.includes('getCachedBalances'), 'DashboardPage must load cached balances');
+      assert.ok(content.includes('getCachedTransactions'), 'DashboardPage must derive summaries from the local ledger');
     });
 
     test('ConfigureStartingBalancesModal supports setting and updating starting cash and online funds', () => {
@@ -257,19 +257,18 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
         content.includes('Sync now'),
         'Must provide manual Sync now button'
       );
-      assert.ok(
-        content.includes('getPendingMutations'),
-        'Must read pending mutations from IndexedDB'
-      );
+      assert.ok(content.includes('syncEngine.subscribe'), 'Must use centralized sync engine state');
     });
 
-    test('Service worker sw.js precaches App Shell and isolates authenticated APIs', () => {
+    test('Service worker caches public assets and isolates authenticated APIs', () => {
       const swPath = path.join(projectRoot, 'public', 'sw.js');
       assert.ok(fs.existsSync(swPath));
       const content = fs.readFileSync(swPath, 'utf8');
       assert.ok(content.includes('arth-shell-v1'));
       assert.ok(content.includes('/manifest.webmanifest'));
       assert.ok(content.includes("url.pathname.startsWith('/api/')"));
+      assert.ok(content.includes('isPublicResponse'));
+      assert.ok(!content.includes("caches.match('/')"));
     });
   });
 

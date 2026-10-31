@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   type NecessityClass,
   type DashboardDateRangePreset,
@@ -8,13 +8,7 @@ import {
   type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
-import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
-import {
-  getCachedBalances,
-  setCachedBalances,
-  getCachedDashboardSummary,
-  setCachedDashboardSummary,
-} from '@/lib/offline-db';
+import { getCachedBalances, getCachedTransactions, getCachedCategories, getSyncMeta, setCachedBalances } from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
@@ -24,8 +18,10 @@ import { RecentActivity } from './RecentActivity';
 import { DashboardSkeleton } from './DashboardSkeleton';
 import { getLatestRecentTransactions } from './recent-transactions';
 import { formatDateHuman } from '@/lib/format';
+import { formatPaiseToINR } from '@/lib/format';
 
 interface DashboardPageProps {
+  userId: string;
   onOpenQuickAdd: () => void;
   onNavigateToLedger: () => void;
   onOpenFilteredLedger: (filter: {
@@ -48,6 +44,7 @@ interface DashboardError {
 }
 
 export function DashboardPage({
+  userId,
   onOpenQuickAdd,
   onNavigateToLedger,
   onOpenFilteredLedger,
@@ -63,138 +60,65 @@ export function DashboardPage({
 
   const [balances, setBalances] = useState<AccountBalancesDTO | null>(initialBalances);
   const [balancesLoading, setBalancesLoading] = useState(!initialBalances);
-  const rangeKey = `${dateRange.start_date}_${dateRange.end_date}`;
 
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<DashboardError | null>(null);
   const [expandedList, setExpandedList] = useState<'categories' | 'transactions' | null>(null);
+  const [offlineCopyUnavailable, setOfflineCopyUnavailable] = useState(false);
 
-  const summarySeqRef = useRef<number>(0);
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch balances (cached + revalidated)
+  // Use the same user-scoped local records as the ledger. The sync engine refreshes in the background.
   useEffect(() => {
     let isMounted = true;
-
-    if (!initialBalances) {
-      getCachedBalances()
-        .then((cached) => {
-          if (cached && isMounted) {
-            setBalances(cached);
-            setBalancesLoading(false);
-          }
-        })
-        .catch(() => {});
-    }
-
-    fetchBalances()
-      .then((data) => {
+    Promise.all([getCachedTransactions(userId), getCachedCategories(userId), initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId), getSyncMeta(userId)])
+      .then(([transactions, categories, cachedBalances, syncMeta]) => {
         if (!isMounted) return;
-        setBalances(data);
-        setBalancesLoading(false);
-        setCachedBalances(data);
-        onBalancesLoaded?.(data);
-      })
-      .catch(() => {
-        if (isMounted) setBalancesLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [refreshTrigger, initialBalances, onBalancesLoaded]);
-
-  // Fetch dashboard summary (cached + revalidated with sequence tracking & debounced refresh indicator)
-  useEffect(() => {
-    let isMounted = true;
-    summarySeqRef.current += 1;
-    const currentSeq = summarySeqRef.current;
-
-    // Trigger subtle refreshing indicator after 90ms if request is still pending
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
-      if (summarySeqRef.current === currentSeq) {
-        setIsRefreshing(true);
-      }
-    }, 90);
-
-    // Check local cache first for instant render
-    getCachedDashboardSummary(rangeKey)
-      .then((cached) => {
-        if (cached && isMounted && summarySeqRef.current === currentSeq) {
-          setSummary(cached);
-          setLoading(false);
+        if (!transactions.length && !syncMeta.transactionsSnapshotComplete) {
+          setSummary(null);
+          setOfflineCopyUnavailable(typeof navigator !== 'undefined' && !navigator.onLine);
+          setLoading(false); setBalancesLoading(false); onInitialReady?.();
+          return;
         }
-      })
-      .catch(() => {});
-
-    fetchDashboardSummary(dateRange)
-      .then((data) => {
-        if (!isMounted || summarySeqRef.current !== currentSeq) return;
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        setSummary(data);
-        setError(null);
-        setLoading(false);
-        setIsRefreshing(false);
-        setCachedDashboardSummary(rangeKey, data).catch(() => {});
-        onInitialReady?.();
-      })
-      .catch((err: unknown) => {
-        if (!isMounted || summarySeqRef.current !== currentSeq) return;
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        setIsRefreshing(false);
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'Failed to load dashboard summary';
-        const statusCode = (err as { statusCode?: number })?.statusCode;
-        setError({ message, statusCode });
-        setLoading(false);
-        onInitialReady?.(message);
-      });
+        setOfflineCopyUnavailable(false);
+        const inRange = transactions.filter((t) => t.transaction_date >= dateRange.start_date && t.transaction_date <= dateRange.end_date);
+        const expenses = inRange.filter((t) => t.type === 'expense');
+        const incomes = inRange.filter((t) => t.type === 'income');
+        const expenseTotal = expenses.reduce((sum, t) => sum + t.amount_paise, 0);
+        const incomeTotal = incomes.reduce((sum, t) => sum + t.amount_paise, 0);
+        const composition = new Map<string, number>();
+        const necessity = new Map<string, number>();
+        for (const t of expenses) {
+          composition.set(t.category_id, (composition.get(t.category_id) || 0) + t.amount_paise);
+          if (t.necessity) necessity.set(t.necessity, (necessity.get(t.necessity) || 0) + t.amount_paise);
+        }
+        setSummary({
+          start_date: dateRange.start_date, end_date: dateRange.end_date,
+          income_paise: incomeTotal, expenses_paise: expenseTotal, net_cash_flow_paise: incomeTotal - expenseTotal,
+          formatted_income: formatPaiseToINR(incomeTotal), formatted_expenses: formatPaiseToINR(expenseTotal), formatted_net_cash_flow: formatPaiseToINR(incomeTotal - expenseTotal),
+          spending_composition: [...composition].map(([id, amount]) => {
+            const category = categories.find((item) => item.id === id);
+            return { category_id: id, category_name: category?.name || expenses.find((t) => t.category_id === id)?.category_name || 'Uncategorized', category_color: category?.color || null, category_icon: category?.icon || null, amount_paise: amount, formatted_inr: formatPaiseToINR(amount), share_percentage: expenseTotal ? Math.round(amount / expenseTotal * 1000) / 10 : 0 };
+          }).sort((a, b) => b.amount_paise - a.amount_paise),
+          spending_by_necessity: (['essential', 'optional', 'luxury'] as const).map((tier) => { const amount = necessity.get(tier) || 0; return { necessity: tier, label: tier[0].toUpperCase() + tier.slice(1), amount_paise: amount, formatted_inr: formatPaiseToINR(amount), share_percentage: expenseTotal ? Math.round(amount / expenseTotal * 1000) / 10 : 0 }; }),
+          recent_transactions: getLatestRecentTransactions(inRange, 10), has_activity_in_range: inRange.length > 0, total_active_transaction_count: inRange.length,
+        });
+        setLoading(false); setIsRefreshing(false); setError(null);
+        if (cachedBalances) { setBalances(cachedBalances); onBalancesLoaded?.(cachedBalances); }
+        setBalancesLoading(false); onInitialReady?.();
+      }).catch(() => { if (isMounted) { setLoading(false); setBalancesLoading(false); } });
 
     return () => {
       isMounted = false;
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
     };
-  }, [dateRange, refreshTrigger, onInitialReady, rangeKey]);
+  }, [userId, dateRange, refreshTrigger, initialBalances, onBalancesLoaded, onInitialReady]);
 
   const handleRetry = () => {
     setLoading(true);
     setError(null);
     setBalancesLoading(true);
-
-    fetchBalances()
-      .then((b) => {
-        setBalances(b);
-        setBalancesLoading(false);
-        setCachedBalances(b);
-      })
-      .catch(() => setBalancesLoading(false));
-
-    fetchDashboardSummary(dateRange)
-      .then((data) => {
-        setSummary(data);
-        setError(null);
-        setLoading(false);
-        setIsRefreshing(false);
-        onInitialReady?.();
-      })
-      .catch((err: unknown) => {
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'Failed to load dashboard summary';
-        const statusCode = (err as { statusCode?: number })?.statusCode;
-        setError({ message, statusCode });
-        setLoading(false);
-        setIsRefreshing(false);
-        onInitialReady?.(message);
-      });
+    setDateRange({ ...dateRange });
   };
 
   const handleSelectPreset = (newPreset: DashboardDateRangePreset) => {
@@ -245,7 +169,7 @@ export function DashboardPage({
         loading={balancesLoading}
         onBalancesUpdated={(updated) => {
           setBalances(updated);
-          setCachedBalances(updated);
+          if (userId) void setCachedBalances(updated, userId);
         }}
       />
 
@@ -316,67 +240,15 @@ export function DashboardPage({
         </div>
       )}
 
-      {/* Non-blocking Offline Banner when cached data is displayed */}
-      {error && !isAuthError && summary && (
-        <div className="flex items-center justify-between p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-900 dark:text-amber-200">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-400 shrink-0" />
-            <span className="font-medium">
-              Showing cached ledger data. Unable to refresh from server ({error.message}).
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleRetry}
-            className="text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline ml-3 shrink-0 cursor-pointer"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Backend / Gateway Error State (when NO summary is available) */}
-      {error && !isAuthError && !summary && (
-        <div className="p-5 sm:p-6 bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-xl space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-              <span className="text-[10px] font-mono font-semibold text-rose-800 dark:text-rose-200 uppercase tracking-wider">
-                Service Error
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="text-xs font-semibold text-rose-700 dark:text-rose-400 underline hover:no-underline"
-            >
-              Retry
-            </button>
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-rose-900 dark:text-rose-100">
-              Failed to load financial summary
-            </h3>
-            <p className="text-xs text-rose-700 dark:text-rose-300 max-w-lg leading-relaxed">
-              {error.message}
-            </p>
-          </div>
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="inline-flex items-center px-3.5 py-1.5 text-xs font-semibold bg-rose-700 text-white rounded-md hover:bg-rose-800 transition-colors shadow-xs"
-            >
-              Retry Request
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Loading Skeleton (Only shown when no cached or existing summary data is available) */}
       {loading && !summary && <DashboardSkeleton />}
 
       {/* Populated Content with smooth transition */}
+      {offlineCopyUnavailable && !summary && (
+        <div role="status" className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 text-sm text-[var(--text-secondary)]">
+          No offline copy of this account’s dashboard has been downloaded on this device yet. Reconnect to synchronize your data.
+        </div>
+      )}
       {summary && (
         <div
           className={`space-y-6 transition-opacity duration-150 ${

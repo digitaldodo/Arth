@@ -20,16 +20,15 @@ import {
   removePendingMutation,
   updatePendingMutation,
   saveCachedTransaction,
-  getCachedTransactions,
   getCachedTransactionById,
   markCachedTransactionDeleted,
   deleteCachedTransactionPermanently,
   getCachedBalances,
   setCachedBalances,
-  getCachedCategories,
   setCachedCategories,
   getSyncMeta,
   setSyncMeta,
+  replaceCachedTransactions,
   type PendingMutation,
   type OfflineTransactionDTO,
 } from '../../lib/offline-db';
@@ -94,14 +93,19 @@ class SyncEngine {
   public setUserId(userId: string | null) {
     if (this.currentUserId !== userId) {
       this.currentUserId = userId;
+      this.currentPendingCount = 0;
+      this.lastSyncedAt = null;
+      this.lastError = null;
       if (userId) {
         // Load initial sync metadata
         void getSyncMeta(userId).then((meta) => {
           this.lastSyncedAt = meta.lastSyncedAt;
           this.lastError = meta.lastError;
           this.updatePendingCount(userId);
+          this.notify();
         });
       }
+      this.notify();
     }
   }
 
@@ -257,7 +261,9 @@ class SyncEngine {
       sync_status: 'pending',
     };
 
+    await this.reverseLocalTransactionBalanceDelta(existing, userId);
     await saveCachedTransaction(updatedTxn, userId, 'pending');
+    await this.applyLocalTransactionBalanceDelta(updatedTxn, userId);
 
     await enqueuePendingMutation({
       id: uuidv7(),
@@ -437,12 +443,14 @@ class SyncEngine {
               lastAttemptAt: Date.now(),
               lastError: 'Network disconnected during synchronization',
             });
+            this.lastError = 'Network disconnected during synchronization';
             break;
           }
 
           // Unrecoverable validation error (400, 422) or client error
           const statusCode = (itemErr as { statusCode?: number })?.statusCode;
           if (statusCode === 400 || statusCode === 422) {
+            this.lastError = itemErr instanceof Error ? itemErr.message : 'Server rejected mutation';
             await updatePendingMutation(mutation.id, {
               status: 'failed',
               attempts: mutation.attempts + 1,
@@ -450,6 +458,7 @@ class SyncEngine {
               lastError: itemErr instanceof Error ? itemErr.message : 'Server rejected mutation',
             });
           } else {
+            this.lastError = itemErr instanceof Error ? itemErr.message : 'Sync temporary failure';
             // Temporary server error (500, 503) — increment attempt and back off
             await updatePendingMutation(mutation.id, {
               attempts: mutation.attempts + 1,
@@ -465,10 +474,16 @@ class SyncEngine {
       this.currentPendingCount = remaining.length;
 
       // Reconcile with server if queue is empty or online
-      if (navigator.onLine) {
-        await this.reconcileServerState(userId);
-        this.lastSyncedAt = Date.now();
-        await setSyncMeta(userId, { lastSyncedAt: this.lastSyncedAt, lastError: null });
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const refreshed = await this.reconcileServerState(userId);
+        if (refreshed) {
+          this.lastSyncedAt = Date.now();
+          this.lastError = null;
+          await setSyncMeta(userId, { lastSyncedAt: this.lastSyncedAt, lastError: null });
+        } else if (!this.lastError) {
+          this.lastError = 'Some server data could not be refreshed; showing the saved local copy.';
+          await setSyncMeta(userId, { lastError: this.lastError });
+        }
       }
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : 'Synchronization failed';
@@ -515,7 +530,7 @@ class SyncEngine {
           const statusCode = (err as { statusCode?: number })?.statusCode;
           if (statusCode === 404) {
             // Transaction was deleted on server — remove from local cache
-            await deleteCachedTransactionPermanently(id);
+            await deleteCachedTransactionPermanently(id, userId);
             return;
           }
           throw err;
@@ -527,12 +542,12 @@ class SyncEngine {
         const { id } = mutation.payload as { id: string };
         try {
           await apiDeleteTransaction(id);
-          await deleteCachedTransactionPermanently(id);
+          await deleteCachedTransactionPermanently(id, userId);
         } catch (err: unknown) {
           const statusCode = (err as { statusCode?: number })?.statusCode;
           if (statusCode === 404) {
             // Already deleted on server
-            await deleteCachedTransactionPermanently(id);
+            await deleteCachedTransactionPermanently(id, userId);
             return;
           }
           throw err;
@@ -566,75 +581,41 @@ class SyncEngine {
    * - Pulls server transactions, balances, and categories.
    * - Preserves pending local mutations so un-synced local edits are not overwritten.
    */
-  private async reconcileServerState(userId: string): Promise<void> {
-    try {
-      const [serverTxRes, serverBalances, serverCategories] = await Promise.allSettled([
-        apiFetchTransactions({ page_size: 100 }),
-        apiFetchBalances(),
-        apiFetchCategories(),
-      ]);
-
-      if (serverBalances.status === 'fulfilled') {
-        // Only overwrite cached balances if there are no pending starting balance or transfer mutations
-        const pending = await getPendingMutations(userId);
-        const hasBalanceMutations = pending.some(
-          (m) =>
-            m.type === 'configure_starting_balances' ||
-            m.type === 'create_transfer' ||
-            m.type === 'create_adjustment'
-        );
-        if (!hasBalanceMutations) {
-          await setCachedBalances(serverBalances.value, userId);
-        }
+  private async reconcileServerState(userId: string): Promise<boolean> {
+    const [serverBalances, serverCategories] = await Promise.allSettled([
+      apiFetchBalances(), apiFetchCategories({ include_archived: true }),
+    ]);
+    let transactionsRefreshed = false;
+    if (serverBalances.status === 'fulfilled') {
+      const pending = await getPendingMutations(userId);
+      const hasBalanceMutations = pending.some((m) => ['configure_starting_balances', 'create_transfer', 'create_adjustment'].includes(m.type));
+      if (!hasBalanceMutations) {
+        await setCachedBalances(serverBalances.value, userId);
+        await setSyncMeta(userId, { balancesCachedAt: Date.now() });
       }
-
-      if (serverCategories.status === 'fulfilled') {
-        await setCachedCategories(serverCategories.value.categories, userId);
-      }
-
-      if (serverTxRes.status === 'fulfilled') {
-        const serverTransactions = serverTxRes.value.items;
-        const pending = await getPendingMutations(userId);
-        const pendingEntityIds = new Set(pending.map((m) => m.entityId));
-
-        // Read local transactions
-        const localTransactions = await getCachedTransactions(userId);
-        const localPending = localTransactions.filter((t) => t.sync_status === 'pending');
-
-        // Merge: server transactions + local pending transactions
-        const mergedMap = new Map<string, OfflineTransactionDTO>();
-
-        for (const st of serverTransactions) {
-          // If this record has a local pending mutation, preserve the local un-synced edit!
-          if (pendingEntityIds.has(st.id)) {
-            const pendingRecord = localPending.find((t) => t.id === st.id);
-            if (pendingRecord) {
-              mergedMap.set(st.id, pendingRecord);
-              continue;
-            }
-          }
-          mergedMap.set(st.id, {
-            ...st,
-            user_id: userId,
-            sync_status: 'synced',
-            deleted_locally: false,
-          });
-        }
-
-        // Add any newly created local pending transactions not yet on server
-        for (const lp of localPending) {
-          if (!mergedMap.has(lp.id) && !lp.deleted_locally) {
-            mergedMap.set(lp.id, lp);
-          }
-        }
-
-        for (const txn of mergedMap.values()) {
-          await saveCachedTransaction(txn, userId, txn.sync_status);
-        }
-      }
-    } catch {
-      // Reconcile is best effort
     }
+    if (serverCategories.status === 'fulfilled') {
+      await setCachedCategories(serverCategories.value.categories, userId);
+      await setSyncMeta(userId, { categoriesSnapshotComplete: true });
+    }
+    try {
+      const all: TransactionDTO[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await apiFetchTransactions({ page, page_size: 100 });
+        all.push(...result.items);
+        hasMore = result.has_more;
+        page += 1;
+        if (page > 1000) throw new Error('Transaction snapshot exceeded the safety page limit.');
+      }
+      await replaceCachedTransactions(all, userId);
+      await setSyncMeta(userId, { transactionsSnapshotComplete: true });
+      transactionsRefreshed = true;
+    } catch {
+      // A partial page sequence is not a complete snapshot; keep the existing cache intact.
+    }
+    return transactionsRefreshed && serverBalances.status === 'fulfilled' && serverCategories.status === 'fulfilled';
   }
 
   private async applyLocalTransactionBalanceDelta(

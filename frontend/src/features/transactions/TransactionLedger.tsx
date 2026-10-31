@@ -7,13 +7,9 @@ import {
   type CategoryDTO,
   type TransactionType,
   type NecessityClass,
+  type PaymentMethod,
 } from '@arth/contracts';
-import {
-  fetchTransactions,
-  fetchCategories,
-  deleteTransaction,
-  restoreTransaction,
-} from '@/lib/api-client';
+import { fetchCategories, restoreTransaction } from '@/lib/api-client';
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { computePresetDateRange } from './date-range-utils';
 import { ExportPdfDialog } from './ExportPdfDialog';
@@ -22,7 +18,7 @@ import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
-import { getCachedTransactions, saveCachedTransactions } from '@/lib/offline-db';
+import { getCachedTransactions, getCachedCategories, setCachedCategories, getSyncMeta } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
@@ -68,11 +64,13 @@ export function TransactionLedger({
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [snapshotComplete, setSnapshotComplete] = useState(false);
 
   // Filters
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>(initialFilter ? 'expense' : 'all');
   const [selectedCategory, setSelectedCategory] = useState<string>(initialFilter?.categoryId || 'all');
   const [selectedNecessity, setSelectedNecessity] = useState<NecessityClass | 'all'>(initialFilter?.necessity || 'all');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | 'all'>('all');
   const [selectedDatePreset, setSelectedDatePreset] = useState<LedgerDatePreset>(initialFilter ? 'custom' : 'all');
   const [dateRangeOverride, setDateRangeOverride] = useState(initialFilter ? {
     startDate: initialFilter.startDate,
@@ -99,15 +97,18 @@ export function TransactionLedger({
 
   // Sequence ref and AbortController to cancel obsolete in-flight requests and prevent race conditions
   const querySeqRef = useRef<number>(0);
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Fetch Categories once on mount or when refreshTrigger fires (not on every filter selection)
+  // Categories and transactions are read from the signed-in user's local database first.
   useEffect(() => {
     let isMounted = true;
+    if (!userId) return;
+    getCachedCategories(userId).then((cached) => { if (isMounted && cached.length) setCategories(cached); });
     fetchCategories()
       .then((catRes) => {
         if (isMounted) {
           setCategories(catRes.categories || []);
+          if (userId) void setCachedCategories(catRes.categories || [], userId);
+          // Refreshes are owned by the sync engine; never query from a filter interaction.
         }
       })
       .catch((err) => {
@@ -117,7 +118,7 @@ export function TransactionLedger({
     return () => {
       isMounted = false;
     };
-  }, [refreshTrigger]);
+  }, [refreshTrigger, userId]);
 
   // Compute active date range based on preset
   const activeDateRange = useMemo(() => {
@@ -130,88 +131,30 @@ export function TransactionLedger({
     return { startDate: range.startDate, endDate: range.endDate };
   }, [selectedDatePreset, dateRangeOverride, initialFilter]);
 
-  // 2. Fetch Transactions with Debounced Loading Indicator & Sequence Tracking
+  const moveMonth = (offset: number) => {
+    const base = activeDateRange.startDate || new Date().toISOString().slice(0, 10);
+    const [year, month] = base.split('-').map(Number);
+    const start = new Date(Date.UTC(year, month - 1 + offset, 1));
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+    const asDate = (date: Date) => date.toISOString().slice(0, 10);
+    setSelectedDatePreset('custom');
+    setDateRangeOverride({ startDate: asDate(start), endDate: asDate(end) });
+  };
+
+  // Filter the durable local snapshot; month and filter changes never require a server round trip.
   const loadTransactions = useCallback(() => {
     querySeqRef.current += 1;
     const currentSeq = querySeqRef.current;
-
-    // Invalidate cache if refreshTrigger changed
-    const cacheKey = `${selectedType}_${selectedCategory}_${selectedNecessity}_${activeDateRange.startDate || 'all'}_${activeDateRange.endDate || 'all'}`;
-
-    // Fast-path: check in-memory cache for instant render without network delay
-    if (ledgerQueryCache.has(cacheKey)) {
-      const cached = ledgerQueryCache.get(cacheKey)!;
-      Promise.resolve().then(() => {
-        if (querySeqRef.current === currentSeq) {
-          setTransactions(cached);
-          setIsInitialLoading(false);
-          setIsRefreshing(false);
-          setError(null);
-        }
-      });
-      return;
-    }
-
-    // Set a subtle 90ms debounce timer before displaying the loading bar.
-    // If the request completes in under 90ms, the loading indicator never flashes!
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
-      if (querySeqRef.current === currentSeq) {
-        setIsRefreshing(true);
-      }
-    }, 90);
-
-    const queryParams = {
-      type: selectedType === 'all' ? undefined : selectedType,
-      category_id: selectedCategory === 'all' ? undefined : selectedCategory,
-      necessity:
-        selectedType !== 'income' && selectedNecessity !== 'all' ? selectedNecessity : undefined,
-      start_date: activeDateRange.startDate,
-      end_date: activeDateRange.endDate,
-      page_size: 50,
-    };
-
-    fetchTransactions(queryParams)
-      .then((txnRes) => {
-        if (querySeqRef.current !== currentSeq) return; // Stale response discarded
-
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        const items = txnRes.items || [];
-        ledgerQueryCache.set(cacheKey, items);
-        setTransactions(items);
-        void saveCachedTransactions(items, userId || 'default');
-        setError(null);
-        setIsInitialLoading(false);
-        setIsRefreshing(false);
-      })
-      .catch((err: unknown) => {
-        if (querySeqRef.current !== currentSeq) return;
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-
-        void getCachedTransactions(userId || 'default')
-          .then((cachedItems) => {
-            if (querySeqRef.current !== currentSeq) return;
-            if (cachedItems && cachedItems.length > 0) {
-              setTransactions(cachedItems);
-              setError(null);
-            } else {
-              const msg = err instanceof Error ? err.message : 'Failed to load ledger data';
-              setError(msg);
-            }
-          })
-          .catch(() => {
-            if (querySeqRef.current !== currentSeq) return;
-            const msg = err instanceof Error ? err.message : 'Failed to load ledger data';
-            setError(msg);
-          })
-          .finally(() => {
-            if (querySeqRef.current === currentSeq) {
-              setIsInitialLoading(false);
-              setIsRefreshing(false);
-            }
-          });
-      });
-  }, [selectedType, selectedCategory, selectedNecessity, activeDateRange]);
+    if (!userId) return;
+    void Promise.resolve().then(() => Promise.all([getCachedTransactions(userId), getSyncMeta(userId)])).then(([items, meta]) => {
+      if (querySeqRef.current !== currentSeq) return;
+      setTransactions(items);
+      setSnapshotComplete(meta.transactionsSnapshotComplete);
+      setError(null);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
+    });
+  }, [userId]);
 
   // Clear query cache on external data mutations
   useEffect(() => {
@@ -219,13 +162,9 @@ export function TransactionLedger({
   }, [refreshTrigger]);
 
   useEffect(() => {
-    loadTransactions();
+    void Promise.resolve().then(loadTransactions);
 
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
+    return () => { querySeqRef.current += 1; };
   }, [loadTransactions, refreshTrigger]);
 
   // Clean up undo timer on unmount
@@ -239,7 +178,14 @@ export function TransactionLedger({
 
   // 3. Local Search & Sorting (Computed instantly without server trips)
   const filteredTransactions = useMemo(() => {
-    let result = transactions;
+    let result = transactions.filter((t) =>
+      (selectedType === 'all' || t.type === selectedType) &&
+      (selectedCategory === 'all' || t.category_id === selectedCategory) &&
+      (selectedType === 'income' || selectedNecessity === 'all' || t.necessity === selectedNecessity) &&
+      (selectedPaymentMethod === 'all' || t.payment_method === selectedPaymentMethod) &&
+      (!activeDateRange.startDate || t.transaction_date >= activeDateRange.startDate) &&
+      (!activeDateRange.endDate || t.transaction_date <= activeDateRange.endDate)
+    );
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -268,7 +214,7 @@ export function TransactionLedger({
     }
 
     return result;
-  }, [transactions, searchQuery, sortBy]);
+  }, [transactions, searchQuery, sortBy, selectedType, selectedCategory, selectedNecessity, selectedPaymentMethod, activeDateRange]);
 
   // Compute Net Cash Flow strictly from visible / filtered transactions
   const { totalIncomePaise, totalExpensePaise, netCashFlowPaise } = useMemo(() => {
@@ -522,6 +468,11 @@ export function TransactionLedger({
               ))}
           </select>
 
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month" className="rounded border border-[var(--border-hairline)] px-2 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)]">‹</button>
+            <button type="button" onClick={() => moveMonth(1)} aria-label="Next month" className="rounded border border-[var(--border-hairline)] px-2 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)]">›</button>
+          </div>
+
           {/* Necessity Dropdown */}
           <select
             value={selectedNecessity}
@@ -534,6 +485,17 @@ export function TransactionLedger({
             <option value="essential">Essential</option>
             <option value="optional">Optional</option>
             <option value="luxury">Luxury</option>
+          </select>
+
+          <select
+            aria-label="Filter by payment method"
+            value={selectedPaymentMethod}
+            onChange={(e) => setSelectedPaymentMethod(e.target.value as PaymentMethod | 'all')}
+            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
+          >
+            <option value="all">All Payment Methods</option>
+            <option value="cash">Cash</option>
+            <option value="online">Online</option>
           </select>
 
           {/* Date Range Preset Dropdown */}
@@ -672,7 +634,7 @@ export function TransactionLedger({
         <div className="text-center py-12 px-4 border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)]">
           <div className="text-2xl mb-2">📋</div>
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-            {isAnyFilterActive ? 'No matching transactions found' : 'No transactions recorded yet'}
+            {isAnyFilterActive ? 'No matching transactions found' : snapshotComplete ? 'No transactions recorded in the downloaded ledger' : 'No offline copy of this transaction history is available yet'}
           </h3>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
             {isAnyFilterActive

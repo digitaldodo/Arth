@@ -270,8 +270,8 @@ describe('PWA Splash Screen & Initialization Experience', () => {
         'DashboardPage must call onInitialReady() on successful summary fetch'
       );
       assert.ok(
-        content.includes('onInitialReady?.(message)'),
-        'DashboardPage must call onInitialReady(message) on failed fetch'
+        content.includes('onInitialReady?.()'),
+        'DashboardPage must report completion after local summary calculation'
       );
     });
   });

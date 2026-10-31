@@ -100,35 +100,24 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
 
   // ─── 3. Stale-While-Revalidate Dashboard Architecture ─────────────────────
   describe('3. Dashboard Stale-While-Revalidate Architecture', () => {
-    test('DashboardPage retrieves cached summary before initiating background fetch', () => {
+    test('DashboardPage derives summary from the shared local ledger snapshot', () => {
       assert.ok(fs.existsSync(dashboardPath), 'DashboardPage.tsx must exist');
       const content = fs.readFileSync(dashboardPath, 'utf8');
 
       assert.ok(
-        content.includes('getCachedDashboardSummary'),
-        'DashboardPage must invoke getCachedDashboardSummary'
+        content.includes('getCachedTransactions'),
+        'DashboardPage must read the local transaction snapshot'
       );
       assert.ok(
-        content.includes('setCachedDashboardSummary'),
-        'DashboardPage must persist fresh summary to getCachedDashboardSummary'
+        content.includes('getCachedCategories'),
+        'DashboardPage must resolve category names from cached categories'
       );
     });
 
-    test('DashboardPage renders non-blocking notification when cached data is shown during failure', () => {
+    test('DashboardPage does not turn ordinary offline reads into server error banners', () => {
       const content = fs.readFileSync(dashboardPath, 'utf8');
-
-      assert.ok(
-        content.includes('error && !isAuthError && summary'),
-        'DashboardPage must distinguish cached failure from unpopulated failure'
-      );
-      assert.ok(
-        content.includes('Showing cached ledger data'),
-        'DashboardPage must show clear notification when displaying cached financial data'
-      );
-      assert.ok(
-        content.includes('error && !isAuthError && !summary'),
-        'DashboardPage must show full error card only when NO summary is available'
-      );
+      assert.ok(content.includes('getCachedTransactions(userId)'));
+      assert.doesNotMatch(content, /Unable to refresh from server/);
     });
   });
 
@@ -139,7 +128,7 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
       const content = fs.readFileSync(offlineDbPath, 'utf8');
 
       assert.ok(
-        /const DB_VERSION = [23];/.test(content),
+        /const DB_VERSION = [2345];/.test(content),
         'offline-db must be at version 2 or higher'
       );
       assert.ok(
@@ -189,12 +178,12 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
         'Service worker must apply timeout to navigation requests'
       );
       assert.ok(
-        content.includes("caches.match('/')"),
-        'Service worker must fall back to cached App Shell'
+        content.includes('isPublicResponse') && content.includes('set-cookie'),
+        'Service worker must only cache explicitly public navigation responses'
       );
       assert.ok(
-        content.includes('Initial Setup Requires Internet'),
-        'Service worker must display informative screen if offline on first launch'
+        content.includes('authenticated app shell is not cached'),
+        'Service worker must explain when no safe offline shell is available'
       );
     });
 
@@ -207,8 +196,8 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
         'Generated sw.js must handle navigation requests'
       );
       assert.ok(
-        content.includes("caches.match('/')"),
-        'Generated sw.js must fall back to cached App Shell'
+        content.includes('isPublicResponse'),
+        'Generated sw.js must only cache public navigation responses'
       );
     });
   });

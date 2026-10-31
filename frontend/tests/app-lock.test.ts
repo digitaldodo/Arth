@@ -137,11 +137,13 @@ describe('App Lock WebAuthn boundaries', () => {
     assert.match(server, /challenge: null/);
   });
 
-  test('the UI stays locked unless platform or password verification succeeds', () => {
+  test('the UI stays locked until a platform authenticator verifies', () => {
     const root = path.resolve(__dirname, '../src/features/app-lock');
     const screen = fs.readFileSync(path.join(root, 'AppLockScreen.tsx'), 'utf8');
     const shell = fs.readFileSync(path.resolve(__dirname, '../src/features/transactions/TransactionAppShell.tsx'), 'utf8');
     assert.match(screen, /await onUnlock\(\)/);
+    assert.doesNotMatch(screen, /passcode|password/);
+    assert.doesNotMatch(shell, /verifyPasscodeUnlock/);
     assert.match(shell, /unlockAfterVerification\(appLock\.verifyDevice, appLock\.unlockAfterVerification\)/);
     assert.match(shell, /hidden=\{isAppLocked\}/);
     assert.match(shell, /inert=\{isAppLocked\}/);

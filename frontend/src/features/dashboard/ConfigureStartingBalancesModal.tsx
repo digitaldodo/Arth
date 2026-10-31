@@ -60,10 +60,11 @@ export function ConfigureStartingBalancesModal({
 
     setIsSubmitting(true);
     try {
+      if (!userId) throw new Error('Sign in to save starting balances on this device.');
       const updated = await syncEngine.configureStartingBalancesLocalFirst({
         starting_cash: cashStr || '0',
         starting_online: onlineStr || '0',
-      }, userId || 'default');
+      }, userId);
       onConfigured(updated);
       onClose();
     } catch (err) {

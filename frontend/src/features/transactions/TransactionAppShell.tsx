@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -25,23 +25,10 @@ import { unlockAfterVerification } from '@/features/app-lock/verification';
 import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
 import {
   type CreateTransactionResponse,
-  type CreateTransactionRequest,
-  type CreateTransferRequest,
-  type CreateAdjustmentRequest,
   type AccountBalancesDTO,
   type NecessityClass,
 } from '@arth/contracts';
-import {
-  createTransaction,
-  createBalanceTransfer,
-  createBalanceAdjustment,
-} from '@/lib/api-client';
-import {
-  getPendingMutations,
-  removePendingMutation,
-  getCachedBalances,
-  setCachedBalances,
-} from '@/lib/offline-db';
+import { getCachedBalances, setCachedBalances } from '@/lib/offline-db';
 import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import type { PasswordStatus } from '@/lib/auth/password-status';
@@ -61,6 +48,7 @@ export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const router = useRouter();
+  const userId = user?.id ?? null;
   const appLock = useAppLock(user?.id ?? 'anonymous');
   const isAppLocked = Boolean(user) && (!appLock.isReady || appLock.isLocked);
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
@@ -87,6 +75,9 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   // Offline mutation queue sync state
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const lastSyncedAtRef = useRef<number | null>(null);
 
   // Automatic PWA update detection, background download, and safe activation
   usePwaUpdate({ checkIntervalMs: 5 * 60 * 1000 });
@@ -96,75 +87,35 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     isQuickAddOpen || isDeleteModalOpen || isPasswordModalOpen || isStartingBalancesModalOpen || isSyncing
   );
 
-  // Check pending mutations in IndexedDB
-  const checkPendingMutations = useCallback(() => {
-    getPendingMutations()
-      .then((pending) => {
-        setPendingSyncCount(pending.length);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    checkPendingMutations();
-  }, [refreshTrigger, checkPendingMutations]);
-
+  // The sync engine is the only queue runner; keep shell status scoped to this account.
   // Load initial cached balances for Settings card and Dashboard instant render
   useEffect(() => {
     if (!user) return;
-    getCachedBalances()
+    getCachedBalances(user.id)
       .then((b) => {
         if (b) setShellBalances(b);
       })
       .catch(() => {});
   }, [user]);
 
-  // Synchronize pending outbox mutations with backend
-  const handleSyncNow = async () => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    try {
-      const pending = await getPendingMutations();
-      for (const m of pending) {
-        try {
-          if (m.type === 'create_transaction') {
-            await createTransaction(m.payload as CreateTransactionRequest);
-            await removePendingMutation(m.id);
-          } else if (m.type === 'create_transfer') {
-            await createBalanceTransfer(m.payload as CreateTransferRequest);
-            await removePendingMutation(m.id);
-          } else if (m.type === 'create_adjustment') {
-            await createBalanceAdjustment(m.payload as CreateAdjustmentRequest);
-            await removePendingMutation(m.id);
-          }
-        } catch (itemErr) {
-          console.error('[Sync] Failed to process mutation:', m.id, itemErr);
-        }
-      }
-      await checkPendingMutations();
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err) {
-      console.error('[Sync] Error during background synchronization:', err);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Auto-sync when coming back online
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleOnline = () => {
-      handleSyncNow();
-    };
-
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, []);
+    syncEngine.setUserId(userId);
+    const unsubscribe = syncEngine.subscribe((state) => {
+      setPendingSyncCount(state.pendingCount);
+      setIsSyncing(state.isSyncing);
+      setIsOnline(state.isOnline);
+      setSyncError(state.lastError);
+      if (state.lastSyncedAt && state.lastSyncedAt !== lastSyncedAtRef.current) {
+        lastSyncedAtRef.current = state.lastSyncedAt;
+        setRefreshTrigger((value) => value + 1);
+      }
+    });
+    if (userId) void syncEngine.processQueue(userId);
+    return unsubscribe;
+  }, [userId]);
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
-    checkPendingMutations();
     const txn = res.transaction;
     const msg = res.idempotent_replay
       ? `Transaction ${txn.formatted_inr} confirmed (idempotent replay)`
@@ -305,6 +256,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
       {/* Main Content Area */}
       <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
+          <span className={`h-1.5 w-1.5 rounded-full ${!isOnline || pendingSyncCount ? 'bg-amber-500' : syncError ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+          <span>{!isOnline ? 'Offline' : isSyncing ? 'Syncing' : syncError ? 'Sync failed' : pendingSyncCount ? `${pendingSyncCount} change${pendingSyncCount === 1 ? '' : 's'} pending sync` : 'Synced'}</span>
+          {syncError && <span className="truncate">{syncError}</span>}
+        </div>
         {/* Offline Pending Synchronization Banner */}
         {pendingSyncCount > 0 && (
           <div className="mb-4 p-3 text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded-lg flex items-center justify-between">
@@ -316,7 +272,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             </div>
             <button
               type="button"
-              onClick={handleSyncNow}
+              onClick={() => user?.id && void syncEngine.processQueue(user.id)}
               disabled={isSyncing}
               className="px-2.5 py-1 text-xs font-semibold bg-amber-700 text-white rounded-md hover:bg-amber-800 transition-colors disabled:opacity-60 cursor-pointer"
             >
@@ -362,6 +318,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             {/* Persistent Tab Container: All views stay mounted in the DOM to eliminate reload delay */}
             <div className={activeView === 'home' ? 'block' : 'hidden'}>
               <DashboardPage
+                userId={user.id}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
                 onOpenFilteredLedger={(filter) => {
@@ -394,12 +351,13 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
             <div className={activeView === 'people' ? 'block' : 'hidden'}>
               <PeoplePage
+                userId={user.id}
                 onRefreshShell={() => setRefreshTrigger((prev) => prev + 1)}
               />
             </div>
 
             <div className={activeView === 'categories' ? 'block' : 'hidden'}>
-              <CategoryManager onCategoryChange={handleCategoryChanged} />
+              <CategoryManager userId={user.id} onCategoryChange={handleCategoryChanged} />
             </div>
 
             <div className={activeView === 'more' ? 'block' : 'hidden'}>
@@ -731,7 +689,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsStartingBalancesModalOpen(false)}
           onConfigured={(updated) => {
             setShellBalances(updated);
-            setCachedBalances(updated);
+            if (user?.id) void setCachedBalances(updated, user.id);
             setRefreshTrigger((prev) => prev + 1);
           }}
           currentBalances={shellBalances}
@@ -744,18 +702,10 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     {isAppLocked && user && (
       <AppLockScreen
         isInitializing={!appLock.isReady}
-        hasLocalPasscode={appLock.hasLocalPasscode}
-        biometricsEnabled={appLock.biometricsEnabled}
         supportsPlatformAuth={appLock.supportsPlatformAuth}
-        onUnlockPasscode={async (passcode) => {
-          return await appLock.verifyPasscodeUnlock(passcode);
-        }}
         onUnlock={async () => {
           await unlockAfterVerification(appLock.verifyDevice, appLock.unlockAfterVerification);
         }}
-        onUnlockBiometrics={appLock.biometricsEnabled ? async () => {
-          await unlockAfterVerification(appLock.verifyDevice, appLock.unlockAfterVerification);
-        } : undefined}
         onResetViaAccount={handleLockRecovery}
       />
     )}

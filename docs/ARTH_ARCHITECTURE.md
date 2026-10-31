@@ -58,6 +58,14 @@ The architecture enforces strict separation between:
 
 ## 2. Data model
 
+### 2.0 Local-first client reads and current offline boundary
+
+The browser stores user-scoped transaction snapshots, categories, people and person details, balances, synchronization metadata, and durable pending mutations in IndexedDB (`arth_offline_db`, schema version 5). The ledger applies date, type, category ID, necessity, payment method, search, and sort filters to that local snapshot. Dashboard summaries use the same local transaction records. When online, the sync engine paginates the authenticated transaction endpoint and refreshes balances and categories; queued transaction changes are preserved while reconciling a complete snapshot. Transaction writes are saved locally before entering the durable outbox and are removed from the queue only after server confirmation. Retry operation IDs are stable UUIDv7 values.
+
+IndexedDB is not encrypted against same-origin script access. Cached reads are account scoped. Service-worker caching excludes API/auth endpoints and refuses to cache personalized HTML. Consequently, an already loaded app can continue reading its local data after network loss, but a cold PWA/TWA launch while fully offline is not guaranteed: the authenticated root HTML is deliberately not cached. A safe static offline page is shown instead when no public shell exists. People and category mutations are not yet a fully offline-capable set; people/categories are cached for reading, while their writes still require the server. The native Android biometric gate also does not provide a browser bridge for TWA resume lifecycle.
+
+Production still needs migration `0023_fix_profiles_balances_configured.sql` applied and the PostgREST schema cache reloaded for the `profiles.balances_configured` error. This repository contains that migration; a production database connection was not available to verify whether it has been applied.
+
 ### 2.1 Design principles
 
 - Amounts stored as **`BIGINT` paise** (1 INR = 100 paise). Never `DECIMAL` or `FLOAT`.
