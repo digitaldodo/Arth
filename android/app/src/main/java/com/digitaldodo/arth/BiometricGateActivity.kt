@@ -80,7 +80,7 @@ class BiometricGateActivity : FragmentActivity() {
             .setNegativeButton("Close") { _, _ -> finish() }
             .setPositiveButton(if (status == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) "Settings" else "Account recovery") { _, _ ->
                 if (status == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
-                else startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://arth-9h3f.vercel.app/login")))
+                else startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://arth-9h3f.vercel.app/login")).setPackage("com.android.chrome"))
                 finish()
             }
             .setOnCancelListener { finish() }

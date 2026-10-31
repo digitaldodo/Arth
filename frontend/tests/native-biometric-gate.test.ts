@@ -18,5 +18,6 @@ describe('Android biometric gate', () => {
     assert.match(source, /cannot guarantee fingerprint-only matching/);
     assert.match(source, /BIOMETRIC_ERROR_NONE_ENROLLED/);
     assert.match(source, /BIOMETRIC_ERROR_HW_UNAVAILABLE/);
+    assert.match(source, /setPackage\("com\.android\.chrome"\)/);
   });
 });
