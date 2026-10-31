@@ -44,6 +44,7 @@ import {
   fetchCategories as apiFetchCategories,
 } from '../../lib/api-client';
 import { parseINRToPaise, formatPaiseToINR } from '../../lib/format';
+import { isStandalonePwaClient } from '../../lib/platform-mode';
 
 export interface SyncState {
   isOnline: boolean;
@@ -87,6 +88,12 @@ class SyncEngine {
           void this.processQueue(this.currentUserId);
         }
       });
+    }
+  }
+
+  private assertOfflineWriteIsAllowed(): void {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false && !isStandalonePwaClient()) {
+      throw new Error('Offline changes are available in the installed Arth app. Reconnect to use Arth in a browser.');
     }
   }
 
@@ -162,6 +169,7 @@ class SyncEngine {
     categories: CategoryDTO[],
     userId: string
   ): Promise<CreateTransactionResponse> {
+    this.assertOfflineWriteIsAllowed();
     const paise = parseINRToPaise(payload.amount);
     const category = categories.find((c) => c.id === payload.category_id);
 
@@ -225,6 +233,7 @@ class SyncEngine {
     categories: CategoryDTO[],
     userId: string
   ): Promise<UpdateTransactionResponse> {
+    this.assertOfflineWriteIsAllowed();
     const existing = await getCachedTransactionById(id, userId);
     if (!existing) {
       throw new Error('Transaction not found in local storage.');
@@ -295,6 +304,7 @@ class SyncEngine {
     id: string,
     userId: string
   ): Promise<DeleteTransactionResponse> {
+    this.assertOfflineWriteIsAllowed();
     const existing = await getCachedTransactionById(id, userId);
     if (existing) {
       // Reverse balance delta
@@ -330,6 +340,7 @@ class SyncEngine {
     req: ConfigureStartingBalancesRequest,
     userId: string
   ): Promise<AccountBalancesDTO> {
+    this.assertOfflineWriteIsAllowed();
     const existing = (await getCachedBalances(userId)) || {
       starting_cash_paise: 0,
       starting_online_paise: 0,

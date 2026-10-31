@@ -1,11 +1,11 @@
 /**
  * Arth Progressive Web App Service Worker
- * Version: v1-tnrjcs
+ * Version: v1-tnrjsm
  * Caches only public static assets; the authenticated root HTML is never cached.
  * Authenticated API endpoints and auth routes are strictly excluded from Service Worker Cache API.
  */
 
-const SW_VERSION = 'v1-tnrjcs';
+const SW_VERSION = 'v1-tnrjsm';
 const CACHE_NAME = 'arth-shell-v1-' + SW_VERSION;
 
 const PRECACHE_ASSETS = [

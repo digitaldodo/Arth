@@ -9,7 +9,7 @@ import {
   type NecessityClass,
   type PaymentMethod,
 } from '@arth/contracts';
-import { fetchCategories, restoreTransaction } from '@/lib/api-client';
+import { fetchCategories, fetchTransactions, restoreTransaction } from '@/lib/api-client';
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { computePresetDateRange } from './date-range-utils';
 import { ExportPdfDialog } from './ExportPdfDialog';
@@ -20,6 +20,7 @@ import { QuickAddModal } from './QuickAddModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { getCachedTransactions, getCachedCategories, setCachedCategories, getSyncMeta } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
+import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
@@ -59,6 +60,7 @@ export function TransactionLedger({
   userId,
   initialFilter = null,
 }: TransactionLedgerProps) {
+  const isPwa = useStandalonePwa();
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
@@ -102,7 +104,7 @@ export function TransactionLedger({
   useEffect(() => {
     let isMounted = true;
     if (!userId) return;
-    getCachedCategories(userId).then((cached) => { if (isMounted && cached.length) setCategories(cached); });
+    if (isPwa) getCachedCategories(userId).then((cached) => { if (isMounted && cached.length) setCategories(cached); });
     fetchCategories()
       .then((catRes) => {
         if (isMounted) {
@@ -118,7 +120,7 @@ export function TransactionLedger({
     return () => {
       isMounted = false;
     };
-  }, [refreshTrigger, userId]);
+  }, [refreshTrigger, userId, isPwa]);
 
   // Compute active date range based on preset
   const activeDateRange = useMemo(() => {
@@ -141,11 +143,36 @@ export function TransactionLedger({
     setDateRangeOverride({ startDate: asDate(start), endDate: asDate(end) });
   };
 
-  // Filter the durable local snapshot; month and filter changes never require a server round trip.
+  // Installed PWAs query the durable local snapshot; desktop web queries the authenticated API.
   const loadTransactions = useCallback(() => {
     querySeqRef.current += 1;
     const currentSeq = querySeqRef.current;
     if (!userId) return;
+    if (!isPwa) {
+      setIsRefreshing(true);
+      setError(null);
+      void fetchTransactions({
+        type: selectedType === 'all' ? undefined : selectedType,
+        category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+        necessity: selectedType === 'income' || selectedNecessity === 'all' ? undefined : selectedNecessity,
+        start_date: activeDateRange.startDate,
+        end_date: activeDateRange.endDate,
+        page_size: 50,
+      }).then((result) => {
+        if (querySeqRef.current !== currentSeq) return;
+        setTransactions(result.items || []);
+        setSnapshotComplete(false);
+        setIsInitialLoading(false);
+        setIsRefreshing(false);
+      }).catch((err: unknown) => {
+        if (querySeqRef.current !== currentSeq) return;
+        setError(err instanceof Error ? err.message : 'Could not load transactions. Check your connection.');
+        setTransactions([]);
+        setIsInitialLoading(false);
+        setIsRefreshing(false);
+      });
+      return;
+    }
     void Promise.resolve().then(() => Promise.all([getCachedTransactions(userId), getSyncMeta(userId)])).then(([items, meta]) => {
       if (querySeqRef.current !== currentSeq) return;
       setTransactions(items);
@@ -154,7 +181,7 @@ export function TransactionLedger({
       setIsInitialLoading(false);
       setIsRefreshing(false);
     });
-  }, [userId]);
+  }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, activeDateRange]);
 
   // Clear query cache on external data mutations
   useEffect(() => {

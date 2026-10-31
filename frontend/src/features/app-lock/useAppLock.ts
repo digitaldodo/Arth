@@ -20,7 +20,7 @@ interface AppLockMessage {
   type?: unknown;
 }
 
-export function useAppLock(userId: string) {
+export function useAppLock(userId: string, enabledForPwa = true) {
   const [preferences, setPreferences] = useState<AppLockPreferences | null>(null);
   const [readyUserId, setReadyUserId] = useState<string | null>(null);
   const isReady = readyUserId === userId;
@@ -57,6 +57,18 @@ export function useAppLock(userId: string) {
   // Initialize preferences and platform auth availability
   useEffect(() => {
     let cancelled = false;
+    if (!enabledForPwa) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        preferencesRef.current = null;
+        setPreferences(null);
+        setIsLocked(false);
+        setSupportsPlatformAuth(false);
+        setIsCheckingPlatformAuth(false);
+        setReadyUserId(userId);
+      });
+      return () => { cancelled = true; };
+    }
     queueMicrotask(() => {
       if (cancelled) return;
       let current: AppLockPreferences;
@@ -88,7 +100,7 @@ export function useAppLock(userId: string) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, enabledForPwa]);
 
   // Cross-tab synchronization via BroadcastChannel
   useEffect(() => {

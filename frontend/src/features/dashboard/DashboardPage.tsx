@@ -19,6 +19,8 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { getLatestRecentTransactions } from './recent-transactions';
 import { formatDateHuman } from '@/lib/format';
 import { formatPaiseToINR } from '@/lib/format';
+import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
+import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 
 interface DashboardPageProps {
   userId: string;
@@ -53,6 +55,7 @@ export function DashboardPage({
   initialBalances = null,
   onBalancesLoaded,
 }: DashboardPageProps) {
+  const isPwa = useStandalonePwa();
   const [preset, setPreset] = useState<DashboardDateRangePreset>('this_month');
   const [dateRange, setDateRange] = useState(() =>
     resolveDateRangePreset('this_month')
@@ -72,6 +75,21 @@ export function DashboardPage({
   // Use the same user-scoped local records as the ledger. The sync engine refreshes in the background.
   useEffect(() => {
     let isMounted = true;
+    if (!isPwa) {
+      void Promise.all([fetchDashboardSummary(dateRange), fetchBalances()]).then(([data, currentBalances]) => {
+        if (!isMounted) return;
+        setSummary(data); setBalances(currentBalances); setError(null);
+        setLoading(false); setBalancesLoading(false); setIsRefreshing(false);
+        onBalancesLoaded?.(currentBalances); onInitialReady?.();
+      }).catch((err: unknown) => {
+        if (!isMounted) return;
+        const message = err instanceof Error ? err.message : 'Could not load dashboard. Check your connection.';
+        const statusCode = (err as { statusCode?: number })?.statusCode;
+        setError({ message, statusCode }); setLoading(false); setBalancesLoading(false); setIsRefreshing(false);
+        onInitialReady?.(message);
+      });
+      return () => { isMounted = false; };
+    }
     Promise.all([getCachedTransactions(userId), getCachedCategories(userId), initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId), getSyncMeta(userId)])
       .then(([transactions, categories, cachedBalances, syncMeta]) => {
         if (!isMounted) return;
@@ -112,7 +130,7 @@ export function DashboardPage({
     return () => {
       isMounted = false;
     };
-  }, [userId, dateRange, refreshTrigger, initialBalances, onBalancesLoaded, onInitialReady]);
+  }, [userId, dateRange, refreshTrigger, initialBalances, onBalancesLoaded, onInitialReady, isPwa]);
 
   const handleRetry = () => {
     setLoading(true);
@@ -237,6 +255,13 @@ export function DashboardPage({
               Retry
             </button>
           </div>
+        </div>
+      )}
+
+      {error && !isAuthError && !summary && !isPwa && (
+        <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+          Dashboard could not be loaded: {error.message}
+          <button type="button" onClick={handleRetry} className="ml-3 underline">Retry</button>
         </div>
       )}
 

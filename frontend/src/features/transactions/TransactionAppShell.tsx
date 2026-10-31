@@ -31,6 +31,7 @@ import {
 import { getCachedBalances, setCachedBalances } from '@/lib/offline-db';
 import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
+import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';
 
 interface TransactionAppShellProps {
@@ -49,8 +50,10 @@ export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const router = useRouter();
   const userId = user?.id ?? null;
-  const appLock = useAppLock(user?.id ?? 'anonymous');
-  const isAppLocked = Boolean(user) && (!appLock.isReady || appLock.isLocked);
+  const isPwa = useStandalonePwa();
+  const isMobilePwa = useMobileStandalonePwa();
+  const appLock = useAppLock(user?.id ?? 'anonymous', isMobilePwa);
+  const isAppLocked = Boolean(user) && (!appLock.isReady || (isMobilePwa && appLock.isLocked));
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
@@ -90,13 +93,13 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   // The sync engine is the only queue runner; keep shell status scoped to this account.
   // Load initial cached balances for Settings card and Dashboard instant render
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isPwa) return;
     getCachedBalances(user.id)
       .then((b) => {
         if (b) setShellBalances(b);
       })
       .catch(() => {});
-  }, [user]);
+  }, [user, isPwa]);
 
   useEffect(() => {
     syncEngine.setUserId(userId);
@@ -483,7 +486,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     </button>
                   </div>
 
-                  <AppLockSettings appLock={appLock} />
+                  {isMobilePwa && <AppLockSettings appLock={appLock} />}
 
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
@@ -699,7 +702,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
     </div>
     </div>
-    {isAppLocked && user && (
+    {isAppLocked && user && isMobilePwa && (
       <AppLockScreen
         isInitializing={!appLock.isReady}
         supportsPlatformAuth={appLock.supportsPlatformAuth}

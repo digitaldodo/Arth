@@ -17,6 +17,7 @@ import {
   resolveCategoryIcon,
 } from './category-icons';
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
+import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 
 interface CategoryManagerProps {
   userId: string;
@@ -35,6 +36,7 @@ const PRESET_COLORS = [
 ];
 
 export function CategoryManager({ userId, onCategoryChange }: CategoryManagerProps) {
+  const isPwa = useStandalonePwa();
   const [activeTab, setActiveTab] = useState<TransactionType>('expense');
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [archivedCategories, setArchivedCategories] = useState<CategoryDTO[]>([]);
@@ -71,7 +73,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
 
   useEffect(() => {
     let isMounted = true;
-    void getCachedCategories(userId).then((cached) => {
+    if (isPwa) void getCachedCategories(userId).then((cached) => {
       if (!isMounted || !cached.length) return;
       const matching = cached.filter((category) => category.type === activeTab);
       setCategories(matching.filter((c) => !c.archived_at));
@@ -90,6 +92,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       .catch((err: unknown) => {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : 'Failed to load categories';
+        if (!isPwa) { setErrorMessage(msg); setIsLoading(false); return; }
         void getCachedCategories(userId).then((cached) => {
           if (!isMounted || cached.length) return;
           setErrorMessage(`${msg}. No saved offline copy is available.`);
@@ -100,7 +103,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
     return () => {
       isMounted = false;
     };
-  }, [activeTab, loadTrigger, userId]);
+  }, [activeTab, loadTrigger, userId, isPwa]);
 
   const showNotification = (msg: string) => {
     setSuccessBanner(msg);

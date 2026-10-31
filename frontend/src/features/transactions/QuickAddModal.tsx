@@ -16,6 +16,7 @@ import { fetchCategories } from '@/lib/api-client';
 import { getTodayIST, formatDateHuman } from '@/lib/format';
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
+import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function QuickAddModal({
   editingTransaction = null,
   userId,
 }: QuickAddModalProps) {
+  const isPwa = useStandalonePwa();
   const isEditMode = Boolean(editingTransaction);
 
   const amountInputRef = useRef<HTMLInputElement | null>(null);
@@ -151,7 +153,7 @@ export function QuickAddModal({
         });
         setCategoriesLoading(false);
     };
-    if (userId) void getCachedCategories(userId).then((cached) => {
+    if (isPwa && userId) void getCachedCategories(userId).then((cached) => {
       if (isMounted && cached.length) applyCategories(cached.filter((category) => category.type === type));
     });
     fetchCategories({ type })
@@ -171,7 +173,7 @@ export function QuickAddModal({
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isOpen, type, categoryVersion, editingTransaction, userId]);
+  }, [isOpen, type, categoryVersion, editingTransaction, userId, isPwa]);
 
   // Handle Escape key to close modal
   useEffect(() => {
