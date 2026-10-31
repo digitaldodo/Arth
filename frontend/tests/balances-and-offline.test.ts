@@ -264,10 +264,10 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
       const swPath = path.join(projectRoot, 'public', 'sw.js');
       assert.ok(fs.existsSync(swPath));
       const content = fs.readFileSync(swPath, 'utf8');
-      assert.ok(content.includes('arth-shell-v1'));
+      assert.ok(content.includes('arth-shell-v2'));
       assert.ok(content.includes('/manifest.webmanifest'));
       assert.ok(content.includes("url.pathname.startsWith('/api/')"));
-      assert.ok(content.includes('isPublicResponse'));
+      assert.ok(content.includes("mode === 'installed-mobile-pwa'"));
       assert.ok(!content.includes("caches.match('/')"));
     });
   });

@@ -1,142 +1,141 @@
 /**
- * Arth Progressive Web App Service Worker
- * Version: __SW_VERSION__
- * Caches only public static assets; the authenticated root HTML is never cached.
- * Authenticated API endpoints and auth routes are strictly excluded from Service Worker Cache API.
+ * Arth service worker. The root scope is retained for existing installs, but only
+ * a mobile standalone client can use the offline entry. Personalized HTML and APIs
+ * are never cached.
  */
-
 const SW_VERSION = '__SW_VERSION__';
-const CACHE_NAME = 'arth-shell-v1-' + SW_VERSION;
+const CACHE_NAME = 'arth-shell-v2-' + SW_VERSION;
+const PRECACHE_ASSETS = __PRECACHE_ASSETS__;
+const RUNTIME_DB = 'arth_sw_runtime_v1';
+const RUNTIME_DB_VERSION = 1;
 
-const PRECACHE_ASSETS = [
-  '/manifest.webmanifest',
-  '/favicon.ico',
-  '/favicon.svg',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-  '/icons/icon-512x512-maskable.png',
-  '/icons/apple-touch-icon.png',
-];
+function openRuntimeDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(RUNTIME_DB, RUNTIME_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('clients')) db.createObjectStore('clients', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('state')) db.createObjectStore('state', { keyPath: 'key' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
 
-// Install: precache app shell essentials into versioned cache
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .catch((err) => {
-        // Re-throw so the browser marks this worker as 'redundant'.
-        // The existing active worker continues serving until a future install succeeds.
-        console.error('[ServiceWorker] Precaching failed — aborting install to preserve working cache:', err);
-        throw err;
-      })
+async function storeRuntime(storeName, value) {
+  const db = await openRuntimeDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(value);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function getRuntime(storeName, key) {
+  const db = await openRuntimeDb();
+  const value = await new Promise((resolve) => {
+    const request = db.transaction(storeName, 'readonly').objectStore(storeName).get(key);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => resolve(null);
+  });
+  db.close();
+  return value;
+}
+
+async function getClientMode(clientId) {
+  if (!clientId) return null;
+  try {
+    const record = await getRuntime('clients', clientId);
+    return record?.runtimeMode || null;
+  } catch {
+    return null;
+  }
+}
+
+function isMobileUserAgent() {
+  const hints = self.navigator.userAgentData;
+  if (hints && typeof hints.mobile === 'boolean') return hints.mobile;
+  return /android|iphone|ipad|ipod|mobile/i.test(self.navigator.userAgent || '');
+}
+
+function offlineHtml(title, message, retry = true) {
+  return new Response(
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0D0D0F"><title>' + title + '</title><style>body{margin:0;background:#0D0D0F;color:#F5F5F4;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}.card{width:min(100%,380px);background:#141416;border:1px solid #333;border-radius:16px;padding:28px 24px;text-align:center}p{font-size:14px;color:#bbb;line-height:1.55}button{margin-top:12px;background:#fff;color:#000;border:0;border-radius:8px;padding:10px 18px;font-weight:600}</style></head><body><main class="card"><h1>' + title + '</h1><p>' + message + '</p>' + (retry ? '<button onclick="location.reload()">Try again</button>' : '') + '</main></body></html>',
+    { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
   );
-  // Important: We do NOT call self.skipWaiting() here directly.
-  // The service worker remains in the 'waiting' state until the application client
-  // confirms that the user is not actively typing or saving a financial transaction.
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS)));
 });
 
-// Message listener: coordinates safe activation and diagnostics
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+  const data = event.data || {};
+  if (data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (data.type === 'GET_VERSION') event.ports[0]?.postMessage({ version: SW_VERSION, cacheName: CACHE_NAME });
+  if (data.type === 'CLASSIFY_CLIENT' && event.source?.id) {
+    const allowed = ['desktop-web', 'mobile-web', 'installed-mobile-pwa'];
+    if (allowed.includes(data.runtimeMode)) {
+      event.waitUntil(storeRuntime('clients', { id: event.source.id, runtimeMode: data.runtimeMode, updatedAt: Date.now() }));
+    }
   }
-  if (event.data && event.data.type === 'GET_VERSION') {
-    event.ports[0]?.postMessage({
-      version: SW_VERSION,
-      cacheName: CACHE_NAME,
-    });
-  }
+  if (data.type === 'PWA_PREPARED') event.waitUntil(storeRuntime('state', { key: 'pwa-prepared', value: true }));
+  if (data.type === 'PWA_SIGNED_OUT') event.waitUntil(storeRuntime('state', { key: 'pwa-prepared', value: false }));
 });
 
-// Activate: clean up older caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) =>
-        Promise.all(
-          cacheNames
-            .filter((name) => name.startsWith('arth-shell-') && name !== CACHE_NAME)
-            .map((name) => {
-              console.log('[ServiceWorker] Deleting obsolete cache:', name);
-              return caches.delete(name);
-            })
-        )
-      )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('arth-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
 
-// Fetch: Strategy depending on request type
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const request = event.request;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || request.method !== 'GET') return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/login')) return;
 
-  // Strictly skip caching for authenticated API routes, Supabase Auth, and version endpoint
-  if (
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/auth/') ||
-    event.request.method !== 'GET'
-  ) {
-    return;
-  }
-
-  // Handle HTML navigation: Fast Network-first with 1800ms timeout, falling back instantly to cached App Shell
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      (async () => {
-        let timeoutId = null;
-        try {
-          const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-          if (controller) {
-            timeoutId = setTimeout(() => controller.abort(), 1800);
-          }
-          const response = await fetch(event.request, controller ? { signal: controller.signal } : {});
-          if (timeoutId) clearTimeout(timeoutId);
-          const cacheControl = response?.headers.get('cache-control') || '';
-          const isPublicResponse = /(?:^|,)\s*public(?:\s|,|$)/i.test(cacheControl) && !/private|no-store/i.test(cacheControl);
-          if (response && response.status === 200 && isPublicResponse && !response.headers.has('set-cookie')) {
-            const clone = response.clone();
-            await caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        } catch {
-          if (timeoutId) clearTimeout(timeoutId);
-          const cached = await caches.match(event.request);
-          if (cached) return cached;
-          return new Response(
-            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Arth — Offline</title><style>body{margin:0;background:#0D0D0F;color:#F5F5F4;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box;text-align:center}.card{max-width:380px;background:#141416;border:1px solid #333;border-radius:16px;padding:32px 24px}p{font-size:14px;color:#bbb;line-height:1.5}button{background:#fff;color:#000;border:0;border-radius:8px;padding:10px 20px;font-weight:600}</style></head><body><div class="card"><h1>Arth is offline</h1><p>The authenticated app shell is not cached on this device. Reconnect to open Arth; previously loaded financial records remain stored locally and will sync when online.</p><button onclick="location.reload()">Try again</button></div></body></html>',
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          );
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      let mode = await getClientMode(event.clientId);
+      const startUrlSignal = url.pathname === '/offline' && url.searchParams.get('arth_runtime') === 'installed-mobile-pwa' && isMobileUserAgent();
+      if (startUrlSignal) mode = 'installed-mobile-pwa';
+      try {
+        const response = await fetch(request);
+        // Never cache authenticated or personalized navigation responses.
+        if (startUrlSignal && event.resultingClientId) {
+          await storeRuntime('clients', { id: event.resultingClientId, runtimeMode: 'installed-mobile-pwa', updatedAt: Date.now() });
         }
-      })()
-    );
+        return response;
+      } catch {
+        if (mode === 'installed-mobile-pwa' && isMobileUserAgent()) {
+          const prepared = await getRuntime('state', 'pwa-prepared').catch(() => null);
+          if (url.pathname !== '/offline') {
+            return Response.redirect(new URL('/offline?arth_runtime=installed-mobile-pwa', self.location.origin).href, 302);
+          }
+          const cached = await caches.open(CACHE_NAME).then((cache) => cache.match('/offline'));
+          if (prepared?.value && cached) return cached;
+          return offlineHtml('Offline access not prepared', 'Open Arth once while connected to prepare this device for offline use.');
+        }
+        return offlineHtml('Connection required', 'This web session needs an internet connection. Check your connection and try again.');
+      }
+    })());
     return;
   }
 
-  // Handle static assets (Next.js chunks, fonts, icons): Stale-while-revalidate
-  if (
-    url.pathname.startsWith('/_next/static/') ||
-    url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/fonts/') ||
-    url.pathname.endsWith('.svg') ||
-    url.pathname.endsWith('.png') ||
-    url.pathname.endsWith('.ico')
-  ) {
-    event.respondWith(
-      caches.match(event.request).then((cached) => {
-        const fetchPromise = fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const clone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return networkResponse;
-          })
-          .catch(() => cached);
-
-        return cached || fetchPromise;
-      })
-    );
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest' || url.pathname.startsWith('/fonts/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      const update = fetch(request).then((response) => {
+        if (response.ok) void cache.put(request, response.clone());
+        return response;
+      }).catch(() => cached);
+      return cached || update;
+    })());
   }
 });

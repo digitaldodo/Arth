@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'Arth',
     description:
       'Fast, disciplined personal finance tracker with exact integer-paise calculations.',
-    start_url: '/',
+    start_url: '/offline?arth_runtime=installed-mobile-pwa',
     scope: '/',
     id: '/',
     display: 'standalone',

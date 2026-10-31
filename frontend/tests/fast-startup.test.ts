@@ -128,7 +128,7 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
       const content = fs.readFileSync(offlineDbPath, 'utf8');
 
       assert.ok(
-        /const DB_VERSION = [2345];/.test(content),
+        /const DB_VERSION = [23456];/.test(content),
         'offline-db must be at version 2 or higher'
       );
       assert.ok(
@@ -165,26 +165,18 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
 
   // ─── 5. Service Worker Navigation Timeout & Fast Fallback ─────────────────
   describe('5. Service Worker Fast Navigation Strategy', () => {
-    test('sw.template.js enforces fast network timeout with instant App Shell cache fallback', () => {
+    test('sw.template.js limits offline navigation fallback to installed mobile PWA clients', () => {
       assert.ok(fs.existsSync(swTemplatePath), 'sw.template.js must exist');
       const content = fs.readFileSync(swTemplatePath, 'utf8');
 
       assert.ok(
-        content.includes("event.request.mode === 'navigate'"),
+        content.includes("request.mode === 'navigate'"),
         'Service worker must handle navigation requests'
       );
-      assert.ok(
-        content.includes('setTimeout(') && content.includes('.abort()'),
-        'Service worker must apply timeout to navigation requests'
-      );
-      assert.ok(
-        content.includes('isPublicResponse') && content.includes('set-cookie'),
-        'Service worker must only cache explicitly public navigation responses'
-      );
-      assert.ok(
-        content.includes('authenticated app shell is not cached'),
-        'Service worker must explain when no safe offline shell is available'
-      );
+      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Only installed mobile PWA clients receive offline entry');
+      assert.ok(content.includes("url.pathname === '/offline'"), 'PWA offline entry route is explicit');
+      assert.ok(content.includes("'Connection required'"), 'Desktop web gets a network-required state');
+      assert.ok(!content.includes('cache.put(event.request'), 'Authenticated navigation HTML must not be cached');
     });
 
     test('generated public/sw.js matches fast navigation strategy', () => {
@@ -192,13 +184,11 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
       const content = fs.readFileSync(swScriptPath, 'utf8');
 
       assert.ok(
-        content.includes("event.request.mode === 'navigate'"),
+        content.includes("request.mode === 'navigate'"),
         'Generated sw.js must handle navigation requests'
       );
-      assert.ok(
-        content.includes('isPublicResponse'),
-        'Generated sw.js must only cache public navigation responses'
-      );
+      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Generated worker must isolate installed PWA behavior');
+      assert.ok(content.includes("'Connection required'"), 'Generated worker must not display PWA fallback on desktop');
     });
   });
 

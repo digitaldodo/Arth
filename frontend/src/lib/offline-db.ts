@@ -13,7 +13,16 @@ import type {
 } from '@arth/contracts';
 
 const DB_NAME = 'arth_offline_db';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
+
+export interface CachedPwaUser {
+  id: string;
+  email?: string;
+  displayName?: string;
+  username?: string;
+  providers?: string[];
+  passwordStatus?: 'configured' | 'not_configured' | 'unknown';
+}
 
 export type MutationType =
   | 'create_transaction'
@@ -135,11 +144,55 @@ function openDB(): Promise<IDBDatabase> {
         const details = db.createObjectStore('person_details', { keyPath: 'key' });
         details.createIndex('user_id', 'user_id', { unique: false });
       }
+      if (!db.objectStoreNames.contains('pwa_users')) db.createObjectStore('pwa_users', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('pwa_context')) db.createObjectStore('pwa_context', { keyPath: 'key' });
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function setCachedPwaUser(user: CachedPwaUser): Promise<void> {
+  if (!user.id) return;
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['pwa_users', 'pwa_context'], 'readwrite');
+    tx.objectStore('pwa_users').put(user);
+    tx.objectStore('pwa_context').put({ key: 'current', userId: user.id });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Could not save the local PWA account context.'));
+  });
+}
+
+export async function getCachedPwaUser(): Promise<CachedPwaUser | null> {
+  try {
+    const db = await openDB();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(['pwa_users', 'pwa_context'], 'readonly');
+      const contextReq = tx.objectStore('pwa_context').get('current');
+      contextReq.onsuccess = () => {
+        const userId = contextReq.result?.userId as string | undefined;
+        if (!userId) { resolve(null); return; }
+        const userReq = tx.objectStore('pwa_users').get(userId);
+        userReq.onsuccess = () => resolve((userReq.result as CachedPwaUser | undefined) || null);
+        userReq.onerror = () => resolve(null);
+      };
+      contextReq.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+export async function clearCachedPwaUserContext(): Promise<void> {
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction('pwa_context', 'readwrite');
+      tx.objectStore('pwa_context').delete('current');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* preserve the outbox; clearing the active account pointer is best effort */ }
 }
 
 export async function getCachedPeople(userId: string): Promise<PersonDTO[]> {
@@ -672,7 +725,7 @@ export async function clearUserOfflineData(userId: string): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(
-      ['transactions', 'pending_mutations', 'balances', 'categories', 'dashboard_cache', 'sync_meta', 'people', 'person_details'],
+      ['transactions', 'pending_mutations', 'balances', 'categories', 'dashboard_cache', 'sync_meta', 'people', 'person_details', 'pwa_users', 'pwa_context'],
       'readwrite'
     );
 
@@ -713,6 +766,10 @@ export async function clearUserOfflineData(userId: string): Promise<void> {
     const details = tx.objectStore('person_details');
     const detailKeys = details.index('user_id').getAllKeys(userId);
     detailKeys.onsuccess = () => { for (const key of detailKeys.result) details.delete(key); };
+    tx.objectStore('pwa_users').delete(userId);
+    const contextStore = tx.objectStore('pwa_context');
+    const contextReq = contextStore.get('current');
+    contextReq.onsuccess = () => { if (contextReq.result?.userId === userId) contextStore.delete('current'); };
     tx.objectStore('sync_meta').delete(userId);
   } catch {
     // Best effort

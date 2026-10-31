@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PwaRuntimeManager } from './PwaRuntimeManager';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -83,6 +84,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+        <PwaRuntimeManager />
         {children}
       </body>
     </html>

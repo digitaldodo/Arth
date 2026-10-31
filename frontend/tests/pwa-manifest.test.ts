@@ -36,7 +36,7 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
 
     assert.equal(m.name, 'Arth — Personal Finance Tracker');
     assert.equal(m.short_name, 'Arth');
-    assert.equal(m.start_url, '/');
+    assert.equal(m.start_url, '/offline?arth_runtime=installed-mobile-pwa');
     assert.equal(m.scope, '/');
     assert.equal(m.id, '/');
     assert.equal(m.display, 'standalone');
@@ -110,7 +110,7 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
     const swPath = path.join(projectRoot, 'public', 'sw.js');
     assert.ok(fs.existsSync(swPath), 'public/sw.js must exist for PWA offline shell precaching');
     const swContent = fs.readFileSync(swPath, 'utf8');
-    assert.ok(swContent.includes('arth-shell-v1'), 'sw.js must define versioned cache');
+    assert.ok(swContent.includes('arth-shell-v2'), 'sw.js must define versioned cache');
     assert.ok(swContent.includes('/manifest.webmanifest'), 'sw.js must precache manifest');
     assert.ok(swContent.includes('/favicon.ico'), 'sw.js must precache favicon');
     // Ensure no indiscriminate caching of authenticated APIs

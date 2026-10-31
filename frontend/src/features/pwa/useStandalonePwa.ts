@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { isMobileClient, isStandalonePwaClient } from '@/lib/platform-mode';
+import { getApplicationRuntimeMode, isStandalonePwaClient } from '@/lib/platform-mode';
 
 function subscribe(callback: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
@@ -23,6 +23,6 @@ export function useStandalonePwa(): boolean {
 }
 
 export function useMobileStandalonePwa(): boolean {
-  return useSyncExternalStore(subscribe, () => isStandalonePwaClient() && isMobileClient(), () => false);
+  return useSyncExternalStore(subscribe, () => getApplicationRuntimeMode() === 'installed-mobile-pwa', () => false);
 }
 

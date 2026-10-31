@@ -1,13 +1,25 @@
-export function isStandalonePwaClient(): boolean {
-  if (typeof window === 'undefined') return false;
-  const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return window.matchMedia('(display-mode: standalone)').matches || iosStandalone;
+export type ApplicationRuntimeMode = 'desktop-web' | 'mobile-web' | 'installed-mobile-pwa';
+
+export function getApplicationRuntimeMode(): ApplicationRuntimeMode {
+  if (typeof window === 'undefined') return 'desktop-web';
+  const nav = window.navigator as Navigator & {
+    standalone?: boolean;
+    userAgentData?: { mobile?: boolean; platform?: string };
+  };
+  let standalone = nav.standalone === true;
+  try { standalone ||= window.matchMedia('(display-mode: standalone)').matches; } catch { /* uncertain means not installed */ }
+
+  const hints = nav.userAgentData;
+  const ua = nav.userAgent.toLowerCase();
+  const platform = (hints?.platform || nav.platform || '').toLowerCase();
+  const mobileFromUa = /android|iphone|ipad|ipod|mobile/.test(ua);
+  const ipadDesktopMode = /mac/.test(platform) && nav.maxTouchPoints > 1;
+  const isMobile = hints?.mobile === true || (hints?.mobile !== false && (mobileFromUa || ipadDesktopMode));
+
+  if (standalone && isMobile) return 'installed-mobile-pwa';
+  return isMobile ? 'mobile-web' : 'desktop-web';
 }
 
-export function isMobileClient(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent.toLowerCase();
-  const mobileUa = /android|iphone|ipad|ipod|mobile/.test(ua);
-  const ipadDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  return mobileUa || ipadDesktopMode;
+export function isStandalonePwaClient(): boolean {
+  return getApplicationRuntimeMode() === 'installed-mobile-pwa';
 }

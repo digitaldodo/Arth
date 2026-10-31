@@ -28,8 +28,7 @@ import {
   type AccountBalancesDTO,
   type NecessityClass,
 } from '@arth/contracts';
-import { getCachedBalances, setCachedBalances } from '@/lib/offline-db';
-import { usePwaUpdate } from '@/features/pwa/usePwaUpdate';
+import { clearCachedPwaUserContext, getCachedBalances, getSyncMeta, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';
@@ -82,8 +81,24 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const lastSyncedAtRef = useRef<number | null>(null);
 
-  // Automatic PWA update detection, background download, and safe activation
-  usePwaUpdate({ checkIntervalMs: 5 * 60 * 1000 });
+  useEffect(() => {
+    if (!user || !isPwa) return;
+    void setCachedPwaUser(user).then(async () => {
+      const meta = await getSyncMeta(user.id);
+      if (meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null) {
+        navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_PREPARED' });
+      }
+    }).catch(() => {});
+  }, [user, isPwa, pendingSyncCount, isSyncing]);
+
+  const handleSignOut = async (event: React.FormEvent<HTMLFormElement>) => {
+    if (!isPwa) return;
+    event.preventDefault();
+    const form = event.currentTarget;
+    await clearCachedPwaUserContext();
+    navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_SIGNED_OUT' });
+    form.submit();
+  };
 
   // Guard critical operations: defer PWA updates while user is entering/saving transactions or syncing
   useCriticalOperation(
@@ -236,7 +251,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                 <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
                   {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
                 </span>
-                <form action="/auth/logout" method="POST">
+                <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
                   <button
                     type="submit"
                     className="px-3 py-1.5 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
@@ -542,7 +557,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   </div>
                 </div>
 
-                <form action="/auth/logout" method="POST">
+                  <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
                   <button
                     type="submit"
                     className="w-full py-2.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"

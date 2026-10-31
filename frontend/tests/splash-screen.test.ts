@@ -29,7 +29,7 @@ describe('PWA Splash Screen & Initialization Experience', () => {
         'PWA manifest theme_color must be #0D0D0F so Android renders high-contrast white status bar icons'
       );
       assert.equal(m.display, 'standalone');
-      assert.equal(m.start_url, '/');
+      assert.equal(m.start_url, '/offline?arth_runtime=installed-mobile-pwa');
     });
 
     test('layout.tsx establishes dark theme and background before hydration to eliminate white flash', () => {

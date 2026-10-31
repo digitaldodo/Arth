@@ -26,7 +26,7 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
 
     assert.ok(content.includes('const SW_VERSION ='), 'Must define SW_VERSION');
     assert.ok(
-      content.includes("const CACHE_NAME = 'arth-shell-v1-' + SW_VERSION;"),
+      content.includes("const CACHE_NAME = 'arth-shell-v2-' + SW_VERSION;"),
       'Must use versioned cache name'
     );
     assert.ok(content.includes("type === 'SKIP_WAITING'"), 'Must handle SKIP_WAITING message');
@@ -35,7 +35,7 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
       'Must NOT invoke self.skipWaiting() unconditionally in install'
     );
     assert.ok(
-      content.includes('name.startsWith(\'arth-shell-\') && name !== CACHE_NAME'),
+      content.includes("key.startsWith('arth-shell-') && key !== CACHE_NAME"),
       'Must clean up older arth-shell caches on activate'
     );
     assert.ok(
@@ -46,6 +46,11 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
       content.includes("url.pathname.startsWith('/auth/')"),
       'Must exclude auth routes from cache'
     );
+    assert.ok(content.includes("data.type === 'CLASSIFY_CLIENT'"), 'Must classify browser clients before offline fallback decisions');
+    assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Only mobile standalone PWA clients may use the offline entry');
+    assert.ok(content.includes("'Connection required'"), 'Normal web sessions receive a small network-required response');
+    assert.ok(content.includes("cache.addAll(PRECACHE_ASSETS)"), 'Must precache built shell assets');
+    assert.ok(!content.includes('cache.put(event.request'), 'Must not cache personalized navigation HTML');
   });
 
   // ─── 2. Build-Time Version Injection ────────────────────────────────────────
@@ -60,7 +65,7 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
       'public/sw.js must have __SW_VERSION__ placeholder replaced with actual build hash'
     );
     assert.ok(
-      swContent.includes('const CACHE_NAME = \'arth-shell-'),
+      swContent.includes('const CACHE_NAME = \'arth-shell-v2-'),
       'public/sw.js must contain versioned CACHE_NAME'
     );
     assert.ok(
@@ -163,8 +168,8 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
 
     // Bypasses HTTP cache
     assert.ok(
-      hookContent.includes("updateViaCache: 'none'"),
-      'Must register service worker with updateViaCache: none'
+      hookContent.includes("updateViaCache: 'none'") && hookContent.includes("runtimeMode === 'installed-mobile-pwa'"),
+      'Must only register service worker for an installed mobile PWA'
     );
 
     // Safe deferred activation

@@ -5,6 +5,7 @@ import {
   isCriticalOperationActive,
   onCriticalOperationChange,
 } from './critical-operation';
+import { getApplicationRuntimeMode } from '@/lib/platform-mode';
 
 export interface PwaUpdateOptions {
   checkIntervalMs?: number; // Default: 5 minutes (300,000 ms)
@@ -141,6 +142,14 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
     }
 
     hasLoadedControllerRef.current = Boolean(navigator.serviceWorker.controller);
+    const runtimeMode = getApplicationRuntimeMode();
+    const isInstalledMobilePwa = runtimeMode === 'installed-mobile-pwa';
+
+    const classifyClient = () => {
+      const message = { type: 'CLASSIFY_CLIENT', runtimeMode };
+      navigator.serviceWorker.controller?.postMessage(message);
+      registrationRef.current?.active?.postMessage(message);
+    };
 
     let isMounted = true;
     let refreshTriggered = false;
@@ -190,13 +199,44 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    navigator.serviceWorker.addEventListener('controllerchange', classifyClient);
 
-    // Register /sw.js with updateViaCache: 'none' to bypass HTTP cache for sw.js
+    // Only an installed mobile PWA creates a service-worker registration. Ordinary web
+    // sessions update any legacy root registration once so the new worker stops applying
+    // the PWA fallback to them, then classify the current client as online-first.
+    if (!isInstalledMobilePwa) {
+      const legacyRegistration = navigator.serviceWorker.getRegistration('/');
+      const onLegacyUpdateFound = () => {
+        const worker = registrationRef.current?.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) activateWaitingWorker(worker);
+        });
+      };
+      void legacyRegistration.then(async (reg) => {
+        if (!isMounted || !reg) return;
+        registrationRef.current = reg;
+        classifyClient();
+        if (reg.waiting) activateWaitingWorker(reg.waiting);
+        reg.addEventListener('updatefound', onLegacyUpdateFound);
+        try { await reg.update(); } catch { /* an offline desktop remains online-first */ }
+      });
+      classifyClient();
+      return () => {
+        isMounted = false;
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        navigator.serviceWorker.removeEventListener('controllerchange', classifyClient);
+        void legacyRegistration.then((reg) => reg?.removeEventListener('updatefound', onLegacyUpdateFound));
+      };
+    }
+
+    // Register /sw.js only for installed mobile PWA clients.
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         if (!isMounted) return;
         registrationRef.current = reg;
+        classifyClient();
 
         // If an updated worker is already waiting in the background, schedule activation
         if (reg.waiting) {
@@ -253,6 +293,7 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
       isMounted = false;
       clearInterval(intervalId);
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      navigator.serviceWorker.removeEventListener('controllerchange', classifyClient);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);
