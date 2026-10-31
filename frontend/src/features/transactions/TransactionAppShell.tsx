@@ -79,6 +79,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const lastSyncedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -123,6 +125,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       setIsSyncing(state.isSyncing);
       setIsOnline(state.isOnline);
       setSyncError(state.lastError);
+      setMutationError(state.mutationError);
+      setRefreshError(state.refreshError);
       if (state.lastSyncedAt && state.lastSyncedAt !== lastSyncedAtRef.current) {
         lastSyncedAtRef.current = state.lastSyncedAt;
         setRefreshTrigger((value) => value + 1);
@@ -275,9 +279,19 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
       {/* Main Content Area */}
       <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-          <span className={`h-1.5 w-1.5 rounded-full ${!isOnline || pendingSyncCount ? 'bg-amber-500' : syncError ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-          <span>{!isOnline ? 'Offline' : isSyncing ? 'Syncing' : syncError ? 'Sync failed' : pendingSyncCount ? `${pendingSyncCount} change${pendingSyncCount === 1 ? '' : 's'} pending sync` : 'Synced'}</span>
-          {syncError && <span className="truncate">{syncError}</span>}
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${!isOnline ? 'bg-amber-500' : isSyncing ? 'bg-emerald-500 animate-pulse' : mutationError ? 'bg-rose-500' : pendingSyncCount > 0 ? 'bg-amber-500' : refreshError ? 'bg-amber-500' : 'bg-emerald-500'}`}
+          />
+          <span>
+            {!isOnline ? 'Offline' : isSyncing ? 'Syncing' : mutationError ? 'Sync failed' : pendingSyncCount ? `${pendingSyncCount} change${pendingSyncCount === 1 ? '' : 's'} pending sync` : refreshError ? 'Changes synced' : 'Synced'}
+          </span>
+          {mutationError ? (
+            <span className="truncate text-rose-600 dark:text-rose-400">{mutationError}</span>
+          ) : refreshError ? (
+            <span className="truncate text-amber-700 dark:text-amber-400">{refreshError}</span>
+          ) : syncError ? (
+            <span className="truncate text-amber-700 dark:text-amber-400">{syncError}</span>
+          ) : null}
         </div>
         {/* Offline Pending Synchronization Banner */}
         {pendingSyncCount > 0 && (

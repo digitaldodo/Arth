@@ -64,6 +64,7 @@ export function DashboardPage({
   const [balances, setBalances] = useState<AccountBalancesDTO | null>(initialBalances);
   const [balancesLoading, setBalancesLoading] = useState(!initialBalances);
   const [balancesError, setBalancesError] = useState<string | null>(null);
+  const [balancesCachedAt, setBalancesCachedAt] = useState<number | null>(null);
 
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,17 +104,35 @@ export function DashboardPage({
         if (balancesResult.status === 'fulfilled') {
           setBalances(balancesResult.value);
           setBalancesError(null);
+          setBalancesCachedAt(Date.now());
           onBalancesLoaded?.(balancesResult.value);
+          if (userId) void setCachedBalances(balancesResult.value, userId);
           hasAnySuccess = true;
         } else {
           const message =
             balancesResult.reason instanceof Error
               ? balancesResult.reason.message
               : 'Could not calculate account balances.';
-          setBalances(null);
           setBalancesError(message);
           if (!firstErrorMessage) {
             firstErrorMessage = message;
+          }
+          // Attempt graceful fallback to local cached balances
+          if (userId) {
+            void Promise.all([getCachedBalances(userId), getSyncMeta(userId)])
+              .then(([cached, meta]) => {
+                if (cached && isMounted) {
+                  setBalances(cached);
+                  setBalancesCachedAt(meta.balancesCachedAt);
+                } else if (isMounted) {
+                  setBalances(null);
+                }
+              })
+              .catch(() => {
+                if (isMounted) setBalances(null);
+              });
+          } else {
+            setBalances(null);
           }
         }
 
@@ -188,7 +207,9 @@ export function DashboardPage({
       .then((currentBalances) => {
         setBalances(currentBalances);
         setBalancesError(null);
+        setBalancesCachedAt(Date.now());
         onBalancesLoaded?.(currentBalances);
+        if (userId) void setCachedBalances(currentBalances, userId);
       })
       .catch((err: unknown) => {
         const message =
@@ -248,10 +269,12 @@ export function DashboardPage({
         loading={balancesLoading}
         error={balancesError}
         isOffline={typeof navigator !== 'undefined' && !navigator.onLine}
+        cachedAt={balancesCachedAt}
         onRetry={handleRetryBalances}
         onBalancesUpdated={(updated) => {
           setBalances(updated);
           setBalancesError(null);
+          setBalancesCachedAt(Date.now());
           if (userId) void setCachedBalances(updated, userId);
         }}
       />

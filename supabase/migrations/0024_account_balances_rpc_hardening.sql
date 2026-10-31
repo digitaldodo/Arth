@@ -51,6 +51,52 @@ CREATE TABLE IF NOT EXISTS public.balance_movements (
 
 COMMENT ON TABLE public.balance_movements IS 'Internal transfers and auditable reconciliation adjustments. Excluded from income/expense metrics.';
 
+-- Ensure columns exist if table was previously created with a partial schema
+ALTER TABLE public.balance_movements
+  ADD COLUMN IF NOT EXISTS movement_type TEXT,
+  ADD COLUMN IF NOT EXISTS from_method public.payment_method,
+  ADD COLUMN IF NOT EXISTS to_method public.payment_method,
+  ADD COLUMN IF NOT EXISTS amount_paise BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS payment_method public.payment_method,
+  ADD COLUMN IF NOT EXISTS adjustment_paise BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS reason TEXT,
+  ADD COLUMN IF NOT EXISTS movement_date DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- Ensure check constraints exist if table previously existed without them
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_movement_transfer'
+  ) THEN
+    ALTER TABLE public.balance_movements
+      ADD CONSTRAINT chk_movement_transfer CHECK (
+        movement_type <> 'transfer' OR (
+          from_method IS NOT NULL AND
+          to_method IS NOT NULL AND
+          from_method <> to_method AND
+          amount_paise > 0
+        )
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_movement_adjustment'
+  ) THEN
+    ALTER TABLE public.balance_movements
+      ADD CONSTRAINT chk_movement_adjustment CHECK (
+        movement_type <> 'adjustment' OR (
+          payment_method IS NOT NULL AND
+          adjustment_paise <> 0 AND
+          reason IS NOT NULL AND
+          char_length(trim(reason)) > 0
+        )
+      );
+  END IF;
+END $$;
+
 -- Ensure updated_at trigger exists
 DO $$
 BEGIN
@@ -108,8 +154,10 @@ BEGIN
   END IF;
 END $$;
 
--- Table grants for authenticated users
+-- Table grants for authenticated users and service_role
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.balance_movements TO authenticated;
+GRANT ALL ON public.balance_movements TO service_role;
+GRANT SELECT, UPDATE ON public.profiles TO authenticated;
 
 -- 3. Atomic database function to compute account balances
 CREATE OR REPLACE FUNCTION public.fn_account_balances()

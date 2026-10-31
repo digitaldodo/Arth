@@ -134,5 +134,78 @@ describe('Desktop & PWA Balances Isolation, Schema Cache & Sync Recovery', () =>
         'Mutations must only be removed from outbox when executeMutation succeeds'
       );
     });
+
+    test('SyncEngine exposes separate mutationError, refreshError, and resourceErrors on SyncState', () => {
+      const content = fs.readFileSync(syncEnginePath, 'utf8');
+
+      assert.ok(
+        content.includes('mutationError: string | null;') &&
+        content.includes('refreshError: string | null;') &&
+        content.includes('resourceErrors: SyncResourceErrors;'),
+        'SyncState must decouple outgoing mutation errors from incoming refresh errors'
+      );
+
+      const state = syncEngine.getState();
+      assert.ok('mutationError' in state, 'getState() must return mutationError');
+      assert.ok('refreshError' in state, 'getState() must return refreshError');
+      assert.ok('resourceErrors' in state, 'getState() must return resourceErrors');
+    });
+  });
+
+  describe('3. PWA Status Presentation & Separation of Outbox Mutations vs Server Refresh', () => {
+    const appShellPath = path.join(projectRoot, 'src', 'features', 'transactions', 'TransactionAppShell.tsx');
+    const installCardPath = path.join(projectRoot, 'src', 'features', 'pwa', 'InstallPromptCard.tsx');
+
+    test('TransactionAppShell distinguishes mutation failures from background server refresh failures', () => {
+      assert.ok(fs.existsSync(appShellPath), 'TransactionAppShell.tsx must exist');
+      const content = fs.readFileSync(appShellPath, 'utf8');
+
+      // Verify mutationError gives rose red "Sync failed"
+      assert.ok(
+        content.includes("mutationError ? 'bg-rose-500'"),
+        'Must display rose dot only for genuine mutation failures'
+      );
+      assert.ok(
+        content.includes("mutationError ? 'Sync failed'"),
+        'Must display "Sync failed" only when mutation upload fails'
+      );
+
+      // Verify refreshError with 0 pending changes gives amber dot and "Changes synced"
+      assert.ok(
+        content.includes("refreshError ? 'Changes synced'"),
+        'Must acknowledge successful transaction sync when only server refresh fails'
+      );
+      assert.ok(
+        content.includes("refreshError ? 'bg-amber-500'"),
+        'Must display amber warning instead of red error when only server refresh fails'
+      );
+    });
+
+    test('InstallPromptCard distinguishes mutation error from server refresh notice', () => {
+      assert.ok(fs.existsSync(installCardPath), 'InstallPromptCard.tsx must exist');
+      const content = fs.readFileSync(installCardPath, 'utf8');
+
+      assert.ok(
+        content.includes('syncState.mutationError ?'),
+        'InstallPromptCard must check syncState.mutationError'
+      );
+      assert.ok(
+        content.includes('syncState.refreshError ?'),
+        'InstallPromptCard must check syncState.refreshError'
+      );
+    });
+
+    test('BalanceCard displays "Saved Copy" when cached balances are shown during a server error', () => {
+      const content = fs.readFileSync(balanceCardPath, 'utf8');
+
+      assert.ok(
+        content.includes('Saved Copy'),
+        'BalanceCard must badge cached balances as "Saved Copy" during server error'
+      );
+      assert.ok(
+        content.includes('Showing saved balances'),
+        'BalanceCard must honestly inform user that saved balances are being shown'
+      );
+    });
   });
 });

@@ -89,6 +89,10 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
             <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
               {syncState.pendingCount} pending sync
             </span>
+          ) : syncState.mutationError ? (
+            <span className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
+              Sync failed
+            </span>
           ) : (
             <span className="text-[11px] text-[var(--text-muted)]">
               All changes synced
@@ -119,11 +123,19 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
         </div>
       )}
 
-      {syncState.lastError && (
-        <div className="text-[10px] text-red-600 dark:text-red-400">
+      {syncState.mutationError ? (
+        <div className="text-[10px] text-rose-600 dark:text-rose-400">
+          Sync error: {syncState.mutationError}
+        </div>
+      ) : syncState.refreshError ? (
+        <div className="text-[10px] text-amber-700 dark:text-amber-400">
+          Server refresh: {syncState.refreshError}
+        </div>
+      ) : syncState.lastError ? (
+        <div className="text-[10px] text-amber-700 dark:text-amber-400">
           Sync notice: {syncState.lastError}
         </div>
-      )}
+      ) : null}
     </div>
   );
 

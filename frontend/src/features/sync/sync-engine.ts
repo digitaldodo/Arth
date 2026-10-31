@@ -46,12 +46,21 @@ import {
 import { parseINRToPaise, formatPaiseToINR } from '../../lib/format';
 import { isStandalonePwaClient } from '../../lib/platform-mode';
 
+export interface SyncResourceErrors {
+  balances: string | null;
+  categories: string | null;
+  transactions: string | null;
+}
+
 export interface SyncState {
   isOnline: boolean;
   isSyncing: boolean;
   pendingCount: number;
   lastSyncedAt: number | null;
   lastError: string | null;
+  mutationError: string | null;
+  refreshError: string | null;
+  resourceErrors: SyncResourceErrors;
 }
 
 type SyncListener = (state: SyncState) => void;
@@ -63,6 +72,13 @@ class SyncEngine {
   private currentPendingCount = 0;
   private lastSyncedAt: number | null = null;
   private lastError: string | null = null;
+  private mutationError: string | null = null;
+  private refreshError: string | null = null;
+  private resourceErrors: SyncResourceErrors = {
+    balances: null,
+    categories: null,
+    transactions: null,
+  };
   private isOnlineState =
     typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
       ? navigator.onLine
@@ -103,6 +119,13 @@ class SyncEngine {
       this.currentPendingCount = 0;
       this.lastSyncedAt = null;
       this.lastError = null;
+      this.mutationError = null;
+      this.refreshError = null;
+      this.resourceErrors = {
+        balances: null,
+        categories: null,
+        transactions: null,
+      };
       if (userId) {
         // Load initial sync metadata without restoring old error as active error
         void getSyncMeta(userId).then((meta) => {
@@ -130,6 +153,9 @@ class SyncEngine {
       pendingCount: this.currentPendingCount,
       lastSyncedAt: this.lastSyncedAt,
       lastError: this.lastError,
+      mutationError: this.mutationError,
+      refreshError: this.refreshError,
+      resourceErrors: { ...this.resourceErrors },
     };
   }
 
@@ -448,32 +474,34 @@ class SyncEngine {
           if (isNetError) {
             // Stop processing queue on network loss
             this.isOnlineState = false;
+            this.mutationError = 'Network disconnected during synchronization';
+            this.lastError = this.mutationError;
             await updatePendingMutation(mutation.id, {
               attempts: mutation.attempts + 1,
               lastAttemptAt: Date.now(),
               lastError: 'Network disconnected during synchronization',
             });
-            this.lastError = 'Network disconnected during synchronization';
             break;
           }
 
-          // Unrecoverable validation error (400, 422) or client error
+          // Unrecoverable validation error (400, 422) or server mutation failure
           const statusCode = (itemErr as { statusCode?: number })?.statusCode;
+          const msg = itemErr instanceof Error ? itemErr.message : 'Server rejected mutation';
+          this.mutationError = msg;
+          this.lastError = msg;
           if (statusCode === 400 || statusCode === 422) {
-            this.lastError = itemErr instanceof Error ? itemErr.message : 'Server rejected mutation';
             await updatePendingMutation(mutation.id, {
               status: 'failed',
               attempts: mutation.attempts + 1,
               lastAttemptAt: Date.now(),
-              lastError: itemErr instanceof Error ? itemErr.message : 'Server rejected mutation',
+              lastError: msg,
             });
           } else {
-            this.lastError = itemErr instanceof Error ? itemErr.message : 'Sync temporary failure';
             // Temporary server error (500, 503) — increment attempt and back off
             await updatePendingMutation(mutation.id, {
               attempts: mutation.attempts + 1,
               lastAttemptAt: Date.now(),
-              lastError: itemErr instanceof Error ? itemErr.message : 'Sync temporary failure',
+              lastError: msg,
             });
           }
         }
@@ -482,14 +510,19 @@ class SyncEngine {
       // Re-evaluate pending count
       const remaining = await getPendingMutations(userId);
       this.currentPendingCount = remaining.length;
+      if (remaining.length === 0) {
+        this.mutationError = null;
+      }
 
       // Reconcile with server if queue is empty or online
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         const refreshed = await this.reconcileServerState(userId);
         if (refreshed) {
           this.lastSyncedAt = Date.now();
-          this.lastError = null;
-          await setSyncMeta(userId, { lastSyncedAt: this.lastSyncedAt, lastError: null });
+          if (!this.mutationError) {
+            this.lastError = null;
+          }
+          await setSyncMeta(userId, { lastSyncedAt: this.lastSyncedAt, lastError: this.lastError });
         }
       }
     } catch (err) {
@@ -603,8 +636,10 @@ class SyncEngine {
         await setCachedBalances(serverBalances, userId);
         await setSyncMeta(userId, { balancesCachedAt: Date.now() });
       }
+      this.resourceErrors.balances = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh account balances:', err);
+      this.resourceErrors.balances = err instanceof Error ? err.message : 'Failed to refresh balances';
       failedResources.push('Account balances');
     }
 
@@ -613,8 +648,10 @@ class SyncEngine {
       const serverCategories = await apiFetchCategories({ include_archived: true });
       await setCachedCategories(serverCategories.categories, userId);
       await setSyncMeta(userId, { categoriesSnapshotComplete: true });
+      this.resourceErrors.categories = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh categories:', err);
+      this.resourceErrors.categories = err instanceof Error ? err.message : 'Failed to refresh categories';
       failedResources.push('Categories');
     }
 
@@ -632,23 +669,36 @@ class SyncEngine {
       }
       await replaceCachedTransactions(all, userId);
       await setSyncMeta(userId, { transactionsSnapshotComplete: true });
+      this.resourceErrors.transactions = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh transactions:', err);
+      this.resourceErrors.transactions = err instanceof Error ? err.message : 'Failed to refresh transactions';
       failedResources.push('Transaction history');
     }
 
     if (failedResources.length === 0) {
-      this.lastError = null;
+      this.refreshError = null;
       this.lastSyncedAt = Date.now();
-      await setSyncMeta(userId, {
-        lastSyncedAt: this.lastSyncedAt,
-        lastError: null,
-      });
+      if (!this.mutationError) {
+        this.lastError = null;
+        await setSyncMeta(userId, {
+          lastSyncedAt: this.lastSyncedAt,
+          lastError: null,
+        });
+      } else {
+        await setSyncMeta(userId, {
+          lastSyncedAt: this.lastSyncedAt,
+          lastError: this.lastError,
+        });
+      }
       return true;
     }
 
     const failedList = failedResources.join(' and ');
-    this.lastError = `${failedList} could not be refreshed; showing the saved local copy.`;
+    this.refreshError = `${failedList} could not be refreshed; showing the saved local copy.`;
+    if (!this.mutationError) {
+      this.lastError = this.refreshError;
+    }
     await setSyncMeta(userId, { lastError: this.lastError });
     return false;
   }
