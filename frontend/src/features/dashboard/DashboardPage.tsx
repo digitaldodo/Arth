@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  type NecessityClass,
   type DashboardDateRangePreset,
   type DashboardSummaryResponse,
   type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
-import { formatPaiseToINR } from '@/lib/format';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
 import {
   getCachedBalances,
@@ -22,10 +22,20 @@ import { SpendingComposition } from './SpendingComposition';
 import { SpendingByNecessity } from './SpendingByNecessity';
 import { RecentActivity } from './RecentActivity';
 import { DashboardSkeleton } from './DashboardSkeleton';
+import { getLatestRecentTransactions } from './recent-transactions';
+import { formatDateHuman } from '@/lib/format';
 
 interface DashboardPageProps {
   onOpenQuickAdd: () => void;
   onNavigateToLedger: () => void;
+  onOpenFilteredLedger: (filter: {
+    categoryId?: string;
+    necessity?: NecessityClass;
+    startDate: string;
+    endDate: string;
+    label: string;
+    amountPaise: number;
+  }) => void;
   refreshTrigger?: number;
   onInitialReady?: (error?: string) => void;
   initialBalances?: AccountBalancesDTO | null;
@@ -40,6 +50,7 @@ interface DashboardError {
 export function DashboardPage({
   onOpenQuickAdd,
   onNavigateToLedger,
+  onOpenFilteredLedger,
   refreshTrigger = 0,
   onInitialReady,
   initialBalances = null,
@@ -58,6 +69,7 @@ export function DashboardPage({
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<DashboardError | null>(null);
+  const [expandedList, setExpandedList] = useState<'categories' | 'transactions' | null>(null);
 
   const summarySeqRef = useRef<number>(0);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -197,69 +209,6 @@ export function DashboardPage({
     setPreset('custom');
     setDateRange({ start_date: startDate, end_date: endDate });
   };
-
-  // Authoritative spending by necessity fallback reconciliation
-  const effectiveNecessityItems = React.useMemo(() => {
-    if (!summary) return [];
-    const items = summary.spending_by_necessity || [];
-    const sumPaise = items.reduce((acc, curr) => acc + (curr.amount_paise || 0), 0);
-    if (sumPaise > 0 || summary.expenses_paise <= 0) {
-      return items;
-    }
-
-    const txs = summary.recent_transactions || [];
-    let essential = 0;
-    let optional = 0;
-    let luxury = 0;
-
-    for (const t of txs) {
-      if (t.type === 'expense') {
-        const nec = String(t.necessity || '').toLowerCase().trim();
-        const amt = Number(t.amount_paise || 0);
-        if (nec === 'essential') essential += amt;
-        else if (nec === 'optional') optional += amt;
-        else if (nec === 'luxury') luxury += amt;
-      }
-    }
-
-    const calcTotal = essential + optional + luxury;
-    if (calcTotal > 0) {
-      return [
-        {
-          necessity: 'essential' as const,
-          label: 'Essential',
-          amount_paise: essential,
-          formatted_inr: formatPaiseToINR(essential),
-          share_percentage:
-            summary.expenses_paise > 0
-              ? Math.round((essential / summary.expenses_paise) * 1000) / 10
-              : 0,
-        },
-        {
-          necessity: 'optional' as const,
-          label: 'Optional',
-          amount_paise: optional,
-          formatted_inr: formatPaiseToINR(optional),
-          share_percentage:
-            summary.expenses_paise > 0
-              ? Math.round((optional / summary.expenses_paise) * 1000) / 10
-              : 0,
-        },
-        {
-          necessity: 'luxury' as const,
-          label: 'Luxury',
-          amount_paise: luxury,
-          formatted_inr: formatPaiseToINR(luxury),
-          share_percentage:
-            summary.expenses_paise > 0
-              ? Math.round((luxury / summary.expenses_paise) * 1000) / 10
-              : 0,
-        },
-      ];
-    }
-
-    return items;
-  }, [summary]);
 
   const isAuthError =
     error &&
@@ -495,28 +444,89 @@ export function DashboardPage({
           )}
 
           {/* Spending Composition, Spending by Necessity, and Recent Activity */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div className="w-full min-w-0">
               <SpendingComposition
                 categories={summary.spending_composition}
                 totalExpensesPaise={summary.expenses_paise}
+                expanded={expandedList === 'categories'}
+                onSelectCategory={(category) => onOpenFilteredLedger({
+                  categoryId: category.category_id,
+                  startDate: dateRange.start_date,
+                  endDate: dateRange.end_date,
+                  label: category.category_name,
+                  amountPaise: category.amount_paise,
+                })}
+                onToggleExpanded={(expanded) => setExpandedList(expanded ? 'categories' : null)}
               />
             </div>
 
             <div className="w-full min-w-0">
               <SpendingByNecessity
-                items={effectiveNecessityItems}
+                items={summary.spending_by_necessity}
                 totalExpensesPaise={summary.expenses_paise}
+                onSelectNecessity={(necessity, label, amountPaise) => onOpenFilteredLedger({
+                  necessity,
+                  startDate: dateRange.start_date,
+                  endDate: dateRange.end_date,
+                  label,
+                  amountPaise,
+                })}
               />
             </div>
 
             <div className="w-full min-w-0 md:col-span-2 lg:col-span-1">
               <RecentActivity
                 transactions={summary.recent_transactions}
-                onNavigateToLedger={onNavigateToLedger}
+                expanded={expandedList === 'transactions'}
+                onToggleExpanded={(expanded) => setExpandedList(expanded ? 'transactions' : null)}
               />
             </div>
           </div>
+
+          {expandedList && (
+            <section className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5" aria-live="polite">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                  {expandedList === 'categories' ? 'All spending categories' : 'More recent transactions'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setExpandedList(null)}
+                  className="min-h-10 rounded-md px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                >
+                  View less
+                </button>
+              </div>
+              {expandedList === 'categories' ? (
+                <div className="divide-y divide-[var(--border-hairline)]">
+                  {summary.spending_composition.slice(3).map((category) => (
+                    <button
+                      key={category.category_id}
+                      type="button"
+                      onClick={() => onOpenFilteredLedger({ categoryId: category.category_id, startDate: dateRange.start_date, endDate: dateRange.end_date, label: category.category_name, amountPaise: category.amount_paise })}
+                      className="flex w-full min-h-11 items-center justify-between gap-3 py-2.5 text-left text-xs hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)]"
+                    >
+                      <span className="truncate font-medium text-[var(--text-primary)]">{category.category_icon ? `${category.category_icon} ` : ''}{category.category_name} <span className="font-mono text-[var(--text-muted)]">{category.share_percentage}%</span></span>
+                      <span className="shrink-0 font-mono font-semibold text-[var(--text-primary)]">{category.formatted_inr}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="divide-y divide-[var(--border-hairline)]">
+                  {getLatestRecentTransactions(summary.recent_transactions, summary.recent_transactions.length).slice(3).map((transaction) => (
+                    <div key={transaction.id} className="flex min-w-0 items-center justify-between gap-3 py-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-[var(--text-primary)]">{transaction.description || transaction.category_name || 'Uncategorized'}</p>
+                        <p className="mt-1 text-[10px] text-[var(--text-muted)]">{formatDateHuman(transaction.transaction_date)} · {transaction.category_name || 'Uncategorized'} · {transaction.payment_method}</p>
+                      </div>
+                      <span className={`shrink-0 whitespace-nowrap font-mono font-semibold ${transaction.type === 'expense' ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{transaction.type === 'expense' ? '−' : '+'}{transaction.formatted_inr}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       )}
     </div>

@@ -29,6 +29,7 @@ import {
   type CreateTransferRequest,
   type CreateAdjustmentRequest,
   type AccountBalancesDTO,
+  type NecessityClass,
 } from '@arth/contracts';
 import {
   createTransaction,
@@ -65,6 +66,14 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
+  const [ledgerInitialFilter, setLedgerInitialFilter] = useState<{
+    categoryId?: string;
+    necessity?: NecessityClass;
+    startDate: string;
+    endDate: string;
+    label: string;
+    amountPaise: number;
+  } | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
@@ -355,6 +364,10 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <DashboardPage
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
+                onOpenFilteredLedger={(filter) => {
+                  setLedgerInitialFilter(filter);
+                  setActiveView('ledger');
+                }}
                 refreshTrigger={refreshTrigger}
                 initialBalances={shellBalances}
                 onBalancesLoaded={(b) => setShellBalances(b)}
@@ -363,6 +376,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
             <div className={activeView === 'ledger' ? 'block' : 'hidden'}>
               <TransactionLedger
+                key={ledgerInitialFilter ? `${ledgerInitialFilter.categoryId || ''}:${ledgerInitialFilter.necessity || ''}:${ledgerInitialFilter.startDate}:${ledgerInitialFilter.endDate}` : 'all'}
+                initialFilter={ledgerInitialFilter}
                 userId={user?.id}
                 userProfile={{
                   displayName: user?.displayName,

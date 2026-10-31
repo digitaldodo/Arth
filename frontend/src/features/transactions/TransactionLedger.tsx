@@ -25,7 +25,7 @@ import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { getCachedTransactions, saveCachedTransactions } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 
-export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year';
+export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
 
 export interface TransactionLedgerProps {
@@ -36,6 +36,14 @@ export interface TransactionLedgerProps {
   onTransactionMutated?: () => void;
   onAccountPasswordVerified?: () => void;
   userId?: string;
+  initialFilter?: {
+    categoryId?: string;
+    necessity?: NecessityClass;
+    startDate: string;
+    endDate: string;
+    label: string;
+    amountPaise: number;
+  } | null;
 }
 
 // In-memory query cache for recent filter queries to make back-and-forth filtering instantaneous
@@ -53,6 +61,7 @@ export function TransactionLedger({
   onTransactionMutated,
   onAccountPasswordVerified,
   userId,
+  initialFilter = null,
 }: TransactionLedgerProps) {
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -61,10 +70,14 @@ export function TransactionLedger({
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [selectedType, setSelectedType] = useState<TransactionType | 'all'>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedNecessity, setSelectedNecessity] = useState<NecessityClass | 'all'>('all');
-  const [selectedDatePreset, setSelectedDatePreset] = useState<LedgerDatePreset>('all');
+  const [selectedType, setSelectedType] = useState<TransactionType | 'all'>(initialFilter ? 'expense' : 'all');
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialFilter?.categoryId || 'all');
+  const [selectedNecessity, setSelectedNecessity] = useState<NecessityClass | 'all'>(initialFilter?.necessity || 'all');
+  const [selectedDatePreset, setSelectedDatePreset] = useState<LedgerDatePreset>(initialFilter ? 'custom' : 'all');
+  const [dateRangeOverride, setDateRangeOverride] = useState(initialFilter ? {
+    startDate: initialFilter.startDate,
+    endDate: initialFilter.endDate,
+  } : null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<LedgerSortOption>('date_desc');
 
@@ -108,10 +121,14 @@ export function TransactionLedger({
 
   // Compute active date range based on preset
   const activeDateRange = useMemo(() => {
-    if (selectedDatePreset === 'all') return { startDate: undefined, endDate: undefined };
+    if (dateRangeOverride) return dateRangeOverride;
+    if (selectedDatePreset === 'custom' && initialFilter) {
+      return { startDate: initialFilter.startDate, endDate: initialFilter.endDate };
+    }
+    if (selectedDatePreset === 'all' || selectedDatePreset === 'custom') return { startDate: undefined, endDate: undefined };
     const range = computePresetDateRange(selectedDatePreset);
     return { startDate: range.startDate, endDate: range.endDate };
-  }, [selectedDatePreset]);
+  }, [selectedDatePreset, dateRangeOverride, initialFilter]);
 
   // 2. Fetch Transactions with Debounced Loading Indicator & Sequence Tracking
   const loadTransactions = useCallback(() => {
@@ -374,6 +391,7 @@ export function TransactionLedger({
     setSelectedCategory('all');
     setSelectedNecessity('all');
     setSelectedDatePreset('all');
+    setDateRangeOverride(null);
     setSearchQuery('');
     setSortBy('date_desc');
   };
@@ -383,10 +401,20 @@ export function TransactionLedger({
     selectedCategory !== 'all' ||
     selectedNecessity !== 'all' ||
     selectedDatePreset !== 'all' ||
+    dateRangeOverride !== null ||
     searchQuery.trim().length > 0;
 
   return (
     <div className="space-y-5">
+      {initialFilter && (
+        <div className="flex flex-col gap-1 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">{initialFilter.label} transactions</h2>
+            <p className="text-xs text-[var(--text-muted)]">Filtered from {initialFilter.startDate} to {initialFilter.endDate}</p>
+          </div>
+          <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">{formatPaiseToINR(initialFilter.amountPaise)}</div>
+        </div>
+      )}
       {/* 1. Net Cash Flow & Summary Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl shadow-xs transition-colors">
         <div>
@@ -511,11 +539,15 @@ export function TransactionLedger({
           {/* Date Range Preset Dropdown */}
           <select
             value={selectedDatePreset}
-            onChange={(e) => setSelectedDatePreset(e.target.value as LedgerDatePreset)}
+            onChange={(e) => {
+              setSelectedDatePreset(e.target.value as LedgerDatePreset);
+              setDateRangeOverride(null);
+            }}
             className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
             title="Filter by statement date period"
           >
             <option value="all">All Time</option>
+            {initialFilter && <option value="custom">Dashboard Range</option>}
             <option value="this_month">This Month</option>
             <option value="last_month">Last Month</option>
             <option value="this_year">This Year</option>
@@ -707,7 +739,7 @@ export function TransactionLedger({
                     <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
                       {txn.payment_method === 'online' ? 'Online' : 'Cash'}
                     </Badge>
-                    {(txn as any).sync_status === 'pending' && (
+                    {('sync_status' in txn && txn.sync_status === 'pending') && (
                       <Badge variant="warning" size="xs" dot={true}>
                         Waiting to sync
                       </Badge>
