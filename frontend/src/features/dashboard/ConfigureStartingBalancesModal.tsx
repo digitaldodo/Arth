@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import type { AccountBalancesDTO } from '@arth/contracts';
-import { configureStartingBalances } from '@/lib/api-client';
+import { syncEngine } from '@/features/sync/sync-engine';
 import { formatPaiseToINR, parseNonNegativeINRToPaise } from '@arth/contracts';
 
 interface ConfigureStartingBalancesModalProps {
@@ -10,6 +10,7 @@ interface ConfigureStartingBalancesModalProps {
   onClose: () => void;
   onConfigured: (balances: AccountBalancesDTO) => void;
   currentBalances?: AccountBalancesDTO | null;
+  userId?: string;
 }
 
 export function ConfigureStartingBalancesModal({
@@ -17,6 +18,7 @@ export function ConfigureStartingBalancesModal({
   onClose,
   onConfigured,
   currentBalances,
+  userId,
 }: ConfigureStartingBalancesModalProps) {
   const [cashStr, setCashStr] = useState<string>(() =>
     currentBalances?.starting_cash_paise
@@ -58,10 +60,10 @@ export function ConfigureStartingBalancesModal({
 
     setIsSubmitting(true);
     try {
-      const updated = await configureStartingBalances({
+      const updated = await syncEngine.configureStartingBalancesLocalFirst({
         starting_cash: cashStr || '0',
         starting_online: onlineStr || '0',
-      });
+      }, userId || 'default');
       onConfigured(updated);
       onClose();
     } catch (err) {

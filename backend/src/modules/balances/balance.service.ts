@@ -74,12 +74,19 @@ export class SupabaseBalanceService implements IBalanceService {
       throw new Error(`Failed to calculate account balances: ${rpcErr?.message || 'Empty response'}`);
     }
 
+    return this.mapRpcBalances(rpcData as Record<string, unknown>);
+  }
+
+  private mapRpcBalances(rpcData: Record<string, unknown>): AccountBalancesDTO {
     const startingCash = Number(rpcData.starting_cash_paise || 0);
     const startingOnline = Number(rpcData.starting_online_paise || 0);
     const startingTotal = Number(rpcData.starting_total_paise || 0);
     const currentCash = Number(rpcData.current_cash_paise || 0);
     const currentOnline = Number(rpcData.current_online_paise || 0);
     const totalAvailable = Number(rpcData.total_available_paise || 0);
+    const balancesConfigured = Boolean(
+      rpcData.balances_configured || startingCash > 0 || startingOnline > 0
+    );
 
     return {
       starting_cash_paise: startingCash,
@@ -94,7 +101,7 @@ export class SupabaseBalanceService implements IBalanceService {
       formatted_current_cash: formatPaiseToINR(currentCash),
       formatted_current_online: formatPaiseToINR(currentOnline),
       formatted_total_available: formatPaiseToINR(totalAvailable),
-      balances_configured: Boolean(rpcData.balances_configured),
+      balances_configured: balancesConfigured,
       balances_configured_at: (rpcData.balances_configured_at as string) || null,
     };
   }
@@ -106,7 +113,21 @@ export class SupabaseBalanceService implements IBalanceService {
   ): Promise<AccountBalancesDTO> {
     const client = this.getScopedClient(token);
 
-    const { error } = await client
+    // 1. Attempt authoritative RPC fn_configure_starting_balances if available
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('fn_configure_starting_balances', {
+        p_starting_cash_paise: data.starting_cash_paise.toString(),
+        p_starting_online_paise: data.starting_online_paise.toString(),
+      });
+      if (!rpcErr && rpcData) {
+        return this.mapRpcBalances(rpcData as Record<string, unknown>);
+      }
+    } catch {
+      // Fall through to direct table update
+    }
+
+    // 2. Direct profiles table update
+    let { error } = await client
       .from('profiles')
       .update({
         starting_cash_paise: data.starting_cash_paise.toString(),
@@ -115,6 +136,31 @@ export class SupabaseBalanceService implements IBalanceService {
         balances_configured_at: new Date().toISOString(),
       })
       .eq('id', userId);
+
+    // 3. Fallback: if PostgREST schema cache is missing "balances_configured" column
+    if (
+      error &&
+      (error.message.includes('balances_configured') ||
+        error.message.includes('schema cache') ||
+        error.code === 'PGRST204')
+    ) {
+      console.warn(
+        `[BalanceService] "balances_configured" not in schema cache. Updating starting balances without the column.`
+      );
+      const fallbackResult = await client
+        .from('profiles')
+        .update({
+          starting_cash_paise: data.starting_cash_paise.toString(),
+          starting_online_paise: data.starting_online_paise.toString(),
+        })
+        .eq('id', userId);
+
+      if (fallbackResult.error) {
+        console.error(`[BalanceService] Fallback profile update failed:`, fallbackResult.error.message);
+        throw new Error(`Failed to save starting balances: ${fallbackResult.error.message}`);
+      }
+      error = null;
+    }
 
     if (error) {
       console.error(`[BalanceService] Failed to configure starting balances:`, error.message);

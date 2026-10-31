@@ -15,7 +15,8 @@ import {
 } from '@arth/contracts';
 import { createTransaction, updateTransaction, fetchCategories } from '@/lib/api-client';
 import { getTodayIST, formatDateHuman } from '@/lib/format';
-import { enqueuePendingMutation, saveCachedTransaction } from '@/lib/offline-db';
+import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
+import { syncEngine } from '@/features/sync/sync-engine';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ interface QuickAddModalProps {
   onSuccess: (res: CreateTransactionResponse | UpdateTransactionResponse) => void;
   categoryVersion?: number;
   editingTransaction?: TransactionDTO | null;
+  userId?: string;
 }
 
 export function QuickAddModal({
@@ -31,6 +33,7 @@ export function QuickAddModal({
   onSuccess,
   categoryVersion = 0,
   editingTransaction = null,
+  userId,
 }: QuickAddModalProps) {
   const isEditMode = Boolean(editingTransaction);
 
@@ -253,16 +256,21 @@ export function QuickAddModal({
     setIsSubmitting(true);
     try {
       if (isEditMode && editingTransaction) {
-        const response = await updateTransaction(editingTransaction.id, {
-          amount: amount.trim(),
-          type,
-          category_id: categoryId,
-          transaction_date: transactionDate,
-          payment_method: paymentMethod,
-          necessity: type === 'expense' ? necessity : null,
-          description: description.trim() || null,
-          notes: notes.trim() || null,
-        });
+        const response = await syncEngine.updateTransactionLocalFirst(
+          editingTransaction.id,
+          {
+            amount: amount.trim(),
+            type,
+            category_id: categoryId,
+            transaction_date: transactionDate,
+            payment_method: paymentMethod,
+            necessity: type === 'expense' ? necessity : null,
+            description: description.trim() || null,
+            notes: notes.trim() || null,
+          },
+          categories,
+          userId || 'default'
+        );
 
         onSuccess(response);
         onClose();
@@ -279,56 +287,11 @@ export function QuickAddModal({
           notes: notes.trim() || null,
         };
 
-        let response: CreateTransactionResponse;
-
-        try {
-          response = await createTransaction(payload);
-          // Cache successful transaction into offline db
-          saveCachedTransaction(response.transaction);
-        } catch (netErr: unknown) {
-          // If offline or network failure, queue to offline db and respond optimistically
-          const isOffline =
-            typeof navigator !== 'undefined' && !navigator.onLine;
-          const isNetError =
-            netErr instanceof TypeError ||
-            /failed to fetch|network|offline/i.test(String(netErr));
-
-          if (isOffline || isNetError) {
-            const paise = parseINRToPaise(payload.amount);
-            const optimisticTxn: TransactionDTO = {
-              id: payload.id,
-              amount_paise: Number(paise),
-              amount_decimal: payload.amount,
-              formatted_inr: formatPaiseToINR(paise),
-              type: payload.type,
-              category_id: payload.category_id,
-              category_name:
-                categories.find((c) => c.id === payload.category_id)?.name ||
-                'Uncategorized',
-              transaction_date: payload.transaction_date,
-              payment_method: payload.payment_method,
-              necessity: payload.necessity ?? null,
-              description: payload.description || null,
-              notes: payload.notes || null,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-
-            await enqueuePendingMutation({
-              id: payload.id,
-              type: 'create_transaction',
-              payload,
-            });
-            await saveCachedTransaction(optimisticTxn);
-
-            response = {
-              transaction: optimisticTxn,
-              idempotent_replay: false,
-            };
-          } else {
-            throw netErr;
-          }
-        }
+        const response = await syncEngine.createTransactionLocalFirst(
+          payload,
+          categories,
+          userId || 'default'
+        );
 
         onSuccess(response);
 

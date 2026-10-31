@@ -482,31 +482,33 @@ Arth provides baseline Progressive Web App installability via the Next.js App Ro
 - **Subtle Install Experience**: Managed via `usePwaInstall` hook and `InstallPromptCard` rendered in Settings/More (`activeView === 'more'`). Captures `beforeinstallprompt`, provides clean "Install Arth" action, detects standalone mode via `matchMedia('(display-mode: standalone)')`, and provides manual installation steps for iOS/iPadOS Safari without intrusive unsolicited modals.
 - **Strict Scope Boundaries**: Phase 01N implements **zero** service workers, zero offline caching, and zero IndexedDB/Dexie usage.
 
-### 6.1 Service Worker & Offline Strategy (Deferred to Phase 03)
+### 6.1 Service Worker & Offline-First Architecture
 
-> **Not implemented in Phase 01. Documented here to prevent conflicting design decisions.**
+Arth implements a complete local-first storage and synchronization architecture:
 
-#### 6.1.1 Service worker
+#### 6.1.1 Service Worker & Caching
+- **Service Worker (`public/sw.js`)**: Generated at build time with stable cache keys and cache cleanup routines.
+- **Fast App Shell Navigation**: Navigations fall back instantly to the cached App Shell when network connectivity drops or times out.
+- **Background Synchronization**: Listens for connectivity restoration and triggers client synchronization.
 
-- Use Workbox (via `next-pwa` or custom `sw.js`) for static asset caching.
-- Cache-first for UI shell; network-first for data.
+#### 6.1.2 IndexedDB Schema Version 3 (`arth_offline_db`)
+- Native IndexedDB implementation in `frontend/src/lib/offline-db.ts` with strict user-scoping on all stores to eliminate cross-user leakage on shared devices:
+  - `transactions`: Local store keyed by transaction ID, with `user_id` and `created_at` indexes. Tracks `sync_status` (`'synced'` | `'pending'`) and `deleted_locally`.
+  - `pending_mutations`: Client-side durable outbox queue keyed by UUID v7 mutation ID, indexed by `userId`, `createdAt`, and `status`. Stores structured payloads for offline creations, updates, soft-deletes, and starting balance setups.
+  - `balances`: User-partitioned cache for instant balance display.
+  - `categories`: User-partitioned cache of active and custom categories.
+  - `sync_meta`: Per-user sync tracking (`lastSyncedAt`, `lastError`).
+  - `dashboard_cache`: Cached summary metrics for instantaneous dashboard rendering.
 
-#### 6.1.2 IndexedDB (Dexie.js)
+#### 6.1.3 Durable Outbox & Reconciliation Engine (`sync-engine.ts`)
+- **Local-First Writes**: Transactions and starting balances are validated locally, written to IndexedDB, reflected immediately in the UI with a "Waiting to sync" indicator, and queued in the durable outbox.
+- **Sequential FIFO Execution**: Outbox mutations are processed sequentially to guarantee causal consistency and avoid race conditions.
+- **Transient Network Handling**: Network drops pause outbox draining without data loss; when connectivity returns (`window.online`, focus, or manual "Sync Now"), the queue resumes and re-verifies.
+- **Server Reconciliation**: Once local mutations are confirmed by the server, remote updates are pulled and merged safely without overwriting pending local edits.
 
-```typescript
-// src/lib/db.ts  (Phase 03)
-const db = new Dexie('arth');
-db.version(1).stores({
-  transactions: '++id, type, transaction_date, synced',
-  outbox:       '++id, created_at, status',
-});
-```
-
-### 6.3 Sync reconciliation
-
-- On reconnect: flush local outbox to server Route Handler.
-- Server deduplicates using UUID v7 (idempotent upsert).
-- Conflict resolution: `updated_at` timestamp wins; server wins on tie.
+#### 6.1.4 Starting Balances PostgREST Resilience (Migration 0023)
+- Migration `0023_fix_profiles_balances_configured.sql` ensures `starting_cash_paise`, `starting_online_paise`, `balances_configured`, and `balances_configured_at` are present on `profiles`, provides atomic RPC `fn_configure_starting_balances`, and issues `NOTIFY pgrst, 'reload schema'`.
+- Backend service layer in `balance.service.ts` gracefully falls back to direct updates and RPCs, ensuring schema cache reload delays never block starting balance setup.
 
 ---
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 describe('Database Schema & Migration Integrity Audit', () => {
   const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
 
-  test('All 22 numbered migration files exist in sequential order', () => {
+  test('All 23 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -32,10 +32,20 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0019_username_system_enhancements.sql',
       '0020_supabase_cron_schedules.sql',
       '0021_dashboard_necessity_spending.sql',
-      '0022_app_lock_webauthn.sql'
+      '0022_app_lock_webauthn.sql',
+      '0023_fix_profiles_balances_configured.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+
+  test('0023_fix_profiles_balances_configured.sql ensures starting balance columns and atomic RPC', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0023_fix_profiles_balances_configured.sql'), 'utf-8');
+    assert.ok(sql.includes('ALTER TABLE public.profiles'), 'Must alter public.profiles');
+    assert.ok(sql.includes('ADD COLUMN IF NOT EXISTS balances_configured BOOLEAN'), 'Must ensure balances_configured column');
+    assert.ok(sql.includes('fn_configure_starting_balances'), 'Must create fn_configure_starting_balances function');
+    assert.ok(sql.includes("NOTIFY pgrst, 'reload schema'"), 'Must reload PostgREST schema cache');
   });
 
   test('0022_app_lock_webauthn.sql keeps WebAuthn credentials and challenges server-only', () => {

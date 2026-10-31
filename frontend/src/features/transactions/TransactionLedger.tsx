@@ -22,6 +22,8 @@ import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
+import { getCachedTransactions, saveCachedTransactions } from '@/lib/offline-db';
+import { syncEngine } from '@/features/sync/sync-engine';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year';
 export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
@@ -33,6 +35,7 @@ export interface TransactionLedgerProps {
   refreshTrigger: number;
   onTransactionMutated?: () => void;
   onAccountPasswordVerified?: () => void;
+  userId?: string;
 }
 
 // In-memory query cache for recent filter queries to make back-and-forth filtering instantaneous
@@ -49,6 +52,7 @@ export function TransactionLedger({
   refreshTrigger,
   onTransactionMutated,
   onAccountPasswordVerified,
+  userId,
 }: TransactionLedgerProps) {
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -158,18 +162,37 @@ export function TransactionLedger({
         const items = txnRes.items || [];
         ledgerQueryCache.set(cacheKey, items);
         setTransactions(items);
+        void saveCachedTransactions(items, userId || 'default');
         setError(null);
         setIsInitialLoading(false);
         setIsRefreshing(false);
       })
       .catch((err: unknown) => {
         if (querySeqRef.current !== currentSeq) return;
-
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        const msg = err instanceof Error ? err.message : 'Failed to load ledger data';
-        setError(msg);
-        setIsInitialLoading(false);
-        setIsRefreshing(false);
+
+        void getCachedTransactions(userId || 'default')
+          .then((cachedItems) => {
+            if (querySeqRef.current !== currentSeq) return;
+            if (cachedItems && cachedItems.length > 0) {
+              setTransactions(cachedItems);
+              setError(null);
+            } else {
+              const msg = err instanceof Error ? err.message : 'Failed to load ledger data';
+              setError(msg);
+            }
+          })
+          .catch(() => {
+            if (querySeqRef.current !== currentSeq) return;
+            const msg = err instanceof Error ? err.message : 'Failed to load ledger data';
+            setError(msg);
+          })
+          .finally(() => {
+            if (querySeqRef.current === currentSeq) {
+              setIsInitialLoading(false);
+              setIsRefreshing(false);
+            }
+          });
       });
   }, [selectedType, selectedCategory, selectedNecessity, activeDateRange]);
 
@@ -287,7 +310,7 @@ export function TransactionLedger({
     setDeleteError(null);
 
     try {
-      await deleteTransaction(deletingTransaction.id);
+      await syncEngine.deleteTransactionLocalFirst(deletingTransaction.id, userId || 'default');
 
       // Successfully soft-deleted: remove from visible transactions list
       const target = deletingTransaction;
@@ -684,6 +707,11 @@ export function TransactionLedger({
                     <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
                       {txn.payment_method === 'online' ? 'Online' : 'Cash'}
                     </Badge>
+                    {(txn as any).sync_status === 'pending' && (
+                      <Badge variant="warning" size="xs" dot={true}>
+                        Waiting to sync
+                      </Badge>
+                    )}
                     {txn.necessity && (
                       <Badge variant={txn.necessity} size="xs" dot={true}>
                         <span className="capitalize">{txn.necessity}</span>
@@ -731,6 +759,7 @@ export function TransactionLedger({
           onClose={() => setEditingTransaction(null)}
           onSuccess={handleEditSuccess}
           editingTransaction={editingTransaction}
+          userId={userId}
         />
       )}
 

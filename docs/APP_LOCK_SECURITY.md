@@ -1,25 +1,46 @@
 # Arth App Lock security and offline policy
 
-Arth App Lock is an optional device privacy barrier for an already authenticated session. It does not replace Supabase Auth, API authorization, transaction ownership checks, or RLS.
+Arth App Lock is an optional device privacy barrier for an already authenticated session. It shields sensitive financial balances, transactions, and merchant names from casual observation on shared or unattended devices. It does not replace Supabase Auth, API authorization, transaction ownership checks, or RLS.
 
-## WebAuthn verification
+## Offline Local Passcode Unlock
 
-- Registration and authentication use the browser's Web Authentication API through SimpleWebAuthn. The operating system or authenticator performs user verification. Arth never receives biometric samples or stores private authenticator keys.
-- The production origin is `https://arth-9h3f.vercel.app`; the RP ID is derived from the canonical request origin as `arth-9h3f.vercel.app`. Development uses `localhost`. WebAuthn requires HTTPS except for localhost, and a platform authenticator must be available in the current browser.
-- The server creates short-lived challenges, binds each challenge to the authenticated Supabase user, this browser's local device ID, and a ceremony type, then atomically consumes it before verification. Registration and assertion responses are checked for challenge, origin, RP ID, and user verification.
-- Public credential keys, IDs, signature counters, and transport hints are stored in `app_lock_credentials`. Challenge records are stored temporarily in `app_lock_challenges`. Both tables have RLS enabled and no `anon`/`authenticated` table grants; Next.js handlers access them with the server-only Supabase service-role key after validating the HTTP-only Supabase session. Apply migration `0022_app_lock_webauthn.sql` before enabling the feature in a deployment.
-- Challenge creation is rate-limited per user and device to 12 ceremonies in a 15-minute window. Challenges expire after two minutes and are single use.
+- **Cryptographic Key Derivation:** Users configure a dedicated local device passcode (minimum 4 digits or characters), separate from their remote Arth account password.
+- **Web Crypto PBKDF2:** The passcode is derived into a 256-bit verification key using the standard Web Crypto API (`crypto.subtle`) with:
+  - Algorithm: PBKDF2 with SHA-256
+  - Iterations: 100,000 iterations
+  - Salt: 16-byte cryptographically secure random salt generated via `crypto.getRandomValues`
+- **Zero Plaintext Storage:** The raw passcode is NEVER stored in plaintext or sessionStorage/localStorage. Only the random `passcodeSalt` and derived `passcodeHash` are persisted.
+- **100% Offline Capable:** Passcode verification executes entirely locally in the browser/PWA and does not make network trips. Users can unlock Arth and record or view transactions seamlessly even with zero internet connectivity.
+- **Constant-Time Verification:** Passcode comparison uses constant-time byte XOR comparison (`timingSafeEqual`) to prevent timing side-channel attacks.
 
-## Inactivity and tabs
+## WebAuthn Biometric Verification (Optional)
 
-The client tracks meaningful pointer, touch, keyboard, and form input events. A single 300,000 ms deadline uses `performance.now()` and wall time, and is checked again on visibility, focus, and page resume. Background network work does not reset it. Lock messages propagate to same-account tabs; activity does not propagate, so an active tab cannot keep an idle tab unlocked. Unlocking one tab does not unlock the others.
+- Platform authenticator unlock (Touch ID, Face ID, Android Biometrics, Windows Hello) is available as an optional hardware-backed accelerator via SimpleWebAuthn.
+- The production origin is `https://arth-9h3f.vercel.app`; the RP ID is derived from the canonical request origin as `arth-9h3f.vercel.app`. Development uses `localhost`. WebAuthn requires HTTPS except for localhost.
+- Server challenge creation is rate-limited per user and device. Challenges expire after two minutes and are single-use.
+- The platform authenticator works alongside the local offline passcode so users always have a guaranteed offline fallback.
 
-The lock gate is rendered before the authenticated shell during startup, and the shell is hidden and inert while locked. Locking does not sign out, reload the PWA, clear caches, touch IndexedDB, delete transactions, or mutate the pending synchronization queue.
+## Inactivity, Backgrounding, and Tab Coordination
 
-## Offline policy and limitations
+- **Configurable Auto-Lock Timeouts:** Users can choose from:
+  - `immediate` (locks as soon as the app loses focus or is backgrounded)
+  - `1m` (1 minute of inactivity)
+  - `5m` (5 minutes of inactivity — default)
+  - `15m` (15 minutes of inactivity)
+- **Lock on Background:** Optional setting to immediately lock when the PWA is minimized or tab is switched away (`document.visibilityState === 'hidden'`).
+- **Activity Tracking:** Monitors pointer, touch, keyboard, and form events. Deadline calculations combine `performance.now()` with monotonic wall time to ensure sleep/hibernation does not bypass the lock.
+- **Tab Coordination:** Lock events propagate instantly across open tabs of the same account via `BroadcastChannel('arth_app_lock')`. Unlocking one tab does not automatically unlock others.
 
-Arth uses server-verified WebAuthn assertions and the existing Supabase password verification flow. **Unlock verification therefore requires a network connection.** If the application reaches the idle deadline while offline, it remains locked until connectivity returns or the user completes the account sign-in recovery path. Local transactions and pending mutations remain in IndexedDB unchanged and are available again after successful verification. No client-only signature check or boolean success flag is treated as authentication.
+## Financial Shielding
 
-The lock preference and device identifier are stored in browser local storage, separately for each Arth account in that browser. This makes the preference device-level, but it is not tamper-proof: a person with control of developer tools, same-origin script execution, a compromised browser/extension, or an XSS vulnerability can alter client state or inspect data already delivered to the browser. The lock is intended to deter casual access to an unattended open app, not an attacker controlling the device or browser. Server authorization remains mandatory regardless of UI lock state.
+While locked:
+- The entire application shell is masked with `hidden` and `inert`.
+- All account balances (Cash, Online, Total Available) and transaction lists are completely shielded from the DOM.
+- A clean, Ledger Minimal unlock screen prompts for the passcode or biometrics.
 
-Disabling App Lock in settings requires platform verification or the existing account-password reauthentication flow. On the lock screen, password-enabled accounts can use that same flow; passwordless accounts can sign out and complete the existing account sign-in again. This recovery option needs the account's configured sign-in provider and network access.
+## Safe Online Recovery
+
+If a user forgets their device passcode:
+- Arth provides an online recovery path allowing the user to sign in with their Arth account credentials.
+- Signing in successfully resets the local app lock preferences.
+- **Zero Data Loss:** Resetting app lock does NOT clear IndexedDB or purge pending offline transactions. All un-synced financial operations remain queued in the durable outbox and synchronize once connected.

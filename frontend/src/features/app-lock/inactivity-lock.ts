@@ -1,4 +1,21 @@
+import type { AutoLockTimeout } from './storage';
+
 export const APP_LOCK_TIMEOUT_MS = 300_000;
+
+export function timeoutToMs(timeout?: AutoLockTimeout): number {
+  switch (timeout) {
+    case 'immediate':
+      return 0;
+    case '1m':
+      return 60_000;
+    case '5m':
+      return 300_000;
+    case '15m':
+      return 900_000;
+    default:
+      return 300_000;
+  }
+}
 
 export interface InactivityClock {
   monotonicNow: () => number;
@@ -26,7 +43,8 @@ export class InactivityLockController {
   constructor(
     private readonly lock: () => void,
     private readonly clock: InactivityClock = browserClock,
-    private readonly timeoutMs = APP_LOCK_TIMEOUT_MS,
+    private readonly timeoutMs: number = APP_LOCK_TIMEOUT_MS,
+    private readonly lockOnBackground: boolean = false
   ) {}
 
   start(): void {
@@ -47,6 +65,10 @@ export class InactivityLockController {
     this.visible = visible;
     if (!visible) {
       this.cancelTimer();
+      if (this.lockOnBackground || this.timeoutMs === 0) {
+        this.active = false;
+        this.lock();
+      }
       return;
     }
     this.checkDeadline();
@@ -54,7 +76,7 @@ export class InactivityLockController {
 
   checkDeadline(): void {
     if (!this.active || !this.visible) return;
-    if (this.elapsedMs() >= this.timeoutMs) {
+    if (this.timeoutMs === 0 || this.elapsedMs() >= this.timeoutMs) {
       this.active = false;
       this.cancelTimer();
       this.lock();
@@ -71,7 +93,7 @@ export class InactivityLockController {
   private elapsedMs(): number {
     return Math.max(
       this.clock.monotonicNow() - this.lastActivityMono,
-      this.clock.wallNow() - this.lastActivityWall,
+      this.clock.wallNow() - this.lastActivityWall
     );
   }
 

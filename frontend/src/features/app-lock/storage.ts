@@ -1,17 +1,36 @@
-const STORAGE_KEY_PREFIX = 'arth_app_lock_v1:';
+const STORAGE_KEY_PREFIX = 'arth_app_lock_v2:';
+const LEGACY_STORAGE_KEY_PREFIX = 'arth_app_lock_v1:';
+
+export type AutoLockTimeout = 'immediate' | '1m' | '5m' | '15m';
 
 export interface AppLockPreferences {
   deviceId: string;
   enabled: boolean;
   configured: boolean;
+  passcodeSalt?: string;
+  passcodeHash?: string;
+  autoLockTimeout?: AutoLockTimeout;
+  lockOnBackground?: boolean;
+  biometricsEnabled?: boolean;
 }
 
 export function newAppLockPreferences(): AppLockPreferences {
-  return { deviceId: newDeviceId(), enabled: false, configured: false };
+  return {
+    deviceId: newDeviceId(),
+    enabled: false,
+    configured: false,
+    autoLockTimeout: '5m',
+    lockOnBackground: true,
+    biometricsEnabled: false,
+  };
 }
 
 function storageKey(userId: string): string {
   return `${STORAGE_KEY_PREFIX}${userId}`;
+}
+
+function legacyStorageKey(userId: string): string {
+  return `${LEGACY_STORAGE_KEY_PREFIX}${userId}`;
 }
 
 function newDeviceId(): string {
@@ -23,33 +42,56 @@ function newDeviceId(): string {
     const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  throw new Error('This browser cannot create a secure device identifier.');
+  return `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export function readAppLockPreferences(userId: string): AppLockPreferences {
   const fallback = newAppLockPreferences();
-  const raw = localStorage.getItem(storageKey(userId));
+  if (typeof localStorage === 'undefined') return fallback;
+
+  let raw = localStorage.getItem(storageKey(userId));
+  // Fallback to legacy v1 preferences if v2 does not exist
+  if (!raw) {
+    raw = localStorage.getItem(legacyStorageKey(userId));
+  }
   if (!raw) return fallback;
+
   try {
     const value = JSON.parse(raw) as Partial<AppLockPreferences>;
-    if (typeof value.deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.deviceId)) {
-      throw new Error('Invalid device lock preferences.');
-    }
+    const deviceId =
+      typeof value.deviceId === 'string' && value.deviceId.length > 0
+        ? value.deviceId
+        : fallback.deviceId;
+
+    const timeout: AutoLockTimeout =
+      value.autoLockTimeout === 'immediate' ||
+      value.autoLockTimeout === '1m' ||
+      value.autoLockTimeout === '5m' ||
+      value.autoLockTimeout === '15m'
+        ? value.autoLockTimeout
+        : '5m';
+
     return {
-      deviceId: value.deviceId,
+      deviceId,
       enabled: value.enabled === true,
-      configured: value.configured === true,
+      configured: value.configured === true || Boolean(value.passcodeHash),
+      passcodeSalt: typeof value.passcodeSalt === 'string' ? value.passcodeSalt : undefined,
+      passcodeHash: typeof value.passcodeHash === 'string' ? value.passcodeHash : undefined,
+      autoLockTimeout: timeout,
+      lockOnBackground: value.lockOnBackground !== false,
+      biometricsEnabled: value.biometricsEnabled === true,
     };
   } catch {
-    throw new Error('Device lock settings could not be read safely.');
+    return fallback;
   }
 }
 
 export function writeAppLockPreferences(userId: string, preferences: AppLockPreferences): void {
+  if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(storageKey(userId), JSON.stringify(preferences));
   } catch {
-    throw new Error('This browser could not save the device lock setting. Check available storage and try again.');
+    throw new Error('This browser could not save device lock settings. Check available storage.');
   }
 }
 

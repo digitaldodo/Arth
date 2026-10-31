@@ -1,7 +1,13 @@
 'use client';
 
-import React, { useState, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
+import { Badge } from '@/components/ui/Badge';
 import { usePwaInstall } from './usePwaInstall';
+import { syncEngine, type SyncState } from '@/features/sync/sync-engine';
+
+export interface InstallPromptCardProps {
+  userId?: string;
+}
 
 function subscribeServiceWorker(callback: () => void): () => void {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
@@ -22,10 +28,17 @@ function getServiceWorkerServerSnapshot(): boolean {
   return false;
 }
 
-export const InstallPromptCard: React.FC = () => {
+export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) => {
   const { isStandalone, isInstallable, isInstalled, isIos, installApp } = usePwaInstall();
   const [isInstalling, setIsInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<'accepted' | 'dismissed' | null>(null);
+  const [syncState, setSyncState] = useState<SyncState>(() => syncEngine.getState());
+
+  useEffect(() => {
+    return syncEngine.subscribe((state) => {
+      setSyncState(state);
+    });
+  }, []);
 
   const isOfflineReady = useSyncExternalStore(
     subscribeServiceWorker,
@@ -43,12 +56,83 @@ export const InstallPromptCard: React.FC = () => {
     }
   };
 
+  const handleManualSync = () => {
+    if (userId) {
+      void syncEngine.processQueue(userId);
+    }
+  };
+
+  // Live Sync & Offline Status Section component
+  const syncStatusSection = (
+    <div className="pt-2 border-t border-[var(--border-hairline)] space-y-2">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-[var(--text-secondary)]">Network:</span>
+          {syncState.isOnline ? (
+            <Badge variant="connected" size="xs" dot>
+              Online
+            </Badge>
+          ) : (
+            <Badge variant="warning" size="xs" dot>
+              Offline
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {syncState.isSyncing ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              Syncing…
+            </span>
+          ) : syncState.pendingCount > 0 ? (
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              {syncState.pendingCount} pending sync
+            </span>
+          ) : (
+            <span className="text-[11px] text-[var(--text-muted)]">
+              All changes synced
+            </span>
+          )}
+
+          {syncState.pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={syncState.isSyncing || !syncState.isOnline}
+              className="px-2 py-0.5 text-[10px] font-semibold border border-[var(--border-subtle)] rounded text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            >
+              Sync Now
+            </button>
+          )}
+        </div>
+      </div>
+
+      {syncState.lastSyncedAt && (
+        <div className="text-[10px] text-[var(--text-muted)] font-mono">
+          Last synced:{' '}
+          {new Date(syncState.lastSyncedAt).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })}
+        </div>
+      )}
+
+      {syncState.lastError && (
+        <div className="text-[10px] text-red-600 dark:text-red-400">
+          Sync notice: {syncState.lastError}
+        </div>
+      )}
+    </div>
+  );
+
   // 1. Standalone / Already Installed
   if (isStandalone || isInstalled) {
     return (
       <div
         data-testid="pwa-installed-card"
-        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-3"
       >
         {/* Row 1: Icon, Title, Status badge */}
         <div className="flex items-center justify-between gap-3">
@@ -60,16 +144,18 @@ export const InstallPromptCard: React.FC = () => {
               Offline Support
             </h3>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/40 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <Badge variant="connected" size="sm" dot>
             Installed
-          </span>
+          </Badge>
         </div>
 
         {/* Row 2: Full-width concise description */}
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
           Use Arth offline and sync your changes when you&apos;re back online.
         </p>
+
+        {/* Sync Status details */}
+        {syncStatusSection}
       </div>
     );
   }
@@ -79,7 +165,7 @@ export const InstallPromptCard: React.FC = () => {
     return (
       <div
         data-testid="pwa-installable-card"
-        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2.5"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-3"
       >
         {/* Row 1: Icon, Title, Status badge */}
         <div className="flex items-center justify-between gap-3">
@@ -91,10 +177,9 @@ export const InstallPromptCard: React.FC = () => {
               Offline Support
             </h3>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <Badge variant="neutral" size="sm" dot>
             {isOfflineReady ? 'Offline Ready' : 'Installable'}
-          </span>
+          </Badge>
         </div>
 
         {/* Row 2: Full-width concise description */}
@@ -119,6 +204,9 @@ export const InstallPromptCard: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* Sync Status details */}
+        {syncStatusSection}
       </div>
     );
   }
@@ -128,7 +216,7 @@ export const InstallPromptCard: React.FC = () => {
     return (
       <div
         data-testid="pwa-ios-card"
-        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2.5"
+        className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-3"
       >
         {/* Row 1: Icon, Title, Status badge */}
         <div className="flex items-center justify-between gap-3">
@@ -140,9 +228,9 @@ export const InstallPromptCard: React.FC = () => {
               Offline Support
             </h3>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] shrink-0">
+          <Badge variant="neutral" size="sm">
             {isOfflineReady ? 'Offline Ready' : 'iOS Safari'}
-          </span>
+          </Badge>
         </div>
 
         {/* Row 2: Full-width concise description */}
@@ -165,6 +253,9 @@ export const InstallPromptCard: React.FC = () => {
             <span>Tap <strong>Add</strong> in the top right to complete</span>
           </div>
         </div>
+
+        {/* Sync Status details */}
+        {syncStatusSection}
       </div>
     );
   }
@@ -173,7 +264,7 @@ export const InstallPromptCard: React.FC = () => {
   return (
     <div
       data-testid="pwa-info-card"
-      className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-2"
+      className="p-4 sm:p-5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] space-y-3"
     >
       {/* Row 1: Icon, Title, Status badge */}
       <div className="flex items-center justify-between gap-3">
@@ -185,16 +276,18 @@ export const InstallPromptCard: React.FC = () => {
             Offline Support
           </h3>
         </div>
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <Badge variant="connected" size="sm" dot>
           {isOfflineReady ? 'Offline Ready' : 'Enabled'}
-        </span>
+        </Badge>
       </div>
 
       {/* Row 2: Full-width concise description */}
       <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
         Use Arth offline and sync your changes when you&apos;re back online.
       </p>
+
+      {/* Sync Status details */}
+      {syncStatusSection}
     </div>
   );
 };

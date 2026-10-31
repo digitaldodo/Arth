@@ -10,7 +10,6 @@ import { TransactionLedger } from './TransactionLedger';
 import { CategoryManager } from '@/features/categories/CategoryManager';
 import { PeoplePage } from '@/features/people/PeoplePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { FinancialToolsPage } from '@/features/financial-tools/FinancialToolsPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
@@ -21,6 +20,7 @@ import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
 import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
 import { useAppLock } from '@/features/app-lock/useAppLock';
+import { syncEngine } from '@/features/sync/sync-engine';
 import { unlockAfterVerification } from '@/features/app-lock/verification';
 import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
 import {
@@ -56,7 +56,7 @@ interface TransactionAppShellProps {
   } | null;
 }
 
-export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more' | 'financial-tools';
+export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const router = useRouter();
@@ -65,7 +65,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
-  const [financialToolMode, setFinancialToolMode] = useState<'safe' | 'emi'>('safe');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
@@ -184,7 +183,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     if (!response.ok || result.signedOut !== true) {
       throw new Error(result.error || 'Sign out could not be completed. Arth remains locked.');
     }
-    appLock.recoverBySigningIn();
+    appLock.resetAppLock();
     router.replace('/login');
   };
 
@@ -241,13 +240,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   }`}
                 >
                   People
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveView('financial-tools')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${activeView === 'financial-tools' ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-                >
-                  Planning
                 </button>
                 <button
                   type="button"
@@ -363,7 +355,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <DashboardPage
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
                 onNavigateToLedger={() => setActiveView('ledger')}
-                onNavigateToFinancialTools={(mode) => { setFinancialToolMode(mode); setActiveView('financial-tools'); }}
                 refreshTrigger={refreshTrigger}
                 initialBalances={shellBalances}
                 onBalancesLoaded={(b) => setShellBalances(b)}
@@ -372,6 +363,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
             <div className={activeView === 'ledger' ? 'block' : 'hidden'}>
               <TransactionLedger
+                userId={user?.id}
                 userProfile={{
                   displayName: user?.displayName,
                   username: currentUsername || user?.username,
@@ -395,15 +387,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
               <CategoryManager onCategoryChange={handleCategoryChanged} />
             </div>
 
-            <div className={activeView === 'financial-tools' ? 'block' : 'hidden'}>
-              {activeView === 'financial-tools' && <FinancialToolsPage
-                  userId={user.id}
-                  initialMode={financialToolMode}
-                  initialBalances={shellBalances}
-                  onBack={() => setActiveView('home')}
-                />}
-            </div>
-
             <div className={activeView === 'more' ? 'block' : 'hidden'}>
               <div className="space-y-5">
                 <div>
@@ -413,11 +396,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     Application settings, category customization, and account details
                   </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button type="button" onClick={() => { setFinancialToolMode('safe'); setActiveView('financial-tools'); }} className="min-h-16 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left text-sm font-semibold hover:bg-[var(--bg-surface-subtle)]">Safe to Spend <span className="float-right">→</span></button>
-                  <button type="button" onClick={() => { setFinancialToolMode('emi'); setActiveView('financial-tools'); }} className="min-h-16 rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-left text-sm font-semibold hover:bg-[var(--bg-surface-subtle)]">EMI stress test <span className="float-right">→</span></button>
                 </div>
 
                 {/* Account Balances Card in Settings */}
@@ -459,7 +437,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                   </div>
                 </div>
 
-                <InstallPromptCard />
+                <InstallPromptCard userId={user?.id} />
 
                 <AutomaticDetectionSettings />
 
@@ -532,7 +510,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                     </button>
                   </div>
 
-                  <AppLockSettings appLock={appLock} passwordStatus={passwordStatus} />
+                  <AppLockSettings appLock={appLock} />
 
                   <div className="p-4 space-y-3">
                     <div className="flex items-center gap-3">
@@ -703,6 +681,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           onClose={() => setIsQuickAddOpen(false)}
           onSuccess={handleTransactionCreated}
           categoryVersion={categoryVersion}
+          userId={user?.id}
         />
       )}
 
@@ -741,6 +720,7 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
             setRefreshTrigger((prev) => prev + 1);
           }}
           currentBalances={shellBalances}
+          userId={user?.id}
         />
       )}
 
@@ -749,15 +729,19 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     {isAppLocked && user && (
       <AppLockScreen
         isInitializing={!appLock.isReady}
-        hasPassword={passwordStatus === 'configured'}
-        deviceConfigured={appLock.isConfigured}
+        hasLocalPasscode={appLock.hasLocalPasscode}
+        biometricsEnabled={appLock.biometricsEnabled}
         supportsPlatformAuth={appLock.supportsPlatformAuth}
-        isCheckingPlatformAuth={appLock.isCheckingPlatformAuth}
+        onUnlockPasscode={async (passcode) => {
+          return await appLock.verifyPasscodeUnlock(passcode);
+        }}
         onUnlock={async () => {
           await unlockAfterVerification(appLock.verifyDevice, appLock.unlockAfterVerification);
         }}
-        onPasswordVerified={appLock.unlockAfterVerification}
-        onRecoverBySigningIn={handleLockRecovery}
+        onUnlockBiometrics={appLock.biometricsEnabled ? async () => {
+          await unlockAfterVerification(appLock.verifyDevice, appLock.unlockAfterVerification);
+        } : undefined}
+        onResetViaAccount={handleLockRecovery}
       />
     )}
     </>
