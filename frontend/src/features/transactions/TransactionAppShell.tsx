@@ -110,13 +110,13 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   // The sync engine is the only queue runner; keep shell status scoped to this account.
   // Load initial cached balances for Settings card and Dashboard instant render
   useEffect(() => {
-    if (!user || !isPwa) return;
+    if (!user) return;
     getCachedBalances(user.id)
       .then((b) => {
         if (b) setShellBalances(b);
       })
       .catch(() => {});
-  }, [user, isPwa]);
+  }, [user]);
 
   useEffect(() => {
     syncEngine.setUserId(userId);

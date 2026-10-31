@@ -14,6 +14,7 @@ interface BalanceCardProps {
   error?: string | null;
   isOffline?: boolean;
   cachedAt?: number | null;
+  userId?: string;
   onRetry?: () => void;
   onBalancesUpdated: (updated: AccountBalancesDTO) => void;
 }
@@ -24,6 +25,7 @@ export function BalanceCard({
   error = null,
   isOffline = false,
   cachedAt = null,
+  userId,
   onRetry,
   onBalancesUpdated,
 }: BalanceCardProps) {
@@ -235,6 +237,8 @@ export function BalanceCard({
         onClose={() => setIsConfigureOpen(false)}
         onConfigured={onBalancesUpdated}
         currentBalances={balances}
+        userId={userId}
+        isLoadingBalances={loading}
       />
 
       <TransferModal

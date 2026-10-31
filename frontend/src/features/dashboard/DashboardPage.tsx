@@ -265,6 +265,7 @@ export function DashboardPage({
 
       {/* Account Balances Card (Live Available, Cash, and Online Balances) */}
       <BalanceCard
+        userId={userId}
         balances={balances}
         loading={balancesLoading}
         error={balancesError}
