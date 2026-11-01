@@ -21,6 +21,12 @@ function collectShellAssets(directory, relative = '') {
   });
 }
 
+const offlineHtmlPath = path.join(frontendDir, '.next/server/app/offline.html');
+let fallbackOfflineHtml = '';
+if (fs.existsSync(offlineHtmlPath)) {
+  fallbackOfflineHtml = fs.readFileSync(offlineHtmlPath, 'utf8');
+}
+
 // Precache the static chunks needed to bootstrap and use the app offline. The list
 // is limited to build output (never API responses or personalized HTML).
 const precacheAssets = [
@@ -34,6 +40,15 @@ const precacheAssets = [
   '/icons/apple-touch-icon.png',
   ...collectShellAssets(staticDir),
 ];
+
+if (fallbackOfflineHtml) {
+  precacheAssets.push('/offline.html');
+  try {
+    fs.writeFileSync(path.join(frontendDir, 'public/offline.html'), fallbackOfflineHtml, 'utf8');
+  } catch (err) {
+    console.warn('[build-sw] Could not write public/offline.html:', err);
+  }
+}
 
 // Derive version from Vercel commit SHA or local timestamp
 const gitCommitSha =
@@ -54,11 +69,15 @@ if (!fs.existsSync(templatePath)) {
 let template = fs.readFileSync(templatePath, 'utf8');
 template = template.replace(/__SW_VERSION__/g, swVersion);
 template = template.replace('__PRECACHE_ASSETS__', JSON.stringify([...new Set(precacheAssets)]));
+template = template.replace('__FALLBACK_OFFLINE_HTML__', JSON.stringify(fallbackOfflineHtml));
 if (template.includes('__SW_VERSION__')) {
   throw new Error('[build-sw] Service-worker version placeholder was not fully replaced');
 }
 if (template.includes('__PRECACHE_ASSETS__')) {
   throw new Error('[build-sw] Service-worker precache placeholder was not replaced');
+}
+if (template.includes('__FALLBACK_OFFLINE_HTML__')) {
+  throw new Error('[build-sw] Service-worker fallback offline HTML placeholder was not replaced');
 }
 fs.writeFileSync(targetSwPath, template, 'utf8');
 console.log(`[build-sw] Generated public/sw.js with version: ${swVersion}`);

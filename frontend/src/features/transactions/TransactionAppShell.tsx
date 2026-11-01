@@ -77,16 +77,20 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   // Offline mutation queue sync state
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator === 'undefined' ? true : navigator.onLine);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [mutationError, setMutationError] = useState<string | null>(null);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
   const lastSyncedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
     void setCachedPwaUser(user).then(() => {
-      navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_PREPARED' });
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'PWA_PREPARED' });
+        } else {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.active?.postMessage({ type: 'PWA_PREPARED' });
+          }).catch(() => {});
+        }
+      }
     }).catch(() => {});
   }, [user, pendingSyncCount, isSyncing]);
 
@@ -120,10 +124,6 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
     const unsubscribe = syncEngine.subscribe((state) => {
       setPendingSyncCount(state.pendingCount);
       setIsSyncing(state.isSyncing);
-      setIsOnline(state.isOnline);
-      setSyncError(state.lastError);
-      setMutationError(state.mutationError);
-      setRefreshError(state.refreshError);
       if (state.lastSyncedAt && state.lastSyncedAt !== lastSyncedAtRef.current) {
         lastSyncedAtRef.current = state.lastSyncedAt;
         setRefreshTrigger((value) => value + 1);
@@ -136,14 +136,17 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
     setRefreshTrigger((prev) => prev + 1);
     const txn = res.transaction;
-    const msg = res.idempotent_replay
-      ? `Transaction ${txn.formatted_inr} confirmed (idempotent replay)`
-      : `Successfully recorded ${txn.type === 'expense' ? 'expense' : 'income'} of ${txn.formatted_inr}`;
+    const isOffline =
+      (typeof navigator !== 'undefined' && !navigator.onLine) ||
+      ('sync_status' in txn && txn.sync_status === 'pending');
+    const msg = isOffline
+      ? "Saved on this device. Will sync when you're online."
+      : 'Transaction saved successfully.';
 
     setSaveSuccessBanner(msg);
     setTimeout(() => {
       setSaveSuccessBanner(null);
-    }, 4000);
+    }, 3500);
   };
 
   const handleCategoryChanged = () => {
@@ -275,48 +278,20 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
 
       {/* Main Content Area */}
       <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${!isOnline ? 'bg-amber-500' : isSyncing ? 'bg-emerald-500 animate-pulse' : mutationError ? 'bg-rose-500' : pendingSyncCount > 0 ? 'bg-amber-500' : refreshError ? 'bg-amber-500' : 'bg-emerald-500'}`}
-          />
-          <span>
-            {!isOnline ? 'Offline' : isSyncing ? 'Syncing' : mutationError ? 'Sync failed' : pendingSyncCount ? `${pendingSyncCount} change${pendingSyncCount === 1 ? '' : 's'} pending sync` : refreshError ? 'Changes synced' : 'Synced'}
-          </span>
-          {mutationError ? (
-            <span className="truncate text-rose-600 dark:text-rose-400">{mutationError}</span>
-          ) : refreshError ? (
-            <span className="truncate text-amber-700 dark:text-amber-400">{refreshError}</span>
-          ) : syncError ? (
-            <span className="truncate text-amber-700 dark:text-amber-400">{syncError}</span>
-          ) : null}
-        </div>
-        {/* Offline Pending Synchronization Banner */}
-        {pendingSyncCount > 0 && (
-          <div className="mb-4 p-3 text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>
-                {pendingSyncCount} {pendingSyncCount === 1 ? 'change' : 'changes'} saved locally (pending sync)
-              </span>
-            </div>
+        {/* Success / Save Confirmation Toast */}
+        {saveSuccessBanner && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-xl text-xs font-medium flex items-center gap-2 transition-all"
+          >
+            <span className="text-emerald-500 font-bold">✓</span>
+            <span>{saveSuccessBanner}</span>
             <button
               type="button"
-              onClick={() => user?.id && void syncEngine.processQueue(user.id)}
-              disabled={isSyncing}
-              className="px-2.5 py-1 text-xs font-semibold bg-amber-700 text-white rounded-md hover:bg-amber-800 transition-colors disabled:opacity-60 cursor-pointer"
-            >
-              {isSyncing ? 'Syncing...' : 'Sync now'}
-            </button>
-          </div>
-        )}
-
-        {/* Success Confirmation Banner */}
-        {saveSuccessBanner && (
-          <div className="mb-4 p-3 text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-200 rounded-lg flex items-center justify-between transition-all">
-            <span>✓ {saveSuccessBanner}</span>
-            <button
               onClick={() => setSaveSuccessBanner(null)}
-              className="text-emerald-600 dark:text-emerald-400 font-bold ml-2 cursor-pointer"
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] font-bold ml-2 cursor-pointer"
+              aria-label="Dismiss notification"
             >
               ✕
             </button>

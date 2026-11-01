@@ -49,3 +49,6 @@ android/app/build/
 
 # Scratch files
 scratch/
+
+# Generated export files
+*.pdf

@@ -11,6 +11,7 @@ import type {
   PersonDTO,
   PersonDetailDTO,
 } from '@arth/contracts';
+import { formatPaiseToINR } from './format';
 
 const DB_NAME = 'arth_offline_db';
 const DB_VERSION = 6;
@@ -585,6 +586,167 @@ export async function setCachedBalances(
       tx.onerror = () => reject(tx.error || new Error('Could not persist balances locally.'));
     });
   }
+}
+
+// -------------------------------------------------------------
+// Atomic Multi-Store Persistence Operations
+// -------------------------------------------------------------
+
+export interface AtomicTransactionCreationParams {
+  transaction: OfflineTransactionDTO;
+  mutation: PendingMutation;
+  userId: string;
+}
+
+export async function saveTransactionCreationAtomic({
+  transaction,
+  mutation,
+  userId,
+}: AtomicTransactionCreationParams): Promise<void> {
+  if (!userId) throw new Error('A signed-in user is required.');
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['transactions', 'pending_mutations', 'balances', 'sync_meta'], 'readwrite');
+    const txnStore = tx.objectStore('transactions');
+    const mutationStore = tx.objectStore('pending_mutations');
+    const balanceStore = tx.objectStore('balances');
+
+    // 1. Put transaction in local transactions store (pending sync status)
+    txnStore.put(transaction);
+
+    // 2. Enqueue mutation in pending_mutations outbox store
+    mutationStore.put(mutation);
+
+    // 3. Apply local balance adjustment atomically
+    const bKey = balanceKey(userId);
+    const balReq = balanceStore.get(bKey);
+    balReq.onsuccess = () => {
+      const balances = balReq.result?.data as AccountBalancesDTO | undefined;
+      if (balances) {
+        const txnRecordedAt = transaction.recorded_at || transaction.created_at;
+        if (!balances.balances_configured_at || txnRecordedAt > balances.balances_configured_at) {
+          const delta = transaction.type === 'income' ? transaction.amount_paise : -transaction.amount_paise;
+          const isCash = transaction.payment_method === 'cash';
+          const newCash = isCash ? balances.current_cash_paise + delta : balances.current_cash_paise;
+          const newOnline = !isCash ? balances.current_online_paise + delta : balances.current_online_paise;
+          const newTotal = newCash + newOnline;
+
+          const updatedBalances: AccountBalancesDTO = {
+            ...balances,
+            current_cash_paise: newCash,
+            current_online_paise: newOnline,
+            total_available_paise: newTotal,
+            formatted_current_cash: formatPaiseToINR(newCash),
+            formatted_current_online: formatPaiseToINR(newOnline),
+            formatted_total_available: formatPaiseToINR(newTotal),
+          };
+          balanceStore.put({ key: bKey, data: updatedBalances, updatedAt: Date.now() });
+        }
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Atomic transaction persistence failed.'));
+    tx.onabort = () => reject(tx.error || new Error('Atomic transaction persistence aborted.'));
+  });
+}
+
+export interface AtomicTransactionDeletionParams {
+  id: string;
+  mutation: PendingMutation;
+  userId: string;
+  existingTransaction?: OfflineTransactionDTO | null;
+}
+
+export async function saveTransactionDeletionAtomic({
+  id,
+  mutation,
+  userId,
+  existingTransaction,
+}: AtomicTransactionDeletionParams): Promise<void> {
+  if (!userId) throw new Error('A signed-in user is required.');
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['transactions', 'pending_mutations', 'balances', 'sync_meta'], 'readwrite');
+    const txnStore = tx.objectStore('transactions');
+    const mutationStore = tx.objectStore('pending_mutations');
+    const balanceStore = tx.objectStore('balances');
+
+    const req = txnStore.get(id);
+    req.onsuccess = () => {
+      const record = req.result as OfflineTransactionDTO | undefined;
+      if (record && record.user_id === userId) {
+        record.deleted_locally = true;
+        record.sync_status = 'pending';
+        txnStore.put(record);
+      }
+    };
+
+    mutationStore.put(mutation);
+
+    if (existingTransaction) {
+      const bKey = balanceKey(userId);
+      const balReq = balanceStore.get(bKey);
+      balReq.onsuccess = () => {
+        const balances = balReq.result?.data as AccountBalancesDTO | undefined;
+        if (balances) {
+          const txnRecordedAt = existingTransaction.recorded_at || existingTransaction.created_at;
+          if (!balances.balances_configured_at || txnRecordedAt > balances.balances_configured_at) {
+            const reverseDelta =
+              existingTransaction.type === 'income'
+                ? -existingTransaction.amount_paise
+                : existingTransaction.amount_paise;
+            const isCash = existingTransaction.payment_method === 'cash';
+            const newCash = isCash ? balances.current_cash_paise + reverseDelta : balances.current_cash_paise;
+            const newOnline = !isCash ? balances.current_online_paise + reverseDelta : balances.current_online_paise;
+            const newTotal = newCash + newOnline;
+
+            const updatedBalances: AccountBalancesDTO = {
+              ...balances,
+              current_cash_paise: newCash,
+              current_online_paise: newOnline,
+              total_available_paise: newTotal,
+              formatted_current_cash: formatPaiseToINR(newCash),
+              formatted_current_online: formatPaiseToINR(newOnline),
+              formatted_total_available: formatPaiseToINR(newTotal),
+            };
+            balanceStore.put({ key: bKey, data: updatedBalances, updatedAt: Date.now() });
+          }
+        }
+      };
+    }
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Atomic transaction deletion failed.'));
+    tx.onabort = () => reject(tx.error || new Error('Atomic transaction deletion aborted.'));
+  });
+}
+
+export interface AtomicStartingBalancesParams {
+  balances: AccountBalancesDTO;
+  mutation: PendingMutation;
+  userId: string;
+}
+
+export async function saveStartingBalancesAtomic({
+  balances,
+  mutation,
+  userId,
+}: AtomicStartingBalancesParams): Promise<void> {
+  if (!userId) throw new Error('A signed-in user is required.');
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['pending_mutations', 'balances', 'sync_meta'], 'readwrite');
+    const mutationStore = tx.objectStore('pending_mutations');
+    const balanceStore = tx.objectStore('balances');
+
+    balanceStore.put({ key: balanceKey(userId), data: balances, updatedAt: Date.now() });
+    mutationStore.put(mutation);
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Atomic starting balances configuration failed.'));
+    tx.onabort = () => reject(tx.error || new Error('Atomic starting balances configuration aborted.'));
+  });
 }
 
 // -------------------------------------------------------------

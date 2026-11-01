@@ -16,10 +16,12 @@ export function OfflinePwaEntry() {
 
   useEffect(() => {
     if (getApplicationRuntimeMode() !== 'installed-mobile-pwa') {
-      router.replace('/');
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        router.replace('/');
+      }
       return;
     }
-    if (navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine && typeof window !== 'undefined' && window.location.pathname === '/offline') {
       router.replace('/');
       return;
     }
@@ -32,7 +34,9 @@ export function OfflinePwaEntry() {
         return;
       }
       const meta = await getSyncMeta(localUser.id);
-      const prepared = (meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null) || Boolean(localUser);
+      const prepared =
+        (meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null) ||
+        Boolean(localUser);
       if (cancelled) return;
       if (prepared) {
         setUser(localUser);
@@ -44,6 +48,16 @@ export function OfflinePwaEntry() {
     return () => {
       cancelled = true;
     };
+  }, [router]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      if (typeof window !== 'undefined' && window.location.pathname === '/offline') {
+        router.replace('/');
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [router]);
 
   if (state === 'ready' && user) return <TransactionAppShell user={user} />;

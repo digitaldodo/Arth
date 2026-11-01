@@ -156,28 +156,35 @@ describe('Desktop & PWA Balances Isolation, Schema Cache & Sync Recovery', () =>
     const appShellPath = path.join(projectRoot, 'src', 'features', 'transactions', 'TransactionAppShell.tsx');
     const installCardPath = path.join(projectRoot, 'src', 'features', 'pwa', 'InstallPromptCard.tsx');
 
-    test('TransactionAppShell distinguishes mutation failures from background server refresh failures', () => {
-      assert.ok(fs.existsSync(appShellPath), 'TransactionAppShell.tsx must exist');
-      const content = fs.readFileSync(appShellPath, 'utf8');
+    test('InstallPromptCard distinguishes mutation failures from background server refresh failures and TransactionAppShell keeps main headers clean', () => {
+      assert.ok(fs.existsSync(installCardPath), 'InstallPromptCard.tsx must exist');
+      const cardContent = fs.readFileSync(installCardPath, 'utf8');
+      const shellContent = fs.readFileSync(appShellPath, 'utf8');
 
-      // Verify mutationError gives rose red "Sync failed"
+      // Verify mutationError gives "Failed and requiring attention"
       assert.ok(
-        content.includes("mutationError ? 'bg-rose-500'"),
-        'Must display rose dot only for genuine mutation failures'
+        cardContent.includes("syncState.mutationError || syncState.failedCount > 0"),
+        'Must display failed and requiring attention badge for genuine mutation failures'
       );
       assert.ok(
-        content.includes("mutationError ? 'Sync failed'"),
-        'Must display "Sync failed" only when mutation upload fails'
+        cardContent.includes("Failed and requiring attention"),
+        'Must display "Failed and requiring attention" when mutation upload fails'
       );
 
-      // Verify refreshError with 0 pending changes gives amber dot and "Changes synced"
+      // Verify refreshError gives "Server data refresh failed"
       assert.ok(
-        content.includes("refreshError ? 'Changes synced'"),
-        'Must acknowledge successful transaction sync when only server refresh fails'
+        cardContent.includes("syncState.refreshError ?"),
+        'Must acknowledge server refresh failure'
       );
       assert.ok(
-        content.includes("refreshError ? 'bg-amber-500'"),
-        'Must display amber warning instead of red error when only server refresh fails'
+        cardContent.includes("Server data refresh failed"),
+        'Must distinguish server data refresh failed state'
+      );
+
+      // Verify TransactionAppShell does not display permanent sync dot on main views
+      assert.ok(
+        !shellContent.includes("h-1.5 w-1.5 rounded-full"),
+        'TransactionAppShell must not display persistent sync status dot in main views'
       );
     });
 

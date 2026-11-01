@@ -769,8 +769,8 @@ export function TransactionLedger({
                       {txn.payment_method === 'online' ? 'Online' : 'Cash'}
                     </Badge>
                     {('sync_status' in txn && txn.sync_status === 'pending') && (
-                      <Badge variant="warning" size="xs" dot={true}>
-                        Waiting to sync
+                      <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
+                        Pending sync
                       </Badge>
                     )}
                     {txn.necessity && (

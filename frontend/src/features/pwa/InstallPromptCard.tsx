@@ -33,6 +33,8 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
   const [isInstalling, setIsInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<'accepted' | 'dismissed' | null>(null);
   const [syncState, setSyncState] = useState<SyncState>(() => syncEngine.getState());
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     return syncEngine.subscribe((state) => {
@@ -62,12 +64,23 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
     }
   };
 
-  // Live Sync & Offline Status Section component
+  const handleRetryFailed = async () => {
+    if (!userId) return;
+    setIsRetrying(true);
+    try {
+      await syncEngine.retryFailedMutations(userId);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  // Comprehensive Centralized Live Sync & Offline Status Section
   const syncStatusSection = (
-    <div className="pt-2 border-t border-[var(--border-hairline)] space-y-2">
-      <div className="flex items-center justify-between gap-2 text-xs">
+    <div className="pt-3 border-t border-[var(--border-hairline)] space-y-4">
+      {/* 1. Connectivity & High-Level State */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-[var(--text-secondary)]">Network:</span>
+          <span className="text-[11px] font-medium text-[var(--text-secondary)]">Connectivity:</span>
           {syncState.isOnline ? (
             <Badge variant="connected" size="xs" dot>
               Online
@@ -79,63 +92,170 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {syncState.isSyncing ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              Syncing…
-            </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-[var(--text-muted)]">State:</span>
+          {!syncState.isOnline ? (
+            <Badge variant="warning" size="xs">Offline (saved locally)</Badge>
+          ) : syncState.isSyncing ? (
+            <Badge variant="connected" size="xs" dot>Synchronizing…</Badge>
+          ) : syncState.mutationError || syncState.failedCount > 0 ? (
+            <Badge variant="expense" size="xs" dot>Failed and requiring attention</Badge>
           ) : syncState.pendingCount > 0 ? (
-            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
-              {syncState.pendingCount} pending sync
-            </span>
-          ) : syncState.mutationError ? (
-            <span className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
-              Sync failed
-            </span>
+            <Badge variant="warning" size="xs" dot>Waiting to sync</Badge>
+          ) : syncState.refreshError ? (
+            <Badge variant="warning" size="xs">Server data refresh failed</Badge>
           ) : (
-            <span className="text-[11px] text-[var(--text-muted)]">
-              All changes synced
-            </span>
-          )}
-
-          {syncState.pendingCount > 0 && (
-            <button
-              type="button"
-              onClick={handleManualSync}
-              disabled={syncState.isSyncing || !syncState.isOnline}
-              className="px-2 py-0.5 text-[10px] font-semibold border border-[var(--border-subtle)] rounded text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-            >
-              Sync Now
-            </button>
+            <Badge variant="connected" size="xs" dot>Synced</Badge>
           )}
         </div>
       </div>
 
-      {syncState.lastSyncedAt && (
-        <div className="text-[10px] text-[var(--text-muted)] font-mono">
-          Last synced:{' '}
-          {new Date(syncState.lastSyncedAt).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })}
-        </div>
-      )}
+      {/* 2. Outgoing Changes Breakdown */}
+      <div>
+        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+          Outgoing Changes
+        </h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="p-2.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-medium">Pending</div>
+            <div className={`text-base font-semibold font-mono mt-0.5 ${syncState.pendingCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--text-primary)]'}`}>
+              {syncState.pendingCount}
+            </div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Saved locally</div>
+          </div>
 
-      {syncState.mutationError ? (
-        <div className="text-[10px] text-rose-600 dark:text-rose-400">
-          Sync error: {syncState.mutationError}
+          <div className="p-2.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-medium">Synchronizing</div>
+            <div className={`text-base font-semibold font-mono mt-0.5 ${syncState.isSyncing ? 'text-emerald-600 dark:text-emerald-400 animate-pulse' : 'text-[var(--text-primary)]'}`}>
+              {syncState.syncingCount}
+            </div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">In flight</div>
+          </div>
+
+          <div className="p-2.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-medium">Synced</div>
+            <div className="text-base font-semibold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+              {syncState.syncedCount > 0 ? syncState.syncedCount : (syncState.pendingCount === 0 ? '✓' : '0')}
+            </div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Confirmed</div>
+          </div>
+
+          <div className="p-2.5 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-medium">Failed</div>
+            <div className={`text-base font-semibold font-mono mt-0.5 ${syncState.failedCount > 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-[var(--text-primary)]'}`}>
+              {syncState.failedCount}
+            </div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Needs attention</div>
+          </div>
         </div>
-      ) : syncState.refreshError ? (
-        <div className="text-[10px] text-amber-700 dark:text-amber-400">
-          Server refresh: {syncState.refreshError}
+      </div>
+
+      {/* 3. Server Refresh Status */}
+      <div>
+        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+          Server Data Refresh
+        </h4>
+        <div className="space-y-1.5 text-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg p-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[var(--text-secondary)]">Account balances:</span>
+            {syncState.resourceErrors.balances ? (
+              <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">Failed (showing saved copy)</span>
+            ) : syncState.isSyncing ? (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Refreshing…</span>
+            ) : (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">✓ Synced</span>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[var(--text-secondary)]">Transaction history:</span>
+            {syncState.resourceErrors.transactions ? (
+              <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">Failed (showing saved copy)</span>
+            ) : syncState.isSyncing ? (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Refreshing…</span>
+            ) : (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">✓ Synced</span>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-[var(--text-secondary)]">Categories:</span>
+            {syncState.resourceErrors.categories ? (
+              <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">Failed (showing saved copy)</span>
+            ) : syncState.isSyncing ? (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Refreshing…</span>
+            ) : (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">✓ Synced</span>
+            )}
+          </div>
         </div>
-      ) : syncState.lastError ? (
-        <div className="text-[10px] text-amber-700 dark:text-amber-400">
-          Sync notice: {syncState.lastError}
+      </div>
+
+      {/* 4. History & Errors */}
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] font-mono">
+          <span>Last synced:</span>
+          <span>
+            {syncState.lastSyncedAt
+              ? new Date(syncState.lastSyncedAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })
+              : 'Not yet synced in this session'}
+          </span>
         </div>
-      ) : null}
+
+        {(syncState.mutationError || syncState.refreshError || syncState.lastError) && (
+          <div className="p-2.5 rounded-lg border border-amber-300 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-[11px] space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">
+                {syncState.mutationError ? 'Synchronization Error' : syncState.refreshError ? 'Refresh Notice' : 'Sync Notice'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowErrorDetails((prev) => !prev)}
+                className="underline hover:opacity-80 cursor-pointer font-medium text-[10px]"
+              >
+                {showErrorDetails ? 'Hide details' : 'View details'}
+              </button>
+            </div>
+            <p className="line-clamp-2">
+              {syncState.mutationError || syncState.refreshError || syncState.lastError}
+            </p>
+            {showErrorDetails && (
+              <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-900/40 text-[10px] font-mono space-y-1 break-all">
+                {syncState.mutationError && <div><strong>Mutation error:</strong> {syncState.mutationError}</div>}
+                {syncState.refreshError && <div><strong>Refresh notice:</strong> {syncState.refreshError}</div>}
+                {syncState.resourceErrors.balances && <div><strong>Balances error:</strong> {syncState.resourceErrors.balances}</div>}
+                {syncState.resourceErrors.transactions && <div><strong>Transactions error:</strong> {syncState.resourceErrors.transactions}</div>}
+                {syncState.resourceErrors.categories && <div><strong>Categories error:</strong> {syncState.resourceErrors.categories}</div>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 5. Actions Toolbar */}
+      <div className="flex items-center gap-2 pt-1 flex-wrap">
+        <button
+          type="button"
+          onClick={handleManualSync}
+          disabled={syncState.isSyncing || !syncState.isOnline}
+          className="px-3 py-1.5 text-xs font-semibold rounded-md bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+        >
+          {syncState.isSyncing ? 'Synchronizing…' : 'Sync Now'}
+        </button>
+
+        {(syncState.failedCount > 0 || syncState.mutationError) && (
+          <button
+            type="button"
+            onClick={handleRetryFailed}
+            disabled={isRetrying || syncState.isSyncing || !syncState.isOnline}
+            className="px-3 py-1.5 text-xs font-semibold rounded-md bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-900/60 hover:bg-rose-200 dark:hover:bg-rose-900/80 transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            {isRetrying ? 'Retrying…' : 'Retry failed synchronization'}
+          </button>
+        )}
+      </div>
     </div>
   );
 

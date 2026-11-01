@@ -6,6 +6,7 @@
 const SW_VERSION = '__SW_VERSION__';
 const CACHE_NAME = 'arth-shell-v2-' + SW_VERSION;
 const PRECACHE_ASSETS = __PRECACHE_ASSETS__;
+const FALLBACK_OFFLINE_HTML = __FALLBACK_OFFLINE_HTML__;
 const RUNTIME_DB = 'arth_sw_runtime_v1';
 const RUNTIME_DB_VERSION = 1;
 
@@ -68,7 +69,25 @@ function offlineHtml(title, message, retry = true) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      try {
+        await cache.add(new Request('/offline', { cache: 'reload' }));
+      } catch (err) {
+        console.warn('[sw] Could not precache /offline directly:', err);
+      }
+      try {
+        await cache.addAll(PRECACHE_ASSETS);
+      } catch (err) {
+        console.warn('[sw] Precache batch failed, attempting resilient caching:', err);
+        await Promise.allSettled(
+          PRECACHE_ASSETS.map((asset) =>
+            cache.add(new Request(asset, { cache: 'reload' })).catch(() => {})
+          )
+        );
+      }
+    })
+  );
 });
 
 self.addEventListener('message', (event) => {
@@ -117,8 +136,16 @@ self.addEventListener('fetch', (event) => {
           if (prepared?.value) mode = 'installed-mobile-pwa';
         }
         if (mode === 'installed-mobile-pwa' && isMobileUserAgent()) {
-          const cached = await caches.open(CACHE_NAME).then((cache) => cache.match('/offline'));
+          const cached =
+            (await caches.open(CACHE_NAME).then((cache) => cache.match('/offline')).catch(() => null)) ||
+            (await caches.match('/offline')) ||
+            (await caches.match('/offline.html'));
           if (cached) return cached;
+          if (FALLBACK_OFFLINE_HTML) {
+            return new Response(FALLBACK_OFFLINE_HTML, {
+              headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+            });
+          }
           return offlineHtml('Arth is offline', 'The authenticated app shell is not cached on this device. Reconnect to open Arth; previously loaded financial records remain stored locally and will sync when online.');
         }
         return offlineHtml('Connection required', 'This web session needs an internet connection. Check your connection and try again.');

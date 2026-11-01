@@ -21,7 +21,6 @@ import {
   updatePendingMutation,
   saveCachedTransaction,
   getCachedTransactionById,
-  markCachedTransactionDeleted,
   deleteCachedTransactionPermanently,
   getCachedBalances,
   setCachedBalances,
@@ -29,6 +28,9 @@ import {
   getSyncMeta,
   setSyncMeta,
   replaceCachedTransactions,
+  saveTransactionCreationAtomic,
+  saveTransactionDeletionAtomic,
+  saveStartingBalancesAtomic,
   type PendingMutation,
   type OfflineTransactionDTO,
 } from '../../lib/offline-db';
@@ -56,6 +58,9 @@ export interface SyncState {
   isOnline: boolean;
   isSyncing: boolean;
   pendingCount: number;
+  syncingCount: number;
+  failedCount: number;
+  syncedCount: number;
   lastSyncedAt: number | null;
   lastError: string | null;
   mutationError: string | null;
@@ -70,6 +75,9 @@ class SyncEngine {
   private syncListeners = new Set<SyncListener>();
   private currentUserId: string | null = null;
   private currentPendingCount = 0;
+  private currentSyncingCount = 0;
+  private currentFailedCount = 0;
+  private syncedCount = 0;
   private lastSyncedAt: number | null = null;
   private lastError: string | null = null;
   private mutationError: string | null = null;
@@ -117,6 +125,8 @@ class SyncEngine {
     if (this.currentUserId !== userId) {
       this.currentUserId = userId;
       this.currentPendingCount = 0;
+      this.currentSyncingCount = 0;
+      this.currentFailedCount = 0;
       this.lastSyncedAt = null;
       this.lastError = null;
       this.mutationError = null;
@@ -151,6 +161,9 @@ class SyncEngine {
       isOnline: this.isOnlineState,
       isSyncing: this.isSyncing,
       pendingCount: this.currentPendingCount,
+      syncingCount: this.currentSyncingCount,
+      failedCount: this.currentFailedCount,
+      syncedCount: this.syncedCount,
       lastSyncedAt: this.lastSyncedAt,
       lastError: this.lastError,
       mutationError: this.mutationError,
@@ -174,6 +187,10 @@ class SyncEngine {
     try {
       const pending = await getPendingMutations(userId);
       this.currentPendingCount = pending.length;
+      this.currentFailedCount = pending.filter((m) => m.status === 'failed').length;
+      this.currentSyncingCount = this.isSyncing
+        ? pending.filter((m) => m.status === 'syncing' || m.status === 'pending').length
+        : 0;
       this.notify();
     } catch {
       // Ignore
@@ -234,19 +251,24 @@ class SyncEngine {
       deleted_locally: false,
     };
 
-    // 1. Save to local IndexedDB immediately
-    await saveCachedTransaction(optimisticTxn, userId, 'pending');
-
-    // 2. Adjust local balances
-    await this.applyLocalTransactionBalanceDelta(optimisticTxn, userId);
-
-    // 3. Add to durable outbox queue
-    await enqueuePendingMutation({
+    // 1. Save atomically to local IndexedDB (transaction + mutation outbox + balance adjustment)
+    const mutationRecord: PendingMutation = {
       id: uuidv7(),
       entityId: payload.id,
       userId,
       type: 'create_transaction',
       payload: { ...payload, recorded_at, created_at: payload.created_at || recorded_at },
+      createdAt: Date.now(),
+      attempts: 0,
+      status: 'pending',
+      lastAttemptAt: null,
+      lastError: null,
+    };
+
+    await saveTransactionCreationAtomic({
+      transaction: optimisticTxn,
+      mutation: mutationRecord,
+      userId,
     });
 
     await this.updatePendingCount(userId);
@@ -347,18 +369,25 @@ class SyncEngine {
   ): Promise<DeleteTransactionResponse> {
     this.assertOfflineWriteIsAllowed();
     const existing = await getCachedTransactionById(id, userId);
-    if (existing) {
-      // Reverse balance delta
-      await this.reverseLocalTransactionBalanceDelta(existing, userId);
-      await markCachedTransactionDeleted(id, userId);
-    }
 
-    await enqueuePendingMutation({
+    const mutationRecord: PendingMutation = {
       id: uuidv7(),
       entityId: id,
       userId,
       type: 'delete_transaction',
       payload: { id },
+      createdAt: Date.now(),
+      attempts: 0,
+      status: 'pending',
+      lastAttemptAt: null,
+      lastError: null,
+    };
+
+    await saveTransactionDeletionAtomic({
+      id,
+      mutation: mutationRecord,
+      userId,
+      existingTransaction: existing,
     });
 
     await this.updatePendingCount(userId);
@@ -407,14 +436,23 @@ class SyncEngine {
       balances_configured_at: nowIso,
     };
 
-    await setCachedBalances(updatedBalances, userId);
-
-    await enqueuePendingMutation({
+    const mutationRecord: PendingMutation = {
       id: uuidv7(),
       entityId: userId,
       userId,
       type: 'configure_starting_balances',
       payload: req,
+      createdAt: Date.now(),
+      attempts: 0,
+      status: 'pending',
+      lastAttemptAt: null,
+      lastError: null,
+    };
+
+    await saveStartingBalancesAtomic({
+      balances: updatedBalances,
+      mutation: mutationRecord,
+      userId,
     });
 
     await this.updatePendingCount(userId);
@@ -457,9 +495,16 @@ class SyncEngine {
         }
 
         try {
+          await updatePendingMutation(mutation.id, {
+            status: 'syncing',
+            lastAttemptAt: Date.now(),
+          });
+          await this.updatePendingCount(userId);
+
           await this.executeMutation(mutation, userId);
           // Mutation confirmed by server — safely remove from outbox
           await removePendingMutation(mutation.id);
+          this.syncedCount += 1;
         } catch (itemErr: unknown) {
           const isNetError =
             itemErr instanceof TypeError ||
@@ -471,6 +516,7 @@ class SyncEngine {
             this.mutationError = 'Network disconnected during synchronization';
             this.lastError = this.mutationError;
             await updatePendingMutation(mutation.id, {
+              status: 'pending',
               attempts: mutation.attempts + 1,
               lastAttemptAt: Date.now(),
               lastError: 'Network disconnected during synchronization',
@@ -493,6 +539,7 @@ class SyncEngine {
           } else {
             // Temporary server error (500, 503) — increment attempt and back off
             await updatePendingMutation(mutation.id, {
+              status: 'pending',
               attempts: mutation.attempts + 1,
               lastAttemptAt: Date.now(),
               lastError: msg,
@@ -525,6 +572,25 @@ class SyncEngine {
     } finally {
       this.isSyncing = false;
       this.notify();
+    }
+  }
+
+  public async retryFailedMutations(userId: string): Promise<void> {
+    const pending = await getPendingMutations(userId);
+    for (const m of pending) {
+      if (m.status === 'failed') {
+        await updatePendingMutation(m.id, {
+          status: 'pending',
+          attempts: 0,
+          lastError: null,
+        });
+      }
+    }
+    this.mutationError = null;
+    this.lastError = null;
+    await this.updatePendingCount(userId);
+    if (this.isOnlineState) {
+      await this.processQueue(userId);
     }
   }
 

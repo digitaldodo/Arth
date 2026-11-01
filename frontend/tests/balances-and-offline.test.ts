@@ -240,7 +240,7 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
       );
     });
 
-    test('TransactionAppShell displays pending offline sync status and manual sync action', () => {
+    test('InstallPromptCard displays pending offline sync status and manual sync action while TransactionAppShell keeps main screens clean', () => {
       const shellPath = path.join(
         projectRoot,
         'src',
@@ -248,16 +248,25 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
         'transactions',
         'TransactionAppShell.tsx'
       );
-      const content = fs.readFileSync(shellPath, 'utf8');
+      const installCardPath = path.join(
+        projectRoot,
+        'src',
+        'features',
+        'pwa',
+        'InstallPromptCard.tsx'
+      );
+      const shellContent = fs.readFileSync(shellPath, 'utf8');
+      const cardContent = fs.readFileSync(installCardPath, 'utf8');
       assert.ok(
-        content.includes('saved locally (pending sync)'),
-        'Must display pending offline sync status badge'
+        cardContent.includes('Saved locally'),
+        'InstallPromptCard must display Saved locally breakdown'
       );
       assert.ok(
-        content.includes('Sync now'),
-        'Must provide manual Sync now button'
+        cardContent.includes('Sync Now'),
+        'InstallPromptCard must provide manual Sync Now button'
       );
-      assert.ok(content.includes('syncEngine.subscribe'), 'Must use centralized sync engine state');
+      assert.ok(shellContent.includes('syncEngine.subscribe'), 'Must use centralized sync engine state');
+      assert.ok(!shellContent.includes('saved locally (pending sync)'), 'TransactionAppShell must not display persistent global sync banner');
     });
 
     test('Service worker caches public assets and isolates authenticated APIs', () => {
