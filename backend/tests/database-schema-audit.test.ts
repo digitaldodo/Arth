@@ -8,7 +8,7 @@ describe('Database Schema & Migration Integrity Audit', () => {
     ? path.resolve(process.cwd(), '../supabase/migrations')
     : path.resolve(process.cwd(), 'supabase/migrations');
 
-  test('All 25 numbered migration files exist in sequential order', () => {
+  test('All 26 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -37,10 +37,22 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0022_app_lock_webauthn.sql',
       '0023_fix_profiles_balances_configured.sql',
       '0024_account_balances_rpc_hardening.sql',
-      '0025_balance_snapshot_and_non_negative_balances.sql'
+      '0025_balance_snapshot_and_non_negative_balances.sql',
+      '0026_harden_unconfigured_balances_and_ownership.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  test('0026_harden_unconfigured_balances_and_ownership.sql enforces zero-baseline unconfigured balance model, movement updates, and user ownership immutability', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0026_harden_unconfigured_balances_and_ownership.sql'), 'utf-8');
+    assert.ok(sql.includes('Cannot change user ownership of a transaction'), 'Must prohibit changing user_id on transactions');
+    assert.ok(sql.includes('Cannot change user ownership of a balance movement'), 'Must prohibit changing user_id on movements');
+    assert.ok(sql.includes('Physical deletion is not permitted'), 'Must prohibit physical deletion');
+    assert.ok(sql.includes('v_starting_cash := 0'), 'Must enforce zero-baseline cash when unconfigured');
+    assert.ok(sql.includes('v_starting_online := 0'), 'Must enforce zero-baseline online when unconfigured');
+    assert.ok(sql.includes('FOR UPDATE'), 'Must serialize on user profile row lock');
+    assert.ok(sql.includes("TG_OP <> 'UPDATE' OR id <> NEW.id"), 'Must exclude updating row during balance recalculation');
   });
 
   test('0025_balance_snapshot_and_non_negative_balances.sql enforces snapshot boundary, non-negative balance triggers, and FOR UPDATE locking', () => {

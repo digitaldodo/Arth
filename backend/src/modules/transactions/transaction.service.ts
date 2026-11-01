@@ -417,6 +417,10 @@ export class SupabaseTransactionService implements ITransactionService {
       throw new NotFoundError('Transaction not found or has been deleted');
     }
 
+    if (input.user_id && input.user_id !== existing.user_id) {
+      throw new ValidationError('Cannot change user ownership of a transaction');
+    }
+
     const finalType = input.type ?? (existing.type as TransactionType);
     const finalCategoryId = input.category_id ?? (existing.category_id as string);
 
@@ -580,6 +584,25 @@ export class InMemoryTransactionService implements ITransactionService {
   public categories: StoredCategoryRecord[] = [];
   public outboxEvents: StoredOutboxRecord[] = [];
   public balanceService?: { getBalances: (userId: string) => Promise<AccountBalancesDTO> };
+  private userLocks = new Map<string, Promise<void>>();
+
+  public async withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const prevLock = this.userLocks.get(userId) || Promise.resolve();
+    let release: () => void = () => {};
+    const currentLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.userLocks.set(userId, currentLock);
+    try {
+      await prevLock;
+      return await fn();
+    } finally {
+      release();
+      if (this.userLocks.get(userId) === currentLock) {
+        this.userLocks.delete(userId);
+      }
+    }
+  }
 
   constructor() {
     this.seedDefaultCategories('test-user-id');
@@ -628,104 +651,115 @@ export class InMemoryTransactionService implements ITransactionService {
     userId: string,
     input: ValidatedCreateTransactionInput
   ): Promise<{ transaction: TransactionDTO; isReplay: boolean }> {
-    // 1. Check existing
-    const existing = this.transactions.find((t) => t.id === input.id);
-    if (existing) {
-      // Ensure RLS isolation: user can only see own transaction
-      if (existing.user_id !== userId) {
+    return this.withUserLock(userId, async () => {
+      // 1. Check existing
+      const existing = this.transactions.find((t) => t.id === input.id);
+      if (existing) {
+        // Ensure RLS isolation: user can only see own transaction
+        if (existing.user_id !== userId) {
+          throw new ConflictError('A transaction with this ID already exists with different payload attributes');
+        }
+
+        if (existing.deleted_at) {
+          throw new ConflictError('Transaction with this ID was previously deleted and cannot be recreated');
+        }
+
+        const isMatch =
+          existing.amount_paise === Number(input.amount_paise) &&
+          existing.type === input.type &&
+          existing.category_id === input.category_id &&
+          existing.transaction_date === input.transaction_date &&
+          existing.payment_method === input.payment_method &&
+          (existing.necessity ?? null) === input.necessity &&
+          (existing.description ?? null) === input.description &&
+          (existing.notes ?? null) === input.notes;
+
+        if (isMatch) {
+          const cat = this.categories.find((c) => c.id === existing.category_id);
+          return {
+            transaction: mapToTransactionDTO(existing, cat?.name),
+            isReplay: true,
+          };
+        }
+
         throw new ConflictError('A transaction with this ID already exists with different payload attributes');
       }
 
-      if (existing.deleted_at) {
-        throw new ConflictError('Transaction with this ID was previously deleted and cannot be recreated');
-      }
-
-      const isMatch =
-        existing.amount_paise === Number(input.amount_paise) &&
-        existing.type === input.type &&
-        existing.category_id === input.category_id &&
-        existing.transaction_date === input.transaction_date &&
-        existing.payment_method === input.payment_method &&
-        (existing.necessity ?? null) === input.necessity &&
-        (existing.description ?? null) === input.description &&
-        (existing.notes ?? null) === input.notes;
-
-      if (isMatch) {
-        const cat = this.categories.find((c) => c.id === existing.category_id);
-        return {
-          transaction: mapToTransactionDTO(existing, cat?.name),
-          isReplay: true,
-        };
-      }
-
-      throw new ConflictError('A transaction with this ID already exists with different payload attributes');
-    }
-
-    // 2. Validate category ownership and type match
-    const category = this.categories.find(
-      (c) => c.id === input.category_id && c.user_id === userId && c.archived_at === null
-    );
-
-    if (!category) {
-      throw new ValidationError('Selected category does not exist or does not belong to the user');
-    }
-
-    if (category.type !== input.type) {
-      throw new ValidationError(
-        `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
+      // 2. Validate category ownership and type match
+      const category = this.categories.find(
+        (c) => c.id === input.category_id && c.user_id === userId && c.archived_at === null
       );
-    }
 
-    if (input.type === 'expense' && this.balanceService) {
-      const currentBalances = await this.balanceService.getBalances(userId);
-      if (currentBalances.balances_configured && currentBalances.balances_configured_at) {
-        const avail = input.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
-        const isPostBaseline = input.recorded_at > currentBalances.balances_configured_at;
-        if (isPostBaseline && Number(input.amount_paise) > avail) {
-          throw new ValidationError(
-            `Insufficient ${input.payment_method} balance. Available balance is ${avail} paise, but attempted expense is ${input.amount_paise} paise.`
-          );
+      if (!category) {
+        throw new ValidationError('Selected category does not exist or does not belong to the user');
+      }
+
+      if (category.type !== input.type) {
+        throw new ValidationError(
+          `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
+        );
+      }
+
+      let nowMs = Date.now();
+      let currentBalances: AccountBalancesDTO | null = null;
+      if (this.balanceService) {
+        currentBalances = await this.balanceService.getBalances(userId);
+        if (currentBalances.balances_configured_at && nowMs <= Date.parse(currentBalances.balances_configured_at)) {
+          nowMs = Date.parse(currentBalances.balances_configured_at) + 1;
         }
       }
-    }
+      const now = new Date(nowMs).toISOString();
+      const effectiveRecordedAt = input.recorded_at || input.created_at || now;
 
-    const now = new Date().toISOString();
-    const newRecord: StoredTransactionRecord = {
-      id: input.id,
-      user_id: userId,
-      amount_paise: Number(input.amount_paise),
-      type: input.type,
-      category_id: input.category_id,
-      category_name: category.name,
-      transaction_date: input.transaction_date,
-      payment_method: input.payment_method,
-      necessity: input.necessity,
-      description: input.description,
-      notes: input.notes,
-      recorded_at: input.recorded_at,
-      created_at: input.created_at || now,
-      updated_at: now,
-      deleted_at: null,
-    };
+      if (input.type === 'expense' && currentBalances) {
+        const isPostBaseline = !currentBalances.balances_configured_at || effectiveRecordedAt > currentBalances.balances_configured_at;
+        if (isPostBaseline) {
+          const avail = input.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+          if (Number(input.amount_paise) > avail) {
+            throw new ValidationError(
+              `Insufficient ${input.payment_method} balance. Available balance is ${avail} paise, but attempted expense is ${input.amount_paise} paise.`
+            );
+          }
+        }
+      }
 
-    this.transactions.push(newRecord);
+      const newRecord: StoredTransactionRecord = {
+        id: input.id,
+        user_id: userId,
+        amount_paise: Number(input.amount_paise),
+        type: input.type,
+        category_id: input.category_id,
+        category_name: category.name,
+        transaction_date: input.transaction_date,
+        payment_method: input.payment_method,
+        necessity: input.necessity,
+        description: input.description,
+        notes: input.notes,
+        recorded_at: effectiveRecordedAt,
+        created_at: input.created_at || now,
+        updated_at: now,
+        deleted_at: null,
+      };
 
-    // Simulate database trigger trg_transactions_outbox
-    this.outboxEvents.push({
-      id: `outbox-${input.id}`,
-      user_id: userId,
-      entity_type: 'transaction',
-      entity_id: input.id,
-      event_type: 'transaction.created',
-      payload: { ...newRecord },
-      status: 'pending',
-      created_at: now,
+      this.transactions.push(newRecord);
+
+      // Simulate database trigger trg_transactions_outbox
+      this.outboxEvents.push({
+        id: `outbox-${input.id}`,
+        user_id: userId,
+        entity_type: 'transaction',
+        entity_id: input.id,
+        event_type: 'transaction.created',
+        payload: { ...newRecord },
+        status: 'pending',
+        created_at: now,
+      });
+
+      return {
+        transaction: mapToTransactionDTO(newRecord, category.name),
+        isReplay: false,
+      };
     });
-
-    return {
-      transaction: mapToTransactionDTO(newRecord, category.name),
-      isReplay: false,
-    };
   }
 
   async listTransactions(
@@ -825,6 +859,10 @@ export class InMemoryTransactionService implements ITransactionService {
       throw new NotFoundError('Transaction not found or has been deleted');
     }
 
+    if (input.user_id && input.user_id !== existing.user_id) {
+      throw new ValidationError('Cannot change user ownership of a transaction');
+    }
+
     const finalType = input.type ?? existing.type;
     const finalCategoryId = input.category_id ?? existing.category_id;
 
@@ -856,20 +894,19 @@ export class InMemoryTransactionService implements ITransactionService {
 
     if (finalType === 'expense' && this.balanceService) {
       const currentBalances = await this.balanceService.getBalances(userId);
-      if (!currentBalances.balances_configured) {
-        throw new ValidationError('Starting balances have not been configured yet. Available balance is 0.');
-      }
-      const finalMethod = input.payment_method ?? existing.payment_method;
-      let avail = finalMethod === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
-      const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
-      if (existing.type === 'expense' && existing.payment_method === finalMethod && isExistingPostBaseline) {
-        avail += existing.amount_paise;
-      }
-      const newAmountPaise = input.amount_paise !== undefined ? Number(input.amount_paise) : existing.amount_paise;
-      if (newAmountPaise > avail) {
-        throw new ValidationError(
-          `Insufficient ${finalMethod} balance. Available balance is ${avail} paise, but attempted expense is ${newAmountPaise} paise.`
-        );
+      const isPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
+      if (isPostBaseline) {
+        const finalMethod = input.payment_method ?? existing.payment_method;
+        let avail = finalMethod === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+        if (existing.type === 'expense' && existing.payment_method === finalMethod) {
+          avail += existing.amount_paise;
+        }
+        const newAmountPaise = input.amount_paise !== undefined ? Number(input.amount_paise) : existing.amount_paise;
+        if (newAmountPaise > avail) {
+          throw new ValidationError(
+            `Insufficient ${finalMethod} balance. Available balance is ${avail} paise, but attempted expense is ${newAmountPaise} paise.`
+          );
+        }
       }
     }
 

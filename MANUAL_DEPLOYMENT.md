@@ -10,7 +10,7 @@ This document provides exact, step-by-step instructions for completing the deplo
 |---|---|---|
 | **Codebase & Contracts** | ✅ Completed & Committed | Automated via GitHub `main` push. |
 | **Vercel Web App** | 🔄 Automated CI/CD | Auto-deployed on GitHub push to `main`. |
-| **Supabase PostgreSQL** | ⚠️ **Manual Action** | Execute migration `0025` via Supabase SQL Editor. |
+| **Supabase PostgreSQL** | ⚠️ **Manual Action** | Execute migrations `0025` and `0026` via Supabase SQL Editor. |
 | **Installed Android PWA** | 📱 Automatic Update | Update activates upon opening the app. |
 
 ---
@@ -18,8 +18,10 @@ This document provides exact, step-by-step instructions for completing the deplo
 ## 1. Supabase Production Migration
 
 ### Context & Safety
-- **Target File**: [`supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql`](./supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql)
-- **Nature of Migration**: Forward-only, append-only, and **100% idempotent**.
+- **Target Files**:
+  1. [`supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql`](./supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql)
+  2. [`supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql`](./supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql)
+- **Nature of Migrations**: Forward-only, append-only, and **100% idempotent**.
 - **Data Safety**: Non-destructive. Backfills `recorded_at` from `created_at` for existing rows. Preserves all existing financial transactions, categories, and user profiles.
 
 ### Step-by-Step Execution via Supabase Dashboard
@@ -27,8 +29,8 @@ This document provides exact, step-by-step instructions for completing the deplo
 1. Navigate to the **[Supabase Dashboard](https://supabase.com/dashboard)** and select your **Arth** project.
 2. In the left navigation menu, click the **SQL Editor** tab (`>_` icon).
 3. Click **+ New Query** in the top bar.
-4. Copy the complete text of `supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql` from this repository and paste it into the SQL editor window.
-5. Click the green **Run** button (or press `Ctrl` + `Enter` / `Cmd` + `Enter`).
+4. Copy the complete text of `supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql` (if not previously applied) and run it.
+5. Next, copy the complete text of `supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql` into the SQL editor and click the green **Run** button (or press `Ctrl` + `Enter` / `Cmd` + `Enter`).
 6. Confirm that the execution status outputs: `Success. No rows returned`.
 
 > [!TIP]
@@ -141,6 +143,21 @@ WHERE schemaname = 'public'
 ```
 **Expected Result**:
 Both indexes present, indexing `(user_id, recorded_at)`.
+
+---
+
+### 2.6 Verify User Ownership Immutability & Zero-Baseline Invariants (Migration 0026)
+
+```sql
+-- Check that trigger functions contain user ownership validation and zero-baseline checks
+SELECT proname, prosecdef
+FROM pg_proc
+WHERE proname IN ('fn_account_balances', 'fn_validate_transaction_balance', 'fn_validate_movement_balance');
+```
+**Expected Result**:
+- `fn_account_balances`: `prosecdef = false` (`SECURITY INVOKER`)
+- `fn_validate_transaction_balance`: `prosecdef = true` (`SECURITY DEFINER`)
+- `fn_validate_movement_balance`: `prosecdef = true` (`SECURITY DEFINER`)
 
 ---
 

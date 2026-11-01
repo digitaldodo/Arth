@@ -317,6 +317,7 @@ export function validateTransactionId(id: unknown): string {
 }
 
 export interface ValidatedUpdateTransactionInput {
+  user_id?: string;
   amount_paise?: bigint;
   type?: TransactionType;
   category_id?: string;
@@ -334,6 +335,13 @@ export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdate
 
   const payload = body as Record<string, unknown>;
   const result: ValidatedUpdateTransactionInput = {};
+
+  if (payload.user_id !== undefined) {
+    if (typeof payload.user_id !== 'string') {
+      throw new ValidationError('user_id must be a string');
+    }
+    result.user_id = payload.user_id;
+  }
 
   if (payload.type !== undefined) {
     if (payload.type !== 'income' && payload.type !== 'expense') {

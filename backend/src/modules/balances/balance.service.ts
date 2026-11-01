@@ -361,25 +361,6 @@ export class InMemoryBalanceService implements IBalanceService {
       balances_configured_at: null,
     };
 
-    if (!starting.balances_configured || !starting.balances_configured_at) {
-      return {
-        starting_cash_paise: 0,
-        starting_online_paise: 0,
-        starting_total_paise: 0,
-        current_cash_paise: 0,
-        current_online_paise: 0,
-        total_available_paise: 0,
-        formatted_starting_cash: '₹0.00',
-        formatted_starting_online: '₹0.00',
-        formatted_starting_total: '₹0.00',
-        formatted_current_cash: '₹0.00',
-        formatted_current_online: '₹0.00',
-        formatted_total_available: '₹0.00',
-        balances_configured: false,
-        balances_configured_at: null,
-      };
-    }
-
     let cashIncome = 0n;
     let cashExpense = 0n;
     let onlineIncome = 0n;
@@ -468,7 +449,7 @@ export class InMemoryBalanceService implements IBalanceService {
       starting_cash_paise: data.starting_cash_paise,
       starting_online_paise: data.starting_online_paise,
       balances_configured: true,
-      balances_configured_at: new Date().toISOString(),
+      balances_configured_at: new Date(Date.now() - 1).toISOString(),
     });
 
     return this.getBalances(userId);
@@ -479,9 +460,6 @@ export class InMemoryBalanceService implements IBalanceService {
     data: ValidatedCreateTransfer
   ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
     const current = await this.getBalances(userId);
-    if (!current.balances_configured) {
-      throw new BalanceValidationError('Starting balances have not been configured yet.');
-    }
     const avail = data.from_method === 'cash' ? BigInt(current.current_cash_paise) : BigInt(current.current_online_paise);
     if (data.amount_paise > avail) {
       throw new BalanceValidationError(
@@ -489,7 +467,11 @@ export class InMemoryBalanceService implements IBalanceService {
       );
     }
 
-    const now = new Date().toISOString();
+    let nowMs = Date.now();
+    if (current.balances_configured_at && nowMs <= Date.parse(current.balances_configured_at)) {
+      nowMs = Date.parse(current.balances_configured_at) + 1;
+    }
+    const now = new Date(nowMs).toISOString();
     const today = now.slice(0, 10);
     const id = data.id || uuidv7();
 
@@ -536,9 +518,6 @@ export class InMemoryBalanceService implements IBalanceService {
   ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
     if (data.adjustment_paise < 0n) {
       const current = await this.getBalances(userId);
-      if (!current.balances_configured) {
-        throw new BalanceValidationError('Starting balances have not been configured yet.');
-      }
       const avail = data.payment_method === 'cash' ? BigInt(current.current_cash_paise) : BigInt(current.current_online_paise);
       const reduction = -data.adjustment_paise;
       if (reduction > avail) {
@@ -548,7 +527,12 @@ export class InMemoryBalanceService implements IBalanceService {
       }
     }
 
-    const now = new Date().toISOString();
+    const current = await this.getBalances(userId);
+    let nowMs = Date.now();
+    if (current.balances_configured_at && nowMs <= Date.parse(current.balances_configured_at)) {
+      nowMs = Date.parse(current.balances_configured_at) + 1;
+    }
+    const now = new Date(nowMs).toISOString();
     const today = now.slice(0, 10);
     const id = data.id || uuidv7();
 
@@ -612,5 +596,268 @@ export class InMemoryBalanceService implements IBalanceService {
       items,
       total_count: items.length,
     };
+  }
+
+  async updateMovement(
+    userId: string,
+    id: string,
+    data: Partial<StoredMovementRecord>
+  ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+    const existing = this.movements.find((m) => m.id === id);
+    if (!existing || existing.user_id !== userId || existing.deleted_at !== null) {
+      throw new BalanceValidationError('Movement not found or already deleted');
+    }
+
+    if (data.user_id && data.user_id !== existing.user_id) {
+      throw new BalanceValidationError('Cannot change user ownership of a balance movement');
+    }
+
+    const proposed: StoredMovementRecord = {
+      ...existing,
+      ...data,
+      user_id: existing.user_id,
+      recorded_at: existing.recorded_at,
+      created_at: existing.created_at,
+      updated_at: new Date().toISOString(),
+    };
+
+    const starting = this.userBalances.get(userId) || {
+      starting_cash_paise: 0n,
+      starting_online_paise: 0n,
+      balances_configured: false,
+      balances_configured_at: null,
+    };
+
+    const isPostBaseline = !starting.balances_configured_at || proposed.recorded_at > starting.balances_configured_at;
+    if (isPostBaseline && proposed.deleted_at === null) {
+      let availCash = starting.balances_configured ? starting.starting_cash_paise : 0n;
+      let availOnline = starting.balances_configured ? starting.starting_online_paise : 0n;
+
+      if (this.transactionService) {
+        for (const t of this.transactionService.transactions) {
+          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
+          const paise = BigInt(t.amount_paise);
+          if (t.payment_method === 'cash') {
+            if (t.type === 'income') availCash += paise;
+            else if (t.type === 'expense') availCash -= paise;
+          } else if (t.payment_method === 'online') {
+            if (t.type === 'income') availOnline += paise;
+            else if (t.type === 'expense') availOnline -= paise;
+          }
+        }
+      }
+
+      for (const m of this.movements) {
+        if (m.id === id || m.user_id !== userId || m.deleted_at !== null) continue;
+        if (starting.balances_configured_at && (m.recorded_at || m.created_at) <= starting.balances_configured_at) continue;
+        if (m.movement_type === 'transfer') {
+          if (m.to_method === 'cash') availCash += m.amount_paise;
+          if (m.from_method === 'cash') availCash -= m.amount_paise;
+          if (m.to_method === 'online') availOnline += m.amount_paise;
+          if (m.from_method === 'online') availOnline -= m.amount_paise;
+        } else if (m.movement_type === 'adjustment') {
+          if (m.payment_method === 'cash') availCash += m.adjustment_paise;
+          if (m.payment_method === 'online') availOnline += m.adjustment_paise;
+        }
+      }
+
+      if (proposed.movement_type === 'transfer') {
+        if (proposed.from_method === 'cash') availCash -= proposed.amount_paise;
+        if (proposed.from_method === 'online') availOnline -= proposed.amount_paise;
+        if (proposed.to_method === 'cash') availCash += proposed.amount_paise;
+        if (proposed.to_method === 'online') availOnline += proposed.amount_paise;
+      } else if (proposed.movement_type === 'adjustment') {
+        if (proposed.payment_method === 'cash') availCash += proposed.adjustment_paise;
+        if (proposed.payment_method === 'online') availOnline += proposed.adjustment_paise;
+      }
+
+      if (availCash < 0n) {
+        throw new BalanceValidationError(`Insufficient cash balance for movement. Resulting balance would be ${availCash} paise.`);
+      }
+      if (availOnline < 0n) {
+        throw new BalanceValidationError(`Insufficient online balance for movement. Resulting balance would be ${availOnline} paise.`);
+      }
+    }
+
+    Object.assign(existing, proposed);
+    const balances = await this.getBalances(userId);
+    const movement: BalanceMovementDTO = {
+      id: existing.id,
+      movement_type: existing.movement_type,
+      from_method: existing.from_method,
+      to_method: existing.to_method,
+      payment_method: existing.payment_method,
+      amount_paise: Number(existing.amount_paise),
+      adjustment_paise: Number(existing.adjustment_paise),
+      formatted_amount: formatPaiseToINR(
+        existing.movement_type === 'adjustment'
+          ? Math.abs(Number(existing.adjustment_paise))
+          : Number(existing.amount_paise)
+      ),
+      reason: existing.reason,
+      movement_date: existing.movement_date,
+      recorded_at: existing.recorded_at,
+      created_at: existing.created_at,
+      updated_at: existing.updated_at,
+    };
+    return { movement, balances };
+  }
+
+  async deleteMovement(
+    userId: string,
+    id: string
+  ): Promise<{ success: boolean; id: string; balances: AccountBalancesDTO }> {
+    const existing = this.movements.find((m) => m.id === id);
+    if (!existing || existing.user_id !== userId || existing.deleted_at !== null) {
+      throw new BalanceValidationError('Movement not found or already deleted');
+    }
+
+    const starting = this.userBalances.get(userId) || {
+      starting_cash_paise: 0n,
+      starting_online_paise: 0n,
+      balances_configured: false,
+      balances_configured_at: null,
+    };
+
+    const isPostBaseline = !starting.balances_configured_at || existing.recorded_at > starting.balances_configured_at;
+    if (isPostBaseline) {
+      let availCash = starting.balances_configured ? starting.starting_cash_paise : 0n;
+      let availOnline = starting.balances_configured ? starting.starting_online_paise : 0n;
+
+      if (this.transactionService) {
+        for (const t of this.transactionService.transactions) {
+          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
+          const paise = BigInt(t.amount_paise);
+          if (t.payment_method === 'cash') {
+            if (t.type === 'income') availCash += paise;
+            else if (t.type === 'expense') availCash -= paise;
+          } else if (t.payment_method === 'online') {
+            if (t.type === 'income') availOnline += paise;
+            else if (t.type === 'expense') availOnline -= paise;
+          }
+        }
+      }
+
+      for (const m of this.movements) {
+        if (m.id === id || m.user_id !== userId || m.deleted_at !== null) continue;
+        if (starting.balances_configured_at && (m.recorded_at || m.created_at) <= starting.balances_configured_at) continue;
+        if (m.movement_type === 'transfer') {
+          if (m.to_method === 'cash') availCash += m.amount_paise;
+          if (m.from_method === 'cash') availCash -= m.amount_paise;
+          if (m.to_method === 'online') availOnline += m.amount_paise;
+          if (m.from_method === 'online') availOnline -= m.amount_paise;
+        } else if (m.movement_type === 'adjustment') {
+          if (m.payment_method === 'cash') availCash += m.adjustment_paise;
+          if (m.payment_method === 'online') availOnline += m.adjustment_paise;
+        }
+      }
+
+      if (availCash < 0n) {
+        throw new BalanceValidationError(`Insufficient cash balance for movement. Resulting balance would be ${availCash} paise.`);
+      }
+      if (availOnline < 0n) {
+        throw new BalanceValidationError(`Insufficient online balance for movement. Resulting balance would be ${availOnline} paise.`);
+      }
+    }
+
+    existing.deleted_at = new Date().toISOString();
+    existing.updated_at = existing.deleted_at;
+    const balances = await this.getBalances(userId);
+    return { success: true, id, balances };
+  }
+
+  async restoreMovement(
+    userId: string,
+    id: string
+  ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+    const existing = this.movements.find((m) => m.id === id);
+    if (!existing || existing.user_id !== userId || existing.deleted_at === null) {
+      throw new BalanceValidationError('Movement not found or not deleted');
+    }
+
+    const starting = this.userBalances.get(userId) || {
+      starting_cash_paise: 0n,
+      starting_online_paise: 0n,
+      balances_configured: false,
+      balances_configured_at: null,
+    };
+
+    const isPostBaseline = !starting.balances_configured_at || existing.recorded_at > starting.balances_configured_at;
+    if (isPostBaseline) {
+      let availCash = starting.balances_configured ? starting.starting_cash_paise : 0n;
+      let availOnline = starting.balances_configured ? starting.starting_online_paise : 0n;
+
+      if (this.transactionService) {
+        for (const t of this.transactionService.transactions) {
+          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
+          const paise = BigInt(t.amount_paise);
+          if (t.payment_method === 'cash') {
+            if (t.type === 'income') availCash += paise;
+            else if (t.type === 'expense') availCash -= paise;
+          } else if (t.payment_method === 'online') {
+            if (t.type === 'income') availOnline += paise;
+            else if (t.type === 'expense') availOnline -= paise;
+          }
+        }
+      }
+
+      for (const m of this.movements) {
+        if (m.id === id || m.user_id !== userId || m.deleted_at !== null) continue;
+        if (starting.balances_configured_at && (m.recorded_at || m.created_at) <= starting.balances_configured_at) continue;
+        if (m.movement_type === 'transfer') {
+          if (m.to_method === 'cash') availCash += m.amount_paise;
+          if (m.from_method === 'cash') availCash -= m.amount_paise;
+          if (m.to_method === 'online') availOnline += m.amount_paise;
+          if (m.from_method === 'online') availOnline -= m.amount_paise;
+        } else if (m.movement_type === 'adjustment') {
+          if (m.payment_method === 'cash') availCash += m.adjustment_paise;
+          if (m.payment_method === 'online') availOnline += m.adjustment_paise;
+        }
+      }
+
+      if (existing.movement_type === 'transfer') {
+        if (existing.from_method === 'cash') availCash -= existing.amount_paise;
+        if (existing.from_method === 'online') availOnline -= existing.amount_paise;
+        if (existing.to_method === 'cash') availCash += existing.amount_paise;
+        if (existing.to_method === 'online') availOnline += existing.amount_paise;
+      } else if (existing.movement_type === 'adjustment') {
+        if (existing.payment_method === 'cash') availCash += existing.adjustment_paise;
+        if (existing.payment_method === 'online') availOnline += existing.adjustment_paise;
+      }
+
+      if (availCash < 0n) {
+        throw new BalanceValidationError(`Insufficient cash balance for movement. Resulting balance would be ${availCash} paise.`);
+      }
+      if (availOnline < 0n) {
+        throw new BalanceValidationError(`Insufficient online balance for movement. Resulting balance would be ${availOnline} paise.`);
+      }
+    }
+
+    existing.deleted_at = null;
+    existing.updated_at = new Date().toISOString();
+    const balances = await this.getBalances(userId);
+    const movement: BalanceMovementDTO = {
+      id: existing.id,
+      movement_type: existing.movement_type,
+      from_method: existing.from_method,
+      to_method: existing.to_method,
+      payment_method: existing.payment_method,
+      amount_paise: Number(existing.amount_paise),
+      adjustment_paise: Number(existing.adjustment_paise),
+      formatted_amount: formatPaiseToINR(
+        existing.movement_type === 'adjustment'
+          ? Math.abs(Number(existing.adjustment_paise))
+          : Number(existing.amount_paise)
+      ),
+      reason: existing.reason,
+      movement_date: existing.movement_date,
+      recorded_at: existing.recorded_at,
+      created_at: existing.created_at,
+      updated_at: existing.updated_at,
+    };
+    return { movement, balances };
   }
 }

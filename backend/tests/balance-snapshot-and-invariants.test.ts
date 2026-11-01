@@ -72,6 +72,23 @@ describe('Balance Snapshot Model & Non-Negative Balance Invariants (Scenarios 1-
 
   test('Scenario 1: Starting-balance setup with historical transactions (23-30 October)', async () => {
     // 1. Record historical transactions on 23-30 October (before baseline is configured)
+    // 23 Oct: Income ₹1,000 (Cash) (establishes available cash before expenses)
+    const t0 = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: uuidv7(),
+        amount: '1000.00',
+        type: 'income',
+        category_id: salaryCategoryId,
+        transaction_date: '2026-10-23',
+        payment_method: 'cash',
+        recorded_at: '2026-10-23T08:00:00.000Z',
+      },
+    });
+    assert.equal(t0.statusCode, 201);
+
     // 23 Oct: Expense ₹500 (Cash)
     const t1 = await app.inject({
       method: 'POST',
@@ -216,7 +233,7 @@ describe('Balance Snapshot Model & Non-Negative Balance Invariants (Scenarios 1-
 
     // Verify October transactions exist
     const octTxns = list.items.filter((t: TransactionDTO) => t.transaction_date.startsWith('2026-10'));
-    assert.equal(octTxns.length, 4, 'All 4 October historical transactions must be preserved in ledger');
+    assert.equal(octTxns.length, 5, 'All 5 October historical transactions must be preserved in ledger');
   });
 
   test('Scenario 4: Old-dated transaction recorded post-baseline follows post-baseline policy', async () => {
