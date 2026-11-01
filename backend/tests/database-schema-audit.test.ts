@@ -38,10 +38,21 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0023_fix_profiles_balances_configured.sql',
       '0024_account_balances_rpc_hardening.sql',
       '0025_balance_snapshot_and_non_negative_balances.sql',
-      '0026_harden_unconfigured_balances_and_ownership.sql'
+      '0026_harden_unconfigured_balances_and_ownership.sql',
+      '0027_dashboard_lifetime_and_empty_state.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  
+  test('0027_dashboard_lifetime_and_empty_state.sql supports lifetime summary and nullable date range', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0027_dashboard_lifetime_and_empty_state.sql'), 'utf-8');
+    assert.ok(sql.includes('p_start_date DATE DEFAULT NULL'), 'Must define nullable p_start_date');
+    assert.ok(sql.includes('p_end_date DATE DEFAULT NULL'), 'Must define nullable p_end_date');
+    assert.ok(sql.includes('p_start_date IS NULL OR transaction_date >= p_start_date'), 'Must allow unbounded start date');
+    assert.ok(sql.includes('p_end_date IS NULL OR transaction_date <= p_end_date'), 'Must allow unbounded end date');
+    assert.ok(sql.includes('v_total_active_count'), 'Must track total active transactions across all time');
   });
 
   test('0026_harden_unconfigured_balances_and_ownership.sql enforces zero-baseline unconfigured balance model, movement updates, and user ownership immutability', () => {

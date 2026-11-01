@@ -458,17 +458,21 @@ export function TransactionLedger({
         </div>
       )}
 
-      {/* 2. Filter Bar & Action Triggers */}
-      <div className="space-y-3 pb-3 border-b border-[var(--border-hairline)]">
-        {/* Row A: Primary Filters */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Type Segmented Filter */}
-          <div className="flex p-0.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg text-xs font-medium shrink-0">
+      {/* 2. Redesigned Filter Bar & Action Triggers */}
+      <div className="space-y-3.5 pb-4 border-b border-[var(--border-hairline)]">
+        {/* Group A — Transaction Type Segmented Control (Own Row, Full Touch Targets) */}
+        <div className="w-full">
+          <div
+            role="group"
+            aria-label="Filter by transaction type"
+            className="flex w-full p-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl text-xs font-medium"
+          >
             {(['all', 'expense', 'income'] as const).map((t) => (
               <button
                 key={t}
+                type="button"
                 onClick={() => setSelectedType(t)}
-                className={`px-3 py-1 rounded-md capitalize transition-colors cursor-pointer ${
+                className={`flex-1 min-h-[38px] py-2 text-center rounded-lg capitalize transition-all cursor-pointer flex items-center justify-center ${
                   selectedType === t
                     ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs font-semibold'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -478,12 +482,15 @@ export function TransactionLedger({
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Category Dropdown */}
+        {/* Group B — Category Dropdown (Own Row, Full Width) */}
+        <div className="w-full">
           <select
+            aria-label="Filter by category"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
+            className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
           >
             <option value="all">All Categories</option>
             {categories
@@ -494,18 +501,17 @@ export function TransactionLedger({
                 </option>
               ))}
           </select>
+        </div>
 
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month" className="rounded border border-[var(--border-hairline)] px-2 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)]">‹</button>
-            <button type="button" onClick={() => moveMonth(1)} aria-label="Next month" className="rounded border border-[var(--border-hairline)] px-2 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)]">›</button>
-          </div>
-
-          {/* Necessity Dropdown */}
+        {/* Group C — Additional Filters (Mobile 2-Column Grid, Desktop 4-Column Grid) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 w-full">
+          {/* 1. Necessity */}
           <select
+            aria-label="Filter by necessity"
             value={selectedNecessity}
             onChange={(e) => setSelectedNecessity(e.target.value as NecessityClass | 'all')}
             disabled={selectedType === 'income'}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title={selectedType === 'income' ? 'Necessity applies to expenses only' : 'Filter by necessity tier'}
           >
             <option value="all">All Necessities</option>
@@ -514,39 +520,62 @@ export function TransactionLedger({
             <option value="luxury">Luxury</option>
           </select>
 
+          {/* 2. Payment Method */}
           <select
             aria-label="Filter by payment method"
             value={selectedPaymentMethod}
             onChange={(e) => setSelectedPaymentMethod(e.target.value as PaymentMethod | 'all')}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
+            className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
           >
             <option value="all">All Payment Methods</option>
             <option value="cash">Cash</option>
             <option value="online">Online</option>
           </select>
 
-          {/* Date Range Preset Dropdown */}
-          <select
-            value={selectedDatePreset}
-            onChange={(e) => {
-              setSelectedDatePreset(e.target.value as LedgerDatePreset);
-              setDateRangeOverride(null);
-            }}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
-            title="Filter by statement date period"
-          >
-            <option value="all">All Time</option>
-            {initialFilter && <option value="custom">Dashboard Range</option>}
-            <option value="this_month">This Month</option>
-            <option value="last_month">Last Month</option>
-            <option value="this_year">This Year</option>
-          </select>
+          {/* 3. Date Range + Prev/Next Month Steppers */}
+          <div className="flex items-center gap-1 w-full">
+            <select
+              aria-label="Filter by statement date period"
+              value={selectedDatePreset}
+              onChange={(e) => {
+                setSelectedDatePreset(e.target.value as LedgerDatePreset);
+                setDateRangeOverride(null);
+              }}
+              className="flex-1 min-w-0 h-10 px-2.5 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
+              title="Filter by statement date period"
+            >
+              <option value="all">All Time</option>
+              {initialFilter && <option value="custom">Dashboard Range</option>}
+              <option value="this_month">This Month</option>
+              <option value="last_month">Last Month</option>
+              <option value="this_year">This Year</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => moveMonth(-1)}
+              aria-label="Previous month"
+              className="h-10 w-8 flex items-center justify-center shrink-0 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+              title="Previous month"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={() => moveMonth(1)}
+              aria-label="Next month"
+              className="h-10 w-8 flex items-center justify-center shrink-0 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+              title="Next month"
+            >
+              ›
+            </button>
+          </div>
 
-          {/* Sort By Dropdown */}
+          {/* 4. Sort Order */}
           <select
+            aria-label="Sort transaction ordering"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as LedgerSortOption)}
-            className="text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 text-[var(--text-secondary)] focus:outline-hidden cursor-pointer"
+            className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
             title="Sort transaction ordering"
           >
             <option value="date_desc">Newest First</option>
@@ -555,11 +584,11 @@ export function TransactionLedger({
           </select>
         </div>
 
-        {/* Row B: Search Input & Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          {/* Real-time local search */}
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs text-[var(--text-muted)]">
+        {/* Group D — Search Input and Actions (Own Full-Width Rows, No Collision) */}
+        <div className="space-y-2.5 w-full">
+          {/* Full-width Search Input */}
+          <div className="relative w-full">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs text-[var(--text-muted)]">
               🔍
             </span>
             <input
@@ -567,24 +596,24 @@ export function TransactionLedger({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search description, category, notes, or amount..."
-              className="w-full pl-8 pr-7 py-1.5 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-hidden focus:border-[var(--focus-ring)] transition-colors"
+              className="w-full h-10 pl-9 pr-8 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-hidden focus:border-[var(--focus-ring)] transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 aria-label="Clear search"
-                className="absolute inset-y-0 right-0 pr-2 flex items-center text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
 
-          {/* Counter, Updating Status & Actions */}
-          <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-            {/* Status indicator */}
-            <div className="text-[11px] text-[var(--text-muted)] min-w-[70px]">
+          {/* Record Count, Live Status, and Clean Action Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-0.5">
+            {/* Record Counter & Reset */}
+            <div className="text-xs text-[var(--text-muted)] font-medium">
               {isRefreshing ? (
                 <span className="inline-flex items-center gap-1.5 text-[var(--text-primary)] font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
@@ -594,28 +623,39 @@ export function TransactionLedger({
                 <span>
                   {filteredTransactions.length}{' '}
                   {filteredTransactions.length === 1 ? 'record' : 'records'}
+                  {isAnyFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className="ml-2 text-[var(--action-primary-bg)] hover:underline cursor-pointer"
+                    >
+                      Reset filters
+                    </button>
+                  )}
                 </span>
               )}
             </div>
 
-            {/* Download PDF Trigger Button - Opens Export Dialog */}
-            <button
-              type="button"
-              onClick={() => setIsExportDialogOpen(true)}
-              title="Configure and download transaction statement PDF"
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs"
-            >
-              <span className="text-xs" aria-hidden="true">📄</span>
-              <span className="hidden sm:inline">Download</span> PDF
-            </button>
+            {/* Action Buttons: PDF Export & Record Entry */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsExportDialogOpen(true)}
+                title="Configure and download transaction statement PDF"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs"
+              >
+                <span className="text-xs" aria-hidden="true">📄</span>
+                <span>Download PDF</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={onOpenQuickAdd}
-              className="inline-flex items-center justify-center gap-1 px-3.5 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
-            >
-              <span>+ Record Entry</span>
-            </button>
+              <button
+                type="button"
+                onClick={onOpenQuickAdd}
+                className="inline-flex items-center justify-center gap-1 min-h-[38px] px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
+              >
+                <span>+ Record Entry</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

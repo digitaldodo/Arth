@@ -1,6 +1,7 @@
 import type { TransactionDTO, NecessityClass } from './transactions.js';
 
 export type DashboardDateRangePreset =
+  | 'lifetime'
   | 'today'
   | 'this_week'
   | 'this_month'
@@ -27,8 +28,8 @@ export interface NecessitySpendingDTO {
 }
 
 export interface DashboardSummaryResponse {
-  start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
+  start_date: string | null; // YYYY-MM-DD or null for lifetime
+  end_date: string | null; // YYYY-MM-DD or null for lifetime
   income_paise: number;
   expenses_paise: number;
   net_cash_flow_paise: number;
@@ -43,18 +44,23 @@ export interface DashboardSummaryResponse {
 }
 
 export interface DashboardSummaryQuery {
-  start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
+  start_date?: string; // YYYY-MM-DD (omitted for lifetime)
+  end_date?: string; // YYYY-MM-DD (omitted for lifetime)
 }
 
 /**
  * Resolves a date range preset into inclusive start_date and end_date (YYYY-MM-DD)
  * strictly evaluated in Asia/Kolkata (IST) timezone.
+ * Returns undefined start_date and end_date for 'lifetime'.
  */
 export function resolveDateRangePreset(
   preset: DashboardDateRangePreset,
   referenceDate?: Date
-): { start_date: string; end_date: string } {
+): { start_date?: string; end_date?: string } {
+  if (preset === 'lifetime') {
+    return { start_date: undefined, end_date: undefined };
+  }
+
   const ref = referenceDate || new Date();
 
   // Format parts in Asia/Kolkata

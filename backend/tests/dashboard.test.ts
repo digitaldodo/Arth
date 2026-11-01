@@ -68,15 +68,18 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
     assert.equal(res.statusCode, 401);
   });
 
-  // 2. Invalid date formats and reversed ranges are rejected with 400
-  test('rejects missing, invalid, or reversed date ranges with 400', async () => {
-    // Missing dates
-    const resMissing = await app.inject({
+  // 2. Lifetime queries succeed without start_date / end_date while invalid ranges return 400
+  test('allows omitted start_date and end_date for lifetime query and rejects invalid ranges with 400', async () => {
+    // Lifetime query (omitted dates) returns 200
+    const resLifetime = await app.inject({
       method: 'GET',
       url: '/api/v1/dashboard/summary',
       headers: { authorization: 'Bearer user-a-token' },
     });
-    assert.equal(resMissing.statusCode, 400);
+    assert.equal(resLifetime.statusCode, 200);
+    const lifetimeBody = resLifetime.json();
+    assert.equal(lifetimeBody.start_date, null);
+    assert.equal(lifetimeBody.end_date, null);
 
     // Invalid calendar date (e.g. Feb 31)
     const resInvalid = await app.inject({

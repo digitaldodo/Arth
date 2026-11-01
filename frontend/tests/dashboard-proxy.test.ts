@@ -75,6 +75,12 @@ describe('Frontend Dashboard BFF Proxy & Date Range Utilities', () => {
     assert.equal(range.end_date, '2026-12-31');
   });
 
+  test('resolveDateRangePreset resolves "lifetime" to undefined bounds', () => {
+    const range = resolveDateRangePreset('lifetime');
+    assert.equal(range.start_date, undefined);
+    assert.equal(range.end_date, undefined);
+  });
+
   // 4. Monetary formatting with negative net cash flow
   test('formats negative net cash flow and large amounts with exact Indian numbering system', () => {
     // Negative net cash flow: -₹5,400.00

@@ -64,8 +64,8 @@ export class SupabaseDashboardService implements IDashboardService {
 
     // Call authoritative PostgreSQL database function fn_dashboard_summary
     const { data: rpcData, error: rpcErr } = await client.rpc('fn_dashboard_summary', {
-      p_start_date: query.start_date,
-      p_end_date: query.end_date,
+      p_start_date: query.start_date ?? null,
+      p_end_date: query.end_date ?? null,
     });
 
     if (rpcErr || !rpcData) {
@@ -147,14 +147,21 @@ export class SupabaseDashboardService implements IDashboardService {
     // Fallback & Authoritative Reconciliation:
     // If the database RPC function did not return spending_by_necessity, or returned 0s while expenses exist
     if (expensesPaise > 0 && totalNecessityPaise === 0) {
-      const { data: necRows, error: necErr } = await client
+      let necQuery = client
         .from('transactions')
         .select('amount_paise, necessity')
         .eq('user_id', userId)
         .is('deleted_at', null)
-        .eq('type', 'expense')
-        .gte('transaction_date', query.start_date)
-        .lte('transaction_date', query.end_date);
+        .eq('type', 'expense');
+
+      if (query.start_date) {
+        necQuery = necQuery.gte('transaction_date', query.start_date);
+      }
+      if (query.end_date) {
+        necQuery = necQuery.lte('transaction_date', query.end_date);
+      }
+
+      const { data: necRows, error: necErr } = await necQuery;
 
       if (!necErr && Array.isArray(necRows)) {
         let essentialPaise = 0;
@@ -218,8 +225,8 @@ export class SupabaseDashboardService implements IDashboardService {
     }
 
     return {
-      start_date: query.start_date,
-      end_date: query.end_date,
+      start_date: query.start_date ?? null,
+      end_date: query.end_date ?? null,
       income_paise: incomePaise,
       expenses_paise: expensesPaise,
       net_cash_flow_paise: netCashFlowPaise,
@@ -253,13 +260,13 @@ export class InMemoryDashboardService implements IDashboardService {
     const allCategories: StoredCategoryRecord[] =
       this.categoryService?.categories || [];
 
-    // Filter strictly to caller's non-deleted transactions within the inclusive date range
+    // Filter strictly to caller's non-deleted transactions within the inclusive date range (or all if unbounded)
     const userTxns = allTransactions.filter(
       (t) =>
         t.user_id === userId &&
         t.deleted_at === null &&
-        t.transaction_date >= query.start_date &&
-        t.transaction_date <= query.end_date
+        (!query.start_date || t.transaction_date >= query.start_date) &&
+        (!query.end_date || t.transaction_date <= query.end_date)
     );
 
     const totalActiveCount = allTransactions.filter(
@@ -318,6 +325,7 @@ export class InMemoryDashboardService implements IDashboardService {
           totalExpenses > 0
             ? Math.round((catPaise / totalExpenses) * 1000) / 10
             : 0;
+
         return {
           category_id: catId,
           category_name: val.name,
@@ -397,8 +405,8 @@ export class InMemoryDashboardService implements IDashboardService {
     ];
 
     return {
-      start_date: query.start_date,
-      end_date: query.end_date,
+      start_date: query.start_date ?? null,
+      end_date: query.end_date ?? null,
       income_paise: totalIncome,
       expenses_paise: totalExpenses,
       net_cash_flow_paise: netCashFlow,

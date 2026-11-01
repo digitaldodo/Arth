@@ -6,8 +6,8 @@ export class ValidationError extends Error {
 }
 
 export interface ValidatedDashboardSummaryQuery {
-  start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
+  start_date?: string; // YYYY-MM-DD (omitted for lifetime)
+  end_date?: string; // YYYY-MM-DD (omitted for lifetime)
 }
 
 /**
@@ -38,31 +38,37 @@ export function validateDashboardSummaryQuery(
   rawQuery: unknown
 ): ValidatedDashboardSummaryQuery {
   if (!rawQuery || typeof rawQuery !== 'object') {
-    throw new ValidationError('Query parameters must be provided');
+    return {};
   }
 
   const query = rawQuery as Record<string, unknown>;
 
-  if (!query.start_date || typeof query.start_date !== 'string') {
-    throw new ValidationError('start_date is required and must be a YYYY-MM-DD string');
+  let startDate: string | undefined;
+  let endDate: string | undefined;
+
+  if (query.start_date !== undefined && query.start_date !== null && query.start_date !== '') {
+    if (typeof query.start_date !== 'string') {
+      throw new ValidationError('start_date must be a YYYY-MM-DD string');
+    }
+    const trimmed = query.start_date.trim();
+    if (!isValidDateString(trimmed)) {
+      throw new ValidationError(`Invalid start_date format: "${trimmed}". Must be a valid YYYY-MM-DD calendar date.`);
+    }
+    startDate = trimmed;
   }
 
-  if (!query.end_date || typeof query.end_date !== 'string') {
-    throw new ValidationError('end_date is required and must be a YYYY-MM-DD string');
+  if (query.end_date !== undefined && query.end_date !== null && query.end_date !== '') {
+    if (typeof query.end_date !== 'string') {
+      throw new ValidationError('end_date must be a YYYY-MM-DD string');
+    }
+    const trimmed = query.end_date.trim();
+    if (!isValidDateString(trimmed)) {
+      throw new ValidationError(`Invalid end_date format: "${trimmed}". Must be a valid YYYY-MM-DD calendar date.`);
+    }
+    endDate = trimmed;
   }
 
-  const startDate = query.start_date.trim();
-  const endDate = query.end_date.trim();
-
-  if (!isValidDateString(startDate)) {
-    throw new ValidationError(`Invalid start_date format: "${startDate}". Must be a valid YYYY-MM-DD calendar date.`);
-  }
-
-  if (!isValidDateString(endDate)) {
-    throw new ValidationError(`Invalid end_date format: "${endDate}". Must be a valid YYYY-MM-DD calendar date.`);
-  }
-
-  if (startDate > endDate) {
+  if (startDate && endDate && startDate > endDate) {
     throw new ValidationError(`start_date (${startDate}) cannot be after end_date (${endDate})`);
   }
 

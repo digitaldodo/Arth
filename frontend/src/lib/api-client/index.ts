@@ -562,14 +562,15 @@ export async function recordSettlement(
  * Fetches the aggregated dashboard financial summary for the specified date range.
  */
 export async function fetchDashboardSummary(
-  query: DashboardSummaryQuery
+  query?: DashboardSummaryQuery
 ): Promise<DashboardSummaryResponse> {
-  const params = new URLSearchParams({
-    start_date: query.start_date,
-    end_date: query.end_date,
-  });
+  const params = new URLSearchParams();
+  if (query?.start_date) params.set('start_date', query.start_date);
+  if (query?.end_date) params.set('end_date', query.end_date);
+  const queryString = params.toString();
+  const url = queryString ? `/api/backend/dashboard?${queryString}` : '/api/backend/dashboard';
 
-  const response = await fetch(`/api/backend/dashboard?${params.toString()}`, {
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json',

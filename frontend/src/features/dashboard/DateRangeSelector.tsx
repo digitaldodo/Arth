@@ -3,19 +3,21 @@
 import React, { useState } from 'react';
 import {
   type DashboardDateRangePreset,
+  resolveDateRangePreset,
 } from '@arth/contracts';
 import { formatDateHuman } from '@/lib/format';
 import { isValidDateRange } from '@/features/transactions/date-range-utils';
 
 interface DateRangeSelectorProps {
   currentPreset: DashboardDateRangePreset;
-  startDate: string;
-  endDate: string;
+  startDate?: string | null;
+  endDate?: string | null;
   onSelectPreset: (preset: DashboardDateRangePreset) => void;
   onApplyCustomRange: (startDate: string, endDate: string) => void;
 }
 
 const PRESETS: Array<{ id: DashboardDateRangePreset; label: string }> = [
+  { id: 'lifetime', label: 'Lifetime' },
   { id: 'this_month', label: 'This Month' },
   { id: 'last_month', label: 'Last Month' },
   { id: 'this_year', label: 'This Year' },
@@ -30,8 +32,8 @@ export function DateRangeSelector({
   onApplyCustomRange,
 }: DateRangeSelectorProps) {
   const [isCustomOpen, setIsCustomOpen] = useState(false);
-  const [customStart, setCustomStart] = useState(startDate);
-  const [customEnd, setCustomEnd] = useState(endDate);
+  const [customStart, setCustomStart] = useState(startDate || '');
+  const [customEnd, setCustomEnd] = useState(endDate || '');
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Active state is reactively derived: 'custom' while dialog is open or if applied; otherwise currentPreset
@@ -40,8 +42,11 @@ export function DateRangeSelector({
   const handlePresetClick = (presetId: DashboardDateRangePreset) => {
     if (presetId === 'custom') {
       setIsCustomOpen(true);
-      setCustomStart(startDate);
-      setCustomEnd(endDate);
+      const fallbackRange = (!startDate || !endDate)
+        ? resolveDateRangePreset('this_month')
+        : { start_date: startDate, end_date: endDate };
+      setCustomStart(fallbackRange.start_date || '');
+      setCustomEnd(fallbackRange.end_date || '');
       setValidationError(null);
     } else {
       setIsCustomOpen(false);
@@ -52,8 +57,8 @@ export function DateRangeSelector({
 
   const handleCancelCustom = () => {
     setIsCustomOpen(false);
-    setCustomStart(startDate);
-    setCustomEnd(endDate);
+    setCustomStart(startDate || '');
+    setCustomEnd(endDate || '');
     setValidationError(null);
   };
 
@@ -104,7 +109,9 @@ export function DateRangeSelector({
         <div className="flex items-center gap-1.5 font-mono">
           <span>📅</span>
           <span>
-            {formatDateHuman(startDate)} – {formatDateHuman(endDate)}
+            {effectiveActivePreset === 'lifetime' || (!startDate && !endDate)
+              ? 'All Time'
+              : `${formatDateHuman(startDate || '')} – ${formatDateHuman(endDate || '')}`}
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 # Arth Production Deployment & Verification Guide
 
-This document provides exact, step-by-step instructions for completing the deployment of Arth's PWA session persistence, balance snapshot accounting, and database-level non-negative balance invariants.
+This document provides exact, step-by-step instructions for completing the deployment of Arth's PWA session persistence, balance snapshot accounting, database-level non-negative balance invariants, and dashboard lifetime analytics.
 
 ---
 
@@ -10,7 +10,7 @@ This document provides exact, step-by-step instructions for completing the deplo
 |---|---|---|
 | **Codebase & Contracts** | ✅ Completed & Committed | Automated via GitHub `main` push. |
 | **Vercel Web App** | 🔄 Automated CI/CD | Auto-deployed on GitHub push to `main`. |
-| **Supabase PostgreSQL** | ⚠️ **Manual Action** | Execute migrations `0025` and `0026` via Supabase SQL Editor. |
+| **Supabase PostgreSQL** | ⚠️ **Manual Action** | Execute migrations `0025`, `0026`, and `0027` via Supabase SQL Editor. |
 | **Installed Android PWA** | 📱 Automatic Update | Update activates upon opening the app. |
 
 ---
@@ -21,6 +21,7 @@ This document provides exact, step-by-step instructions for completing the deplo
 - **Target Files**:
   1. [`supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql`](./supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql)
   2. [`supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql`](./supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql)
+  3. [`supabase/migrations/0027_dashboard_lifetime_and_empty_state.sql`](./supabase/migrations/0027_dashboard_lifetime_and_empty_state.sql)
 - **Nature of Migrations**: Forward-only, append-only, and **100% idempotent**.
 - **Data Safety**: Non-destructive. Backfills `recorded_at` from `created_at` for existing rows. Preserves all existing financial transactions, categories, and user profiles.
 
@@ -30,8 +31,9 @@ This document provides exact, step-by-step instructions for completing the deplo
 2. In the left navigation menu, click the **SQL Editor** tab (`>_` icon).
 3. Click **+ New Query** in the top bar.
 4. Copy the complete text of `supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql` (if not previously applied) and run it.
-5. Next, copy the complete text of `supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql` into the SQL editor and click the green **Run** button (or press `Ctrl` + `Enter` / `Cmd` + `Enter`).
-6. Confirm that the execution status outputs: `Success. No rows returned`.
+5. Next, copy the complete text of `supabase/migrations/0026_harden_unconfigured_balances_and_ownership.sql` (if not previously applied) and run it.
+6. Next, copy the complete text of `supabase/migrations/0027_dashboard_lifetime_and_empty_state.sql` into the SQL editor and click the green **Run** button (or press `Ctrl` + `Enter` / `Cmd` + `Enter`).
+7. Confirm that the execution status outputs: `Success. No rows returned`.
 
 > [!TIP]
 > If you manage migrations using the Supabase CLI (`supabase db push`), you can alternatively run:
@@ -98,7 +100,7 @@ FROM public.transactions;
 ### 2.3 Verify RPC Signatures & Grants
 
 ```sql
--- Check fn_account_balances signature and execution grants
+-- Check fn_account_balances and fn_dashboard_summary signature and execution grants
 SELECT
   p.proname,
   pg_get_function_identity_arguments(p.oid) AS arguments,
@@ -106,11 +108,12 @@ SELECT
   has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_can_execute,
   has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_can_execute
 FROM pg_proc p
-WHERE p.proname IN ('fn_account_balances', 'fn_configure_starting_balances');
+WHERE p.proname IN ('fn_account_balances', 'fn_configure_starting_balances', 'fn_dashboard_summary');
 ```
 **Expected Result**:
 - `fn_account_balances`: arguments = `""` (0 params), `anon_can_execute` = `false`, `authenticated_can_execute` = `true`.
 - `fn_configure_starting_balances`: arguments = `p_starting_cash_paise bigint, p_starting_online_paise bigint`, `anon_can_execute` = `false`, `authenticated_can_execute` = `true`.
+- `fn_dashboard_summary`: arguments = `p_start_date date DEFAULT NULL::date, p_end_date date DEFAULT NULL::date`, `anon_can_execute` = `false`, `authenticated_can_execute` = `true`.
 
 ---
 
@@ -202,13 +205,18 @@ Once the Supabase migration and Vercel deployment are complete, perform this 5-m
 - [ ] **3. Starting-Balance Snapshot Invariant**:
   - Check your Account Balances.
   - Confirm that transactions recorded prior to your `balances_configured_at` baseline date (e.g., 23–30 October) remain visible in the ledger and reports, but are **not** deducted from your configured starting balance snapshot.
-- [ ] **4. Post-Baseline Expense**:
-  - Record a test expense for ₹10.
-  - Verify that the relevant account (Cash or Online) is deducted by ₹10.
-- [ ] **5. Non-Negative Balance Enforcement**:
+- [ ] **4. Dashboard Lifetime View**:
+  - Open Dashboard. Confirm that **Lifetime** is selected by default with label **"All Time"**.
+  - Verify all historical transactions appear in the summary, composition, and recent activity (reconciling with the Ledger's count).
+  - Switch between Lifetime, This Month, Last Month, and This Year: confirm the Account Balances at the top stay constant and live.
+- [ ] **5. Empty Period Handling (Case B)**:
+  - If selecting a month with 0 transactions, confirm the dashboard displays the contextual period notice ("No transactions this month" with actions: "View Lifetime Activity", "Change Date Range", "+ Add Transaction"), **never** the first-time onboarding screen.
+- [ ] **6. Ledger Filters UX**:
+  - Open Ledger on mobile: confirm Transaction Type (All / Expense / Income) sits on its own row, Category is full width, Additional Filters form a responsive 2-column grid with consistent tap targets, and Search and Action buttons are cleanly separated.
+- [ ] **7. Non-Negative Balance Enforcement**:
   - Attempt to record an expense for an amount greater than your available balance (e.g., ₹999,999).
   - Confirm the application immediately blocks the submission with an alert: `Insufficient cash/online balance.`
-- [ ] **6. Offline Creation & Sync**:
+- [ ] **8. Offline Creation & Sync**:
   - Turn on **Airplane Mode** on your device.
   - Record a small expense (e.g., ₹20). Confirm it saves locally and shows `Saved locally (pending sync)`.
   - Turn off **Airplane Mode**. Confirm the sync engine reconciles the mutation with Supabase and marks it Synced.

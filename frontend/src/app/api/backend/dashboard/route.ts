@@ -35,19 +35,10 @@ export async function GET(req: NextRequest) {
     }
 
     const queryString = permittedParams.toString();
-    if (!permittedParams.has('start_date') || !permittedParams.has('end_date')) {
-      return NextResponse.json(
-        {
-          statusCode: 400,
-          error: 'Bad Request',
-          message: 'start_date and end_date query parameters are required',
-        },
-        { status: 400 }
-      );
-    }
-
     const backendBaseUrl = getBackendBaseUrl();
-    const targetUrl = `${backendBaseUrl}/api/v1/dashboard/summary?${queryString}`;
+    const targetUrl = queryString
+      ? `${backendBaseUrl}/api/v1/dashboard/summary?${queryString}`
+      : `${backendBaseUrl}/api/v1/dashboard/summary`;
 
     const backendRes = await fetch(targetUrl, {
       method: 'GET',
@@ -74,14 +65,21 @@ export async function GET(req: NextRequest) {
       if (currentNecessityTotal === 0 && userId) {
         try {
           const supabase = await createClient();
-          const { data: txRows } = await supabase
+          let txQuery = supabase
             .from('transactions')
             .select('amount_paise, necessity')
             .eq('user_id', userId)
             .is('deleted_at', null)
-            .eq('type', 'expense')
-            .gte('transaction_date', permittedParams.get('start_date'))
-            .lte('transaction_date', permittedParams.get('end_date'));
+            .eq('type', 'expense');
+
+          if (permittedParams.has('start_date')) {
+            txQuery = txQuery.gte('transaction_date', permittedParams.get('start_date'));
+          }
+          if (permittedParams.has('end_date')) {
+            txQuery = txQuery.lte('transaction_date', permittedParams.get('end_date'));
+          }
+
+          const { data: txRows } = await txQuery;
 
           if (Array.isArray(txRows) && txRows.length > 0) {
             let essentialPaise = 0;

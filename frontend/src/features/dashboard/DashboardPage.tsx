@@ -56,9 +56,9 @@ export function DashboardPage({
   onBalancesLoaded,
 }: DashboardPageProps) {
   const isPwa = useStandalonePwa();
-  const [preset, setPreset] = useState<DashboardDateRangePreset>('this_month');
-  const [dateRange, setDateRange] = useState(() =>
-    resolveDateRangePreset('this_month')
+  const [preset, setPreset] = useState<DashboardDateRangePreset>('lifetime');
+  const [dateRange, setDateRange] = useState<{ start_date?: string; end_date?: string }>(() =>
+    resolveDateRangePreset('lifetime')
   );
 
   const [balances, setBalances] = useState<AccountBalancesDTO | null>(initialBalances);
@@ -72,7 +72,6 @@ export function DashboardPage({
   const [error, setError] = useState<DashboardError | null>(null);
   const [expandedList, setExpandedList] = useState<'categories' | 'transactions' | null>(null);
   const [offlineCopyUnavailable, setOfflineCopyUnavailable] = useState(false);
-
 
   // Use the same user-scoped local records as the ledger. The sync engine refreshes in the background.
   useEffect(() => {
@@ -150,42 +149,98 @@ export function DashboardPage({
         isMounted = false;
       };
     }
-    Promise.all([getCachedTransactions(userId), getCachedCategories(userId), initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId), getSyncMeta(userId)])
+
+    Promise.all([
+      getCachedTransactions(userId),
+      getCachedCategories(userId),
+      initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId),
+      getSyncMeta(userId),
+    ])
       .then(([transactions, categories, cachedBalances, syncMeta]) => {
         if (!isMounted) return;
         if (!transactions.length && !syncMeta.transactionsSnapshotComplete) {
           setSummary(null);
           setOfflineCopyUnavailable(typeof navigator !== 'undefined' && !navigator.onLine);
-          setLoading(false); setBalancesLoading(false); onInitialReady?.();
+          setLoading(false);
+          setBalancesLoading(false);
+          onInitialReady?.();
           return;
         }
         setOfflineCopyUnavailable(false);
-        const inRange = transactions.filter((t) => t.transaction_date >= dateRange.start_date && t.transaction_date <= dateRange.end_date);
+
+        // Date filtering: when start_date and end_date are undefined (Lifetime), include all transactions
+        const inRange = (!dateRange.start_date && !dateRange.end_date)
+          ? transactions
+          : transactions.filter((t) => (
+              (!dateRange.start_date || t.transaction_date >= dateRange.start_date) &&
+              (!dateRange.end_date || t.transaction_date <= dateRange.end_date)
+            ));
+
         const expenses = inRange.filter((t) => t.type === 'expense');
         const incomes = inRange.filter((t) => t.type === 'income');
         const expenseTotal = expenses.reduce((sum, t) => sum + t.amount_paise, 0);
         const incomeTotal = incomes.reduce((sum, t) => sum + t.amount_paise, 0);
         const composition = new Map<string, number>();
         const necessity = new Map<string, number>();
+
         for (const t of expenses) {
           composition.set(t.category_id, (composition.get(t.category_id) || 0) + t.amount_paise);
           if (t.necessity) necessity.set(t.necessity, (necessity.get(t.necessity) || 0) + t.amount_paise);
         }
+
         setSummary({
-          start_date: dateRange.start_date, end_date: dateRange.end_date,
-          income_paise: incomeTotal, expenses_paise: expenseTotal, net_cash_flow_paise: incomeTotal - expenseTotal,
-          formatted_income: formatPaiseToINR(incomeTotal), formatted_expenses: formatPaiseToINR(expenseTotal), formatted_net_cash_flow: formatPaiseToINR(incomeTotal - expenseTotal),
+          start_date: dateRange.start_date ?? null,
+          end_date: dateRange.end_date ?? null,
+          income_paise: incomeTotal,
+          expenses_paise: expenseTotal,
+          net_cash_flow_paise: incomeTotal - expenseTotal,
+          formatted_income: formatPaiseToINR(incomeTotal),
+          formatted_expenses: formatPaiseToINR(expenseTotal),
+          formatted_net_cash_flow: formatPaiseToINR(incomeTotal - expenseTotal),
           spending_composition: [...composition].map(([id, amount]) => {
             const category = categories.find((item) => item.id === id);
-            return { category_id: id, category_name: category?.name || expenses.find((t) => t.category_id === id)?.category_name || 'Uncategorized', category_color: category?.color || null, category_icon: category?.icon || null, amount_paise: amount, formatted_inr: formatPaiseToINR(amount), share_percentage: expenseTotal ? Math.round(amount / expenseTotal * 1000) / 10 : 0 };
+            return {
+              category_id: id,
+              category_name: category?.name || expenses.find((t) => t.category_id === id)?.category_name || 'Uncategorized',
+              category_color: category?.color || null,
+              category_icon: category?.icon || null,
+              amount_paise: amount,
+              formatted_inr: formatPaiseToINR(amount),
+              share_percentage: expenseTotal ? Math.round((amount / expenseTotal) * 1000) / 10 : 0,
+            };
           }).sort((a, b) => b.amount_paise - a.amount_paise),
-          spending_by_necessity: (['essential', 'optional', 'luxury'] as const).map((tier) => { const amount = necessity.get(tier) || 0; return { necessity: tier, label: tier[0].toUpperCase() + tier.slice(1), amount_paise: amount, formatted_inr: formatPaiseToINR(amount), share_percentage: expenseTotal ? Math.round(amount / expenseTotal * 1000) / 10 : 0 }; }),
-          recent_transactions: getLatestRecentTransactions(inRange, 10), has_activity_in_range: inRange.length > 0, total_active_transaction_count: inRange.length,
+          spending_by_necessity: (['essential', 'optional', 'luxury'] as const).map((tier) => {
+            const amount = necessity.get(tier) || 0;
+            return {
+              necessity: tier,
+              label: tier[0].toUpperCase() + tier.slice(1),
+              amount_paise: amount,
+              formatted_inr: formatPaiseToINR(amount),
+              share_percentage: expenseTotal ? Math.round((amount / expenseTotal) * 1000) / 10 : 0,
+            };
+          }),
+          recent_transactions: getLatestRecentTransactions(inRange, 10),
+          has_activity_in_range: inRange.length > 0,
+          // Total active count is strictly all cached active transactions across the account's lifetime
+          total_active_transaction_count: transactions.length,
         });
-        setLoading(false); setIsRefreshing(false); setError(null);
-        if (cachedBalances) { setBalances(cachedBalances); onBalancesLoaded?.(cachedBalances); }
-        setBalancesLoading(false); onInitialReady?.();
-      }).catch(() => { if (isMounted) { setLoading(false); setBalancesLoading(false); } });
+
+        setLoading(false);
+        setIsRefreshing(false);
+        setError(null);
+        if (cachedBalances) {
+          setBalances(cachedBalances);
+          onBalancesLoaded?.(cachedBalances);
+        }
+        setBalancesLoading(false);
+        onInitialReady?.();
+      })
+      .catch(() => {
+        if (isMounted) {
+          setLoading(false);
+          setBalancesLoading(false);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -263,7 +318,7 @@ export function DashboardPage({
         </button>
       </div>
 
-      {/* Account Balances Card (Live Available, Cash, and Online Balances) */}
+      {/* Account Balances Card (Live Available, Cash, and Online Balances - Independent of analytics filter) */}
       <BalanceCard
         userId={userId}
         balances={balances}
@@ -357,19 +412,20 @@ export function DashboardPage({
       {/* Loading Skeleton (Only shown when no cached or existing summary data is available) */}
       {loading && !summary && <DashboardSkeleton />}
 
-      {/* Populated Content with smooth transition */}
+      {/* Offline copy status */}
       {offlineCopyUnavailable && !summary && (
         <div role="status" className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 text-sm text-[var(--text-secondary)]">
           No offline copy of this account’s dashboard has been downloaded on this device yet. Reconnect to synchronize your data.
         </div>
       )}
+
       {summary && (
         <div
           className={`space-y-6 transition-opacity duration-150 ${
             isRefreshing ? 'opacity-75' : 'opacity-100'
           }`}
         >
-          {/* Entire Ledger Empty State (First-time user onboarding banner) */}
+          {/* Case A: Brand New Account (0 lifetime transactions across entire account) */}
           {summary.total_active_transaction_count === 0 && (
             <div className="p-6 sm:p-8 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -407,6 +463,50 @@ export function DashboardPage({
             </div>
           )}
 
+          {/* Case B: Existing Account with 0 transactions in the selected period */}
+          {summary.total_active_transaction_count > 0 && !summary.has_activity_in_range && (
+            <div className="p-6 sm:p-8 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono uppercase tracking-wider font-semibold px-2 py-0.5 rounded-sm bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                      Period Overview
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                    {preset === 'this_month' ? 'No transactions this month' : 'No transactions in this period'}
+                  </h2>
+                  <p className="text-sm sm:text-base text-[var(--text-secondary)] max-w-2xl leading-relaxed">
+                    You recorded transactions previously, but none fall within the selected period. Choose another date range or record a new transaction.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPreset('lifetime')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer"
+                  >
+                    View Lifetime Activity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPreset('this_year')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                  >
+                    Change Date Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenQuickAdd}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                  >
+                    + Add Transaction
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Financial Summary Cards */}
           <SummaryCards
             incomePaise={summary.income_paise}
@@ -417,18 +517,6 @@ export function DashboardPage({
             formattedNetCashFlow={summary.formatted_net_cash_flow}
           />
 
-          {/* Empty Range Notice if user has transactions elsewhere in their ledger, but none in this period */}
-          {summary.total_active_transaction_count > 0 && !summary.has_activity_in_range && (
-            <div className="p-5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-xl text-center space-y-1.5">
-              <p className="text-sm font-medium text-[var(--text-secondary)]">
-                No transactions recorded during this period
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">
-                Switch to a different date range or select &quot;This Year&quot; to view activity from other periods.
-              </p>
-            </div>
-          )}
-
           {/* Spending Composition, Spending by Necessity, and Recent Activity */}
           <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div className="w-full min-w-0">
@@ -438,8 +526,8 @@ export function DashboardPage({
                 expanded={expandedList === 'categories'}
                 onSelectCategory={(category) => onOpenFilteredLedger({
                   categoryId: category.category_id,
-                  startDate: dateRange.start_date,
-                  endDate: dateRange.end_date,
+                  startDate: dateRange.start_date || '',
+                  endDate: dateRange.end_date || '',
                   label: category.category_name,
                   amountPaise: category.amount_paise,
                 })}
@@ -453,8 +541,8 @@ export function DashboardPage({
                 totalExpensesPaise={summary.expenses_paise}
                 onSelectNecessity={(necessity, label, amountPaise) => onOpenFilteredLedger({
                   necessity,
-                  startDate: dateRange.start_date,
-                  endDate: dateRange.end_date,
+                  startDate: dateRange.start_date || '',
+                  endDate: dateRange.end_date || '',
                   label,
                   amountPaise,
                 })}
@@ -490,11 +578,22 @@ export function DashboardPage({
                     <button
                       key={category.category_id}
                       type="button"
-                      onClick={() => onOpenFilteredLedger({ categoryId: category.category_id, startDate: dateRange.start_date, endDate: dateRange.end_date, label: category.category_name, amountPaise: category.amount_paise })}
+                      onClick={() => onOpenFilteredLedger({
+                        categoryId: category.category_id,
+                        startDate: dateRange.start_date || '',
+                        endDate: dateRange.end_date || '',
+                        label: category.category_name,
+                        amountPaise: category.amount_paise,
+                      })}
                       className="flex w-full min-h-11 items-center justify-between gap-3 py-2.5 text-left text-xs hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)]"
                     >
-                      <span className="truncate font-medium text-[var(--text-primary)]">{category.category_icon ? `${category.category_icon} ` : ''}{category.category_name} <span className="font-mono text-[var(--text-muted)]">{category.share_percentage}%</span></span>
-                      <span className="shrink-0 font-mono font-semibold text-[var(--text-primary)]">{category.formatted_inr}</span>
+                      <span className="truncate font-medium text-[var(--text-primary)]">
+                        {category.category_icon ? `${category.category_icon} ` : ''}
+                        {category.category_name} <span className="font-mono text-[var(--text-muted)]">{category.share_percentage}%</span>
+                      </span>
+                      <span className="shrink-0 font-mono font-semibold text-[var(--text-primary)]">
+                        {category.formatted_inr}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -503,10 +602,16 @@ export function DashboardPage({
                   {getLatestRecentTransactions(summary.recent_transactions, summary.recent_transactions.length).slice(3).map((transaction) => (
                     <div key={transaction.id} className="flex min-w-0 items-center justify-between gap-3 py-3 text-xs">
                       <div className="min-w-0">
-                        <p className="break-words font-medium text-[var(--text-primary)]">{transaction.description || transaction.category_name || 'Uncategorized'}</p>
-                        <p className="mt-1 text-[10px] text-[var(--text-muted)]">{formatDateHuman(transaction.transaction_date)} · {transaction.category_name || 'Uncategorized'} · {transaction.payment_method}</p>
+                        <p className="break-words font-medium text-[var(--text-primary)]">
+                          {transaction.description || transaction.category_name || 'Uncategorized'}
+                        </p>
+                        <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          {formatDateHuman(transaction.transaction_date)} · {transaction.category_name || 'Uncategorized'} · {transaction.payment_method}
+                        </p>
                       </div>
-                      <span className={`shrink-0 whitespace-nowrap font-mono font-semibold ${transaction.type === 'expense' ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{transaction.type === 'expense' ? '−' : '+'}{transaction.formatted_inr}</span>
+                      <span className={`shrink-0 whitespace-nowrap font-mono font-semibold ${transaction.type === 'expense' ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                        {transaction.type === 'expense' ? '−' : '+'}{transaction.formatted_inr}
+                      </span>
                     </div>
                   ))}
                 </div>
