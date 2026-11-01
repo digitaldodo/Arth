@@ -946,6 +946,17 @@ export class InMemoryTransactionService implements ITransactionService {
       throw new NotFoundError('Transaction not found');
     }
 
+    if (existing.type === 'expense' && this.balanceService) {
+      const currentBalances = await this.balanceService.getBalances(userId);
+      const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
+      if (isExistingPostBaseline) {
+        const avail = existing.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+        if (avail - existing.amount_paise < 0) {
+          throw new ValidationError(`Cannot restore expense: insufficient ${existing.payment_method} balance.`);
+        }
+      }
+    }
+
     const now = new Date().toISOString();
     existing.deleted_at = null;
     existing.updated_at = now;

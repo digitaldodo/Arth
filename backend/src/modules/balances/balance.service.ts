@@ -435,9 +435,6 @@ export class InMemoryBalanceService implements IBalanceService {
       (transferOnlineIn - transferOnlineOut) +
       onlineAdjustments;
 
-    if (currentCash < 0n) currentCash = 0n;
-    if (currentOnline < 0n) currentOnline = 0n;
-
     const startingCashNum = Number(starting.starting_cash_paise);
     const startingOnlineNum = Number(starting.starting_online_paise);
     const startingTotalNum = startingCashNum + startingOnlineNum;

@@ -28,7 +28,7 @@ import {
   type AccountBalancesDTO,
   type NecessityClass,
 } from '@arth/contracts';
-import { clearCachedPwaUserContext, getCachedBalances, getSyncMeta, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
+import { clearCachedPwaUserContext, getCachedBalances, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';

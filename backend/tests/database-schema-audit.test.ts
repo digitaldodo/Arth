@@ -52,6 +52,10 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('recorded_at'), 'Must define and use recorded_at immutable timestamp');
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_account_balances() FROM PUBLIC;'), 'Must revoke from PUBLIC');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_account_balances() TO authenticated;'), 'Must grant execute to authenticated role');
+    assert.ok(sql.includes('chk_profiles_starting_cash_non_negative'), 'Must enforce non-negative check on starting_cash_paise');
+    assert.ok(sql.includes('chk_profiles_starting_online_non_negative'), 'Must enforce non-negative check on starting_online_paise');
+    assert.ok(sql.includes('NEW.recorded_at := OLD.recorded_at;'), 'Must enforce recorded_at immutability on update');
+    assert.ok(sql.includes('Physical deletion is not permitted'), 'Must forbid physical deletion');
   });
 
 

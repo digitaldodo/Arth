@@ -37,8 +37,8 @@ describe('PWA Session Persistence, Offline Startup & Balance Snapshot Invariants
         'applyLocalTransactionBalanceDelta must skip pre-baseline transactions'
       );
       assert.ok(
-        content.includes('Math.max(0, isCash ? balances.current_cash_paise + delta : balances.current_cash_paise)'),
-        'Balance deltas must clamp balances to >= 0'
+        content.includes('isCash ? balances.current_cash_paise + delta : balances.current_cash_paise'),
+        'Balance deltas must accurately reflect calculated amounts'
       );
     });
   });

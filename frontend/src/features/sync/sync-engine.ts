@@ -382,23 +382,6 @@ class SyncEngine {
     userId: string
   ): Promise<AccountBalancesDTO> {
     this.assertOfflineWriteIsAllowed();
-    const existing = (await getCachedBalances(userId)) || {
-      starting_cash_paise: 0,
-      starting_online_paise: 0,
-      starting_total_paise: 0,
-      current_cash_paise: 0,
-      current_online_paise: 0,
-      total_available_paise: 0,
-      formatted_starting_cash: '₹0.00',
-      formatted_starting_online: '₹0.00',
-      formatted_starting_total: '₹0.00',
-      formatted_current_cash: '₹0.00',
-      formatted_current_online: '₹0.00',
-      formatted_total_available: '₹0.00',
-      balances_configured: false,
-      balances_configured_at: null,
-    };
-
     const reqCashPaise = Number(parseINRToPaise(req.starting_cash || '0'));
     const reqOnlinePaise = Number(parseINRToPaise(req.starting_online || '0'));
     const nowIso = new Date().toISOString();
@@ -729,8 +712,8 @@ class SyncEngine {
     const delta = txn.type === 'income' ? txn.amount_paise : -txn.amount_paise;
     const isCash = txn.payment_method === 'cash';
 
-    const newCash = Math.max(0, isCash ? balances.current_cash_paise + delta : balances.current_cash_paise);
-    const newOnline = Math.max(0, !isCash ? balances.current_online_paise + delta : balances.current_online_paise);
+    const newCash = isCash ? balances.current_cash_paise + delta : balances.current_cash_paise;
+    const newOnline = !isCash ? balances.current_online_paise + delta : balances.current_online_paise;
     const newTotal = newCash + newOnline;
 
     const updated: AccountBalancesDTO = {
@@ -762,8 +745,8 @@ class SyncEngine {
     const delta = txn.type === 'income' ? -txn.amount_paise : txn.amount_paise;
     const isCash = txn.payment_method === 'cash';
 
-    const newCash = Math.max(0, isCash ? balances.current_cash_paise + delta : balances.current_cash_paise);
-    const newOnline = Math.max(0, !isCash ? balances.current_online_paise + delta : balances.current_online_paise);
+    const newCash = isCash ? balances.current_cash_paise + delta : balances.current_cash_paise;
+    const newOnline = !isCash ? balances.current_online_paise + delta : balances.current_online_paise;
     const newTotal = newCash + newOnline;
 
     const updated: AccountBalancesDTO = {
