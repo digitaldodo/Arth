@@ -102,7 +102,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       let mode = await getClientMode(event.clientId);
-      const startUrlSignal = url.pathname === '/offline' && url.searchParams.get('arth_runtime') === 'installed-mobile-pwa' && isMobileUserAgent();
+      const startUrlSignal = (url.pathname === '/offline' || url.searchParams.get('arth_runtime') === 'installed-mobile-pwa') && isMobileUserAgent();
       if (startUrlSignal) mode = 'installed-mobile-pwa';
       try {
         const response = await fetch(request);
@@ -112,14 +112,14 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       } catch {
-        if (mode === 'installed-mobile-pwa' && isMobileUserAgent()) {
+        if (!mode && isMobileUserAgent()) {
           const prepared = await getRuntime('state', 'pwa-prepared').catch(() => null);
-          if (url.pathname !== '/offline') {
-            return Response.redirect(new URL('/offline?arth_runtime=installed-mobile-pwa', self.location.origin).href, 302);
-          }
+          if (prepared?.value) mode = 'installed-mobile-pwa';
+        }
+        if (mode === 'installed-mobile-pwa' && isMobileUserAgent()) {
           const cached = await caches.open(CACHE_NAME).then((cache) => cache.match('/offline'));
-          if (prepared?.value && cached) return cached;
-          return offlineHtml('Offline access not prepared', 'Open Arth once while connected to prepare this device for offline use.');
+          if (cached) return cached;
+          return offlineHtml('Arth is offline', 'The authenticated app shell is not cached on this device. Reconnect to open Arth; previously loaded financial records remain stored locally and will sync when online.');
         }
         return offlineHtml('Connection required', 'This web session needs an internet connection. Check your connection and try again.');
       }

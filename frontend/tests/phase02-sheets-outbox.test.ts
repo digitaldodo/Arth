@@ -60,6 +60,8 @@ describe('Phase 02: Google Sheets URL Extraction & Data Formatting', () => {
       necessity: 'need',
       description: 'Groceries at Nature Basket',
       notes: 'Weekly fresh vegetables',
+      recorded_at: '2026-10-25T10:00:00.000Z',
+
       created_at: '2026-10-25T10:00:00.000Z',
       updated_at: '2026-10-25T10:00:00.000Z',
       deleted_at: null,

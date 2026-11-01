@@ -8,8 +8,9 @@ import {
   type PaymentMethod,
 } from '@arth/contracts';
 import type { AppConfig } from '../../config/index.js';
-import type {
-  ValidatedConfigureStartingBalances,
+import {
+  BalanceValidationError,
+  type ValidatedConfigureStartingBalances,
   ValidatedCreateTransfer,
   ValidatedCreateAdjustment,
 } from './balance.validation.js';
@@ -187,6 +188,7 @@ export class SupabaseBalanceService implements IBalanceService {
       amount_paise: data.amount_paise.toString(),
       reason: data.reason || null,
       movement_date: data.movement_date || undefined,
+      recorded_at: data.recorded_at || undefined,
     };
 
     const { data: inserted, error } = await client
@@ -196,6 +198,9 @@ export class SupabaseBalanceService implements IBalanceService {
       .single();
 
     if (error) {
+      if (error.code === '22003' || error.message?.includes('Insufficient')) {
+        throw new BalanceValidationError(error.message);
+      }
       console.error(`[BalanceService] Failed to record transfer:`, error.message);
       throw new Error(`Failed to record transfer: ${error.message}`);
     }
@@ -210,6 +215,7 @@ export class SupabaseBalanceService implements IBalanceService {
       formatted_amount: formatPaiseToINR(Number(inserted.amount_paise)),
       reason: inserted.reason,
       movement_date: inserted.movement_date,
+      recorded_at: inserted.recorded_at || inserted.created_at,
       created_at: inserted.created_at,
       updated_at: inserted.updated_at,
     };
@@ -234,6 +240,7 @@ export class SupabaseBalanceService implements IBalanceService {
       adjustment_paise: data.adjustment_paise.toString(),
       reason: data.reason,
       movement_date: data.movement_date || undefined,
+      recorded_at: data.recorded_at || undefined,
     };
 
     const { data: inserted, error } = await client
@@ -243,6 +250,9 @@ export class SupabaseBalanceService implements IBalanceService {
       .single();
 
     if (error) {
+      if (error.code === '22003' || error.message?.includes('Insufficient')) {
+        throw new BalanceValidationError(error.message);
+      }
       console.error(`[BalanceService] Failed to record adjustment:`, error.message);
       throw new Error(`Failed to record adjustment: ${error.message}`);
     }
@@ -256,6 +266,7 @@ export class SupabaseBalanceService implements IBalanceService {
       formatted_amount: formatPaiseToINR(Math.abs(Number(inserted.adjustment_paise))),
       reason: inserted.reason,
       movement_date: inserted.movement_date,
+      recorded_at: inserted.recorded_at || inserted.created_at,
       created_at: inserted.created_at,
       updated_at: inserted.updated_at,
     };
@@ -296,6 +307,7 @@ export class SupabaseBalanceService implements IBalanceService {
       ),
       reason: row.reason || null,
       movement_date: row.movement_date,
+      recorded_at: row.recorded_at || row.created_at,
       created_at: row.created_at,
       updated_at: row.updated_at,
     }));
@@ -325,6 +337,7 @@ export interface StoredMovementRecord {
   adjustment_paise: bigint;
   reason?: string | null;
   movement_date: string;
+  recorded_at: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -334,7 +347,11 @@ export class InMemoryBalanceService implements IBalanceService {
   private userBalances = new Map<string, InMemoryBalanceRecord>();
   public movements: StoredMovementRecord[] = [];
 
-  constructor(private readonly transactionService?: InMemoryTransactionService) {}
+  constructor(private readonly transactionService?: InMemoryTransactionService) {
+    if (transactionService) {
+      transactionService.balanceService = this;
+    }
+  }
 
   async getBalances(userId: string): Promise<AccountBalancesDTO> {
     const starting = this.userBalances.get(userId) || {
@@ -344,6 +361,25 @@ export class InMemoryBalanceService implements IBalanceService {
       balances_configured_at: null,
     };
 
+    if (!starting.balances_configured || !starting.balances_configured_at) {
+      return {
+        starting_cash_paise: 0,
+        starting_online_paise: 0,
+        starting_total_paise: 0,
+        current_cash_paise: 0,
+        current_online_paise: 0,
+        total_available_paise: 0,
+        formatted_starting_cash: '₹0.00',
+        formatted_starting_online: '₹0.00',
+        formatted_starting_total: '₹0.00',
+        formatted_current_cash: '₹0.00',
+        formatted_current_online: '₹0.00',
+        formatted_total_available: '₹0.00',
+        balances_configured: false,
+        balances_configured_at: null,
+      };
+    }
+
     let cashIncome = 0n;
     let cashExpense = 0n;
     let onlineIncome = 0n;
@@ -352,6 +388,7 @@ export class InMemoryBalanceService implements IBalanceService {
     if (this.transactionService) {
       for (const t of this.transactionService.transactions) {
         if (t.user_id !== userId || t.deleted_at !== null) continue;
+        if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
         const paise = BigInt(t.amount_paise);
         if (t.payment_method === 'cash') {
           if (t.type === 'income') cashIncome += paise;
@@ -372,6 +409,7 @@ export class InMemoryBalanceService implements IBalanceService {
 
     for (const m of this.movements) {
       if (m.user_id !== userId || m.deleted_at !== null) continue;
+      if (starting.balances_configured_at && (m.recorded_at || m.created_at) <= starting.balances_configured_at) continue;
       if (m.movement_type === 'transfer') {
         if (m.to_method === 'cash') transferCashIn += m.amount_paise;
         if (m.from_method === 'cash') transferCashOut += m.amount_paise;
@@ -383,19 +421,22 @@ export class InMemoryBalanceService implements IBalanceService {
       }
     }
 
-    const currentCash =
+    let currentCash =
       starting.starting_cash_paise +
       cashIncome -
       cashExpense +
       (transferCashIn - transferCashOut) +
       cashAdjustments;
 
-    const currentOnline =
+    let currentOnline =
       starting.starting_online_paise +
       onlineIncome -
       onlineExpense +
       (transferOnlineIn - transferOnlineOut) +
       onlineAdjustments;
+
+    if (currentCash < 0n) currentCash = 0n;
+    if (currentOnline < 0n) currentOnline = 0n;
 
     const startingCashNum = Number(starting.starting_cash_paise);
     const startingOnlineNum = Number(starting.starting_online_paise);
@@ -440,6 +481,17 @@ export class InMemoryBalanceService implements IBalanceService {
     userId: string,
     data: ValidatedCreateTransfer
   ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+    const current = await this.getBalances(userId);
+    if (!current.balances_configured) {
+      throw new BalanceValidationError('Starting balances have not been configured yet.');
+    }
+    const avail = data.from_method === 'cash' ? BigInt(current.current_cash_paise) : BigInt(current.current_online_paise);
+    if (data.amount_paise > avail) {
+      throw new BalanceValidationError(
+        `Insufficient ${data.from_method} balance for transfer. Available balance is ${avail} paise, attempted transfer is ${data.amount_paise} paise.`
+      );
+    }
+
     const now = new Date().toISOString();
     const today = now.slice(0, 10);
     const id = data.id || uuidv7();
@@ -454,6 +506,7 @@ export class InMemoryBalanceService implements IBalanceService {
       adjustment_paise: 0n,
       reason: data.reason || null,
       movement_date: data.movement_date || today,
+      recorded_at: data.recorded_at || now,
       created_at: now,
       updated_at: now,
       deleted_at: null,
@@ -472,6 +525,7 @@ export class InMemoryBalanceService implements IBalanceService {
       formatted_amount: formatPaiseToINR(Number(record.amount_paise)),
       reason: record.reason,
       movement_date: record.movement_date,
+      recorded_at: record.recorded_at || record.created_at,
       created_at: record.created_at,
       updated_at: record.updated_at,
     };
@@ -483,6 +537,20 @@ export class InMemoryBalanceService implements IBalanceService {
     userId: string,
     data: ValidatedCreateAdjustment
   ): Promise<{ movement: BalanceMovementDTO; balances: AccountBalancesDTO }> {
+    if (data.adjustment_paise < 0n) {
+      const current = await this.getBalances(userId);
+      if (!current.balances_configured) {
+        throw new BalanceValidationError('Starting balances have not been configured yet.');
+      }
+      const avail = data.payment_method === 'cash' ? BigInt(current.current_cash_paise) : BigInt(current.current_online_paise);
+      const reduction = -data.adjustment_paise;
+      if (reduction > avail) {
+        throw new BalanceValidationError(
+          `Insufficient ${data.payment_method} balance for adjustment. Available balance is ${avail} paise, attempted reduction is ${reduction} paise.`
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const today = now.slice(0, 10);
     const id = data.id || uuidv7();
@@ -496,6 +564,7 @@ export class InMemoryBalanceService implements IBalanceService {
       adjustment_paise: data.adjustment_paise,
       reason: data.reason,
       movement_date: data.movement_date || today,
+      recorded_at: data.recorded_at || now,
       created_at: now,
       updated_at: now,
       deleted_at: null,
@@ -513,6 +582,7 @@ export class InMemoryBalanceService implements IBalanceService {
       formatted_amount: formatPaiseToINR(Number(record.amount_paise)),
       reason: record.reason,
       movement_date: record.movement_date,
+      recorded_at: record.recorded_at || record.created_at,
       created_at: record.created_at,
       updated_at: record.updated_at,
     };
@@ -525,19 +595,20 @@ export class InMemoryBalanceService implements IBalanceService {
       .filter((m) => m.user_id === userId && m.deleted_at === null)
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
-    const items: BalanceMovementDTO[] = userMovements.map((record) => ({
-      id: record.id,
-      movement_type: record.movement_type,
-      from_method: record.from_method || null,
-      to_method: record.to_method || null,
-      payment_method: record.payment_method || null,
-      amount_paise: Number(record.amount_paise),
-      adjustment_paise: Number(record.adjustment_paise),
-      formatted_amount: formatPaiseToINR(Number(record.amount_paise)),
-      reason: record.reason || null,
-      movement_date: record.movement_date,
-      created_at: record.created_at,
-      updated_at: record.updated_at,
+    const items: BalanceMovementDTO[] = userMovements.map((m) => ({
+      id: m.id,
+      movement_type: m.movement_type,
+      from_method: m.from_method || null,
+      to_method: m.to_method || null,
+      payment_method: m.payment_method || null,
+      amount_paise: Number(m.amount_paise),
+      adjustment_paise: Number(m.adjustment_paise),
+      formatted_amount: formatPaiseToINR(Number(m.amount_paise)),
+      reason: m.reason || null,
+      movement_date: m.movement_date,
+      recorded_at: m.recorded_at || m.created_at,
+      created_at: m.created_at,
+      updated_at: m.updated_at,
     }));
 
     return {

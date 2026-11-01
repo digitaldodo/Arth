@@ -198,6 +198,21 @@ class SyncEngine {
     const paise = parseINRToPaise(payload.amount);
     const category = categories.find((c) => c.id === payload.category_id);
 
+    const recorded_at = payload.recorded_at || new Date().toISOString();
+
+    if (payload.type === 'expense') {
+      const balances = await getCachedBalances(userId);
+      if (balances && balances.balances_configured) {
+        const isPreBaseline = balances.balances_configured_at && recorded_at <= balances.balances_configured_at;
+        if (!isPreBaseline) {
+          const avail = payload.payment_method === 'cash' ? balances.current_cash_paise : balances.current_online_paise;
+          if (Number(paise) > avail) {
+            throw new Error(`Insufficient ${payload.payment_method} balance. Available balance is ${formatPaiseToINR(avail)}, but attempted expense is ${formatPaiseToINR(paise)}.`);
+          }
+        }
+      }
+    }
+
     const optimisticTxn: OfflineTransactionDTO = {
       id: payload.id,
       user_id: userId,
@@ -212,7 +227,8 @@ class SyncEngine {
       necessity: payload.necessity ?? null,
       description: payload.description || null,
       notes: payload.notes || null,
-      created_at: new Date().toISOString(),
+      recorded_at,
+      created_at: payload.created_at || recorded_at,
       updated_at: new Date().toISOString(),
       sync_status: 'pending',
       deleted_locally: false,
@@ -230,7 +246,7 @@ class SyncEngine {
       entityId: payload.id,
       userId,
       type: 'create_transaction',
-      payload,
+      payload: { ...payload, recorded_at, created_at: payload.created_at || recorded_at },
     });
 
     await this.updatePendingCount(userId);
@@ -385,32 +401,27 @@ class SyncEngine {
 
     const reqCashPaise = Number(parseINRToPaise(req.starting_cash || '0'));
     const reqOnlinePaise = Number(parseINRToPaise(req.starting_online || '0'));
-
-    const deltaCash = reqCashPaise - existing.starting_cash_paise;
-    const deltaOnline = reqOnlinePaise - existing.starting_online_paise;
+    const nowIso = new Date().toISOString();
 
     const newStartingCash = reqCashPaise;
     const newStartingOnline = reqOnlinePaise;
     const newStartingTotal = newStartingCash + newStartingOnline;
-    const newCurrentCash = existing.current_cash_paise + deltaCash;
-    const newCurrentOnline = existing.current_online_paise + deltaOnline;
-    const newTotalAvailable = newCurrentCash + newCurrentOnline;
 
     const updatedBalances: AccountBalancesDTO = {
       starting_cash_paise: newStartingCash,
       starting_online_paise: newStartingOnline,
       starting_total_paise: newStartingTotal,
-      current_cash_paise: newCurrentCash,
-      current_online_paise: newCurrentOnline,
-      total_available_paise: newTotalAvailable,
+      current_cash_paise: newStartingCash,
+      current_online_paise: newStartingOnline,
+      total_available_paise: newStartingTotal,
       formatted_starting_cash: formatPaiseToINR(newStartingCash),
       formatted_starting_online: formatPaiseToINR(newStartingOnline),
       formatted_starting_total: formatPaiseToINR(newStartingTotal),
-      formatted_current_cash: formatPaiseToINR(newCurrentCash),
-      formatted_current_online: formatPaiseToINR(newCurrentOnline),
-      formatted_total_available: formatPaiseToINR(newTotalAvailable),
+      formatted_current_cash: formatPaiseToINR(newStartingCash),
+      formatted_current_online: formatPaiseToINR(newStartingOnline),
+      formatted_total_available: formatPaiseToINR(newStartingTotal),
       balances_configured: true,
-      balances_configured_at: existing.balances_configured_at || new Date().toISOString(),
+      balances_configured_at: nowIso,
     };
 
     await setCachedBalances(updatedBalances, userId);
@@ -710,11 +721,16 @@ class SyncEngine {
     const balances = await getCachedBalances(userId);
     if (!balances) return;
 
+    // Pre-baseline transactions must never alter the baseline snapshot balances
+    if (balances.balances_configured_at && (txn.recorded_at || txn.created_at) <= balances.balances_configured_at) {
+      return;
+    }
+
     const delta = txn.type === 'income' ? txn.amount_paise : -txn.amount_paise;
     const isCash = txn.payment_method === 'cash';
 
-    const newCash = isCash ? balances.current_cash_paise + delta : balances.current_cash_paise;
-    const newOnline = !isCash ? balances.current_online_paise + delta : balances.current_online_paise;
+    const newCash = Math.max(0, isCash ? balances.current_cash_paise + delta : balances.current_cash_paise);
+    const newOnline = Math.max(0, !isCash ? balances.current_online_paise + delta : balances.current_online_paise);
     const newTotal = newCash + newOnline;
 
     const updated: AccountBalancesDTO = {
@@ -737,12 +753,17 @@ class SyncEngine {
     const balances = await getCachedBalances(userId);
     if (!balances) return;
 
+    // Pre-baseline transactions must never alter the baseline snapshot balances
+    if (balances.balances_configured_at && (txn.recorded_at || txn.created_at) <= balances.balances_configured_at) {
+      return;
+    }
+
     // Opposite of apply
     const delta = txn.type === 'income' ? -txn.amount_paise : txn.amount_paise;
     const isCash = txn.payment_method === 'cash';
 
-    const newCash = isCash ? balances.current_cash_paise + delta : balances.current_cash_paise;
-    const newOnline = !isCash ? balances.current_online_paise + delta : balances.current_online_paise;
+    const newCash = Math.max(0, isCash ? balances.current_cash_paise + delta : balances.current_cash_paise);
+    const newOnline = Math.max(0, !isCash ? balances.current_online_paise + delta : balances.current_online_paise);
     const newTotal = newCash + newOnline;
 
     const updated: AccountBalancesDTO = {

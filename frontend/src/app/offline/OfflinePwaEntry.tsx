@@ -32,7 +32,7 @@ export function OfflinePwaEntry() {
         return;
       }
       const meta = await getSyncMeta(localUser.id);
-      const prepared = meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null;
+      const prepared = (meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null) || Boolean(localUser);
       if (cancelled) return;
       if (prepared) {
         setUser(localUser);
@@ -41,21 +41,30 @@ export function OfflinePwaEntry() {
         setState('not-prepared');
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (state === 'ready' && user) return <TransactionAppShell user={user} />;
+
   return (
     <main className="min-h-screen grid place-items-center px-6 py-12 bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <section className="w-full max-w-sm rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 text-center shadow-sm">
-        <h1 className="text-xl font-semibold">{state === 'checking' ? 'Opening Arth' : 'Offline access not prepared'}</h1>
+        <h1 className="text-xl font-semibold">
+          {state === 'checking' ? 'Opening Arth' : 'Sign In Required for Offline Access'}
+        </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
           {state === 'checking'
-            ? 'Checking this device for your saved Arth data…'
-            : 'Connect to the internet and open Arth once to securely load your account data for offline use.'}
+            ? 'Checking this device for your saved Arth session…'
+            : 'Connect to the internet and sign in to Arth once to securely use your ledger offline on this device.'}
         </p>
         {state === 'not-prepared' && (
-          <button type="button" onClick={() => window.location.reload()} className="mt-5 rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--action-primary-fg)]">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors"
+          >
             Try again
           </button>
         )}

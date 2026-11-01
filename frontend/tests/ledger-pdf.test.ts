@@ -18,6 +18,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
         necessity: 'essential',
         description: 'Lunch',
         notes: null,
+        recorded_at: '2026-10-25T10:00:00Z',
+
         created_at: '2026-10-25T10:00:00Z',
         updated_at: '2026-10-25T10:00:00Z',
       },
@@ -34,6 +36,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
         necessity: null,
         description: 'Pocket Money',
         notes: null,
+        recorded_at: '2026-10-24T10:00:00Z',
+
         created_at: '2026-10-24T10:00:00Z',
         updated_at: '2026-10-24T10:00:00Z',
       },
@@ -50,6 +54,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
         necessity: 'essential',
         description: 'Electricity Bill',
         notes: null,
+        recorded_at: '2026-10-22T10:00:00Z',
+
         created_at: '2026-10-22T10:00:00Z',
         updated_at: '2026-10-22T10:00:00Z',
       },
@@ -98,6 +104,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: 'essential',
             description: 'Item 1',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },
@@ -114,6 +122,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: 'essential',
             description: 'Item 2',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },
@@ -138,6 +148,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: 'essential',
             description: 'Item 3',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },
@@ -155,6 +167,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: 'essential',
             description: 'Item 2',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },
@@ -171,6 +185,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: 'essential',
             description: 'Item 4',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },
@@ -195,6 +211,8 @@ describe('Ledger PDF Export Logic & Pagination Safety', () => {
             necessity: null,
             description: 'Item 5',
             notes: null,
+            recorded_at: '',
+
             created_at: '',
             updated_at: '',
           },

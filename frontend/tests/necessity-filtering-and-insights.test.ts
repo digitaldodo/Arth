@@ -132,6 +132,8 @@ describe('Necessity Filtering and Spending Insights Suite', () => {
                 necessity: 'optional',
                 description: 'Dinner',
                 notes: null,
+                recorded_at: '2026-10-20T12:00:00Z',
+
                 created_at: '2026-10-20T12:00:00Z',
                 updated_at: '2026-10-20T12:00:00Z',
               },

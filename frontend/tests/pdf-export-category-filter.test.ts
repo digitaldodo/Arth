@@ -75,6 +75,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: 'essential',
         description: 'Groceries',
         notes: null,
+        recorded_at: '2026-10-25T10:00:00.000Z',
+
         created_at: '2026-10-25T10:00:00.000Z',
         updated_at: '2026-10-25T10:00:00.000Z',
       },
@@ -90,6 +92,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: 'essential',
         description: 'Lunch',
         notes: null,
+        recorded_at: '2026-10-24T12:00:00.000Z',
+
         created_at: '2026-10-24T12:00:00.000Z',
         updated_at: '2026-10-24T12:00:00.000Z',
       },
@@ -105,6 +109,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: null,
         description: 'Monthly Pay',
         notes: null,
+        recorded_at: '2026-10-01T09:00:00.000Z',
+
         created_at: '2026-10-01T09:00:00.000Z',
         updated_at: '2026-10-01T09:00:00.000Z',
       },
@@ -133,6 +139,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: 'essential',
         description: 'Dinner',
         notes: null,
+        recorded_at: '2026-10-25T10:00:00.000Z',
+
         created_at: '2026-10-25T10:00:00.000Z',
         updated_at: '2026-10-25T10:00:00.000Z',
       },
@@ -148,6 +156,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: null,
         description: 'October Salary',
         notes: null,
+        recorded_at: '2026-10-01T09:00:00.000Z',
+
         created_at: '2026-10-01T09:00:00.000Z',
         updated_at: '2026-10-01T09:00:00.000Z',
       },
@@ -181,6 +191,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: null,
         description: 'Web dev gig',
         notes: null,
+        recorded_at: '2026-10-15T10:00:00.000Z',
+
         created_at: '2026-10-15T10:00:00.000Z',
         updated_at: '2026-10-15T10:00:00.000Z',
       },
@@ -207,6 +219,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: 'essential',
         description: 'Fuel',
         notes: null,
+        recorded_at: '2026-10-20T10:00:00.000Z',
+
         created_at: '2026-10-20T10:00:00.000Z',
         updated_at: '2026-10-20T10:00:00.000Z',
       },
@@ -222,6 +236,8 @@ describe('PDF Export Category Scope: Eligibility Filtering', () => {
         necessity: 'essential',
         description: 'Electricity bill',
         notes: null,
+        recorded_at: '2026-10-18T10:00:00.000Z',
+
         created_at: '2026-10-18T10:00:00.000Z',
         updated_at: '2026-10-18T10:00:00.000Z',
       },
@@ -293,6 +309,8 @@ describe('PDF Export Category Scope: Multi-Page Dataset Eligibility', () => {
       necessity: 'essential' as const,
       description: `Item ${i}`,
       notes: null,
+      recorded_at: '2026-10-25T10:00:00.000Z',
+
       created_at: '2026-10-25T10:00:00.000Z',
       updated_at: '2026-10-25T10:00:00.000Z',
     }));
@@ -309,6 +327,8 @@ describe('PDF Export Category Scope: Multi-Page Dataset Eligibility', () => {
       necessity: 'essential' as const,
       description: `Transport ${i}`,
       notes: null,
+      recorded_at: '2026-10-24T10:00:00.000Z',
+
       created_at: '2026-10-24T10:00:00.000Z',
       updated_at: '2026-10-24T10:00:00.000Z',
     }));

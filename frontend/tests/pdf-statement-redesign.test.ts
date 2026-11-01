@@ -33,6 +33,8 @@ const mockFiveTransactions: TransactionDTO[] = [
     formatted_inr: '₹125.00',
     amount_decimal: '125.00',
     notes: null,
+    recorded_at: '2026-10-26T10:00:00Z',
+
     created_at: '2026-10-26T10:00:00Z',
     updated_at: '2026-10-26T10:00:00Z',
   },
@@ -49,6 +51,8 @@ const mockFiveTransactions: TransactionDTO[] = [
     formatted_inr: '₹20.00',
     amount_decimal: '20.00',
     notes: null,
+    recorded_at: '2026-10-26T11:00:00Z',
+
     created_at: '2026-10-26T11:00:00Z',
     updated_at: '2026-10-26T11:00:00Z',
   },
@@ -65,6 +69,8 @@ const mockFiveTransactions: TransactionDTO[] = [
     formatted_inr: '₹35.00',
     amount_decimal: '35.00',
     notes: null,
+    recorded_at: '2026-10-26T12:00:00Z',
+
     created_at: '2026-10-26T12:00:00Z',
     updated_at: '2026-10-26T12:00:00Z',
   },
@@ -81,6 +87,8 @@ const mockFiveTransactions: TransactionDTO[] = [
     formatted_inr: '₹50.00',
     amount_decimal: '50.00',
     notes: null,
+    recorded_at: '2026-10-26T13:00:00Z',
+
     created_at: '2026-10-26T13:00:00Z',
     updated_at: '2026-10-26T13:00:00Z',
   },
@@ -97,6 +105,8 @@ const mockFiveTransactions: TransactionDTO[] = [
     formatted_inr: '₹40.00',
     amount_decimal: '40.00',
     notes: null,
+    recorded_at: '2026-10-26T14:00:00Z',
+
     created_at: '2026-10-26T14:00:00Z',
     updated_at: '2026-10-26T14:00:00Z',
   },
@@ -261,6 +271,8 @@ describe('Personal Financial Statement PDF Redesign', () => {
           description: `Transaction item number ${i}`,
           transaction_date: '2026-10-15',
           formatted_inr: `₹${(i * 50).toFixed(2)}`,
+          recorded_at: '2026-10-15T10:00:00Z',
+
           created_at: '2026-10-15T10:00:00Z',
           updated_at: '2026-10-15T10:00:00Z',
         });
@@ -297,6 +309,8 @@ describe('Personal Financial Statement PDF Redesign', () => {
           description: 'Monthly Salary Credit',
           transaction_date: '2026-10-01',
           formatted_inr: '₹50,000.00',
+          recorded_at: '2026-10-01T10:00:00Z',
+
           created_at: '2026-10-01T10:00:00Z',
           updated_at: '2026-10-01T10:00:00Z',
         },

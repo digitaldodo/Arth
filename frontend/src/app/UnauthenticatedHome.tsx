@@ -1,7 +1,51 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
+import { getCachedPwaUser, type CachedPwaUser } from '@/lib/offline-db';
+import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
 
 export function UnauthenticatedHome() {
+  const [cachedUser, setCachedUser] = useState<CachedPwaUser | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const user = await getCachedPwaUser();
+        if (!cancelled && user) {
+          setCachedUser(user);
+        }
+      } catch {
+        // Continue to unauthenticated landing page
+      } finally {
+        if (!cancelled) {
+          setIsChecking(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (cachedUser) {
+    return <TransactionAppShell user={cachedUser} />;
+  }
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <ArthLogo variant="full" className="h-7 w-auto mx-auto text-[var(--text-primary)] opacity-80" />
+          <p className="text-xs font-mono text-[var(--text-muted)]">Restoring session…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
       {/* Slim Header */}

@@ -27,6 +27,7 @@ function tx(
     necessity: 'essential',
     description,
     notes: null,
+    recorded_at: createdAt,
     created_at: createdAt,
     updated_at: createdAt,
   };

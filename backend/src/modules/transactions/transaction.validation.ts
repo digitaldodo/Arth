@@ -10,6 +10,14 @@ import {
 
 // RFC 9562 UUID v7 regex (verifies version 7 and variant bits)
 const UUID_V7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function extractTimestampFromUuidV7(id: string): Date | null {
+  if (!UUID_V7_REGEX.test(id)) return null;
+  const hex = id.substring(0, 8) + id.substring(9, 13);
+  const ms = parseInt(hex, 16);
+  if (isNaN(ms) || ms <= 0) return null;
+  return new Date(ms);
+}
 // Standard UUID regex for category references
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // YYYY-MM-DD date regex
@@ -49,6 +57,8 @@ export interface ValidatedCreateTransactionInput {
   necessity: NecessityClass | null;
   description: string | null;
   notes: string | null;
+  recorded_at: string;
+  created_at?: string;
 }
 
 export interface ValidatedTransactionListQuery {
@@ -164,16 +174,42 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     notes = trimmed.length > 0 ? trimmed : null;
   }
 
+  // 9. Validate Recording Timestamp (preserves original recording timestamp across offline sync)
+  let recorded_at: string;
+  if (payload.recorded_at !== undefined && payload.recorded_at !== null) {
+    if (typeof payload.recorded_at !== 'string' || isNaN(Date.parse(payload.recorded_at))) {
+      throw new ValidationError('recorded_at must be a valid ISO 8601 timestamp string');
+    }
+    recorded_at = new Date(payload.recorded_at).toISOString();
+  } else if (payload.created_at !== undefined && payload.created_at !== null) {
+    if (typeof payload.created_at !== 'string' || isNaN(Date.parse(payload.created_at))) {
+      throw new ValidationError('created_at must be a valid ISO 8601 timestamp string');
+    }
+    recorded_at = new Date(payload.created_at).toISOString();
+  } else {
+    const extracted = extractTimestampFromUuidV7(payload.id as string);
+    recorded_at = extracted ? extracted.toISOString() : new Date().toISOString();
+  }
+
+  let created_at: string | undefined = undefined;
+  if (payload.created_at !== undefined && payload.created_at !== null) {
+    if (typeof payload.created_at === 'string' && !isNaN(Date.parse(payload.created_at))) {
+      created_at = new Date(payload.created_at).toISOString();
+    }
+  }
+
   return {
-    id: payload.id.toLowerCase(),
+    id: (payload.id as string).toLowerCase(),
     amount_paise,
     type,
-    category_id: payload.category_id.toLowerCase(),
-    transaction_date: payload.transaction_date,
+    category_id: (payload.category_id as string).toLowerCase(),
+    transaction_date: payload.transaction_date as string,
     payment_method,
     necessity,
     description,
     notes,
+    recorded_at,
+    created_at,
   };
 }
 

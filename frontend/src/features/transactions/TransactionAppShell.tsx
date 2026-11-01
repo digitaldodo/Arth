@@ -84,14 +84,11 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   const lastSyncedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!user || !isPwa) return;
-    void setCachedPwaUser(user).then(async () => {
-      const meta = await getSyncMeta(user.id);
-      if (meta.transactionsSnapshotComplete && meta.categoriesSnapshotComplete && meta.balancesCachedAt !== null) {
-        navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_PREPARED' });
-      }
+    if (!user) return;
+    void setCachedPwaUser(user).then(() => {
+      navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_PREPARED' });
     }).catch(() => {});
-  }, [user, isPwa, pendingSyncCount, isSyncing]);
+  }, [user, pendingSyncCount, isSyncing]);
 
   const handleSignOut = async (event: React.FormEvent<HTMLFormElement>) => {
     if (!isPwa) return;

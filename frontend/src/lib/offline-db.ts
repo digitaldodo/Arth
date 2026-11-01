@@ -566,9 +566,21 @@ export async function setCachedBalances(
   {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction('balances', 'readwrite');
+      const tx = db.transaction(['balances', 'sync_meta'], 'readwrite');
       const store = tx.objectStore('balances');
       store.put({ key: balanceKey(userId), data: balances, updatedAt: Date.now() });
+
+      const metaStore = tx.objectStore('sync_meta');
+      const metaReq = metaStore.get(userId);
+      metaReq.onsuccess = () => {
+        const existing = metaReq.result?.data || {};
+        metaStore.put({
+          key: userId,
+          data: { ...existing, balancesCachedAt: Date.now() },
+          updatedAt: Date.now(),
+        });
+      };
+
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error || new Error('Could not persist balances locally.'));
     });

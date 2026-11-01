@@ -33,6 +33,7 @@ export interface BalanceMovementDTO {
   formatted_amount: string;
   reason?: string | null;
   movement_date: string; // YYYY-MM-DD
+  recorded_at: string;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +45,7 @@ export interface CreateTransferRequest {
   to_method: PaymentMethod;
   movement_date?: string; // YYYY-MM-DD
   reason?: string | null;
+  recorded_at?: string;
 }
 
 export interface CreateAdjustmentRequest {
@@ -53,6 +55,7 @@ export interface CreateAdjustmentRequest {
   direction: 'increase' | 'decrease'; // Direction of adjustment
   reason: string; // Required audit explanation
   movement_date?: string; // YYYY-MM-DD
+  recorded_at?: string;
 }
 
 export interface BalanceMovementListResponse {

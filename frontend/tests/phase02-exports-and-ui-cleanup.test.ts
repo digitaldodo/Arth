@@ -56,6 +56,8 @@ describe('Phase 02: CSV Export & Formula Injection Sanitization', () => {
         necessity: 'essential',
         description: 'Team Lunch',
         notes: 'Lunch at Cafe Bistro',
+        recorded_at: '2026-10-25T13:00:00.000Z',
+
         created_at: '2026-10-25T13:00:00.000Z',
         updated_at: '2026-10-25T13:00:00.000Z',
       },
@@ -71,6 +73,8 @@ describe('Phase 02: CSV Export & Formula Injection Sanitization', () => {
         necessity: null,
         description: 'Monthly Salary',
         notes: null,
+        recorded_at: '2026-10-01T09:00:00.000Z',
+
         created_at: '2026-10-01T09:00:00.000Z',
         updated_at: '2026-10-01T09:00:00.000Z',
       },
@@ -139,6 +143,8 @@ describe('Phase 02: JSON Backup Export Structure & Precision', () => {
         necessity: 'optional',
         description: 'Mechanical keyboard switch set',
         notes: null,
+        recorded_at: '2026-10-25T14:00:00.000Z',
+
         created_at: '2026-10-25T14:00:00.000Z',
         updated_at: '2026-10-25T14:00:00.000Z',
       },

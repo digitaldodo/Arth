@@ -7,6 +7,7 @@ import {
   type TransactionListResponse,
   type CategoryListResponse,
   type TransactionType,
+  type AccountBalancesDTO,
 } from '@arth/contracts';
 import type { AppConfig } from '../../config/index.js';
 import {
@@ -31,6 +32,7 @@ export interface StoredTransactionRecord {
   necessity: 'essential' | 'optional' | 'luxury' | null;
   description: string | null;
   notes: string | null;
+  recorded_at?: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -116,6 +118,7 @@ function mapToTransactionDTO(
     necessity: rec.necessity,
     description: rec.description,
     notes: rec.notes,
+    recorded_at: rec.recorded_at || rec.created_at,
     created_at: rec.created_at,
     updated_at: rec.updated_at,
   };
@@ -157,7 +160,7 @@ export class SupabaseTransactionService implements ITransactionService {
     // 1. Check if transaction with this ID already exists
     const { data: existing, error: existingErr } = await client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .eq('id', input.id)
       .maybeSingle();
 
@@ -219,24 +222,37 @@ export class SupabaseTransactionService implements ITransactionService {
     }
 
     // 3. Insert transaction. Note: RLS verifies user_id = auth.uid()
+    const insertPayload: Record<string, unknown> = {
+      id: input.id,
+      user_id: userId,
+      amount_paise: Number(input.amount_paise),
+      type: input.type,
+      category_id: input.category_id,
+      transaction_date: input.transaction_date,
+      payment_method: input.payment_method,
+      necessity: input.necessity,
+      description: input.description,
+      notes: input.notes,
+      recorded_at: input.recorded_at,
+    };
+    if (input.created_at) {
+      insertPayload.created_at = input.created_at;
+    }
+
     const { data: inserted, error: insertErr } = await client
       .from('transactions')
-      .insert({
-        id: input.id,
-        user_id: userId,
-        amount_paise: Number(input.amount_paise),
-        type: input.type,
-        category_id: input.category_id,
-        transaction_date: input.transaction_date,
-        payment_method: input.payment_method,
-        necessity: input.necessity,
-        description: input.description,
-        notes: input.notes,
-      })
+      .insert(insertPayload)
       .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at')
       .single();
 
     if (insertErr || !inserted) {
+      if (
+        insertErr?.code === '22003' ||
+        insertErr?.message?.includes('Insufficient') ||
+        insertErr?.message?.includes('Starting balances have not been configured')
+      ) {
+        throw new ValidationError(insertErr.message);
+      }
       if (insertErr?.code === '23505') {
         // Concurrent replay detected: another request inserted with this ID
         const { data: concurrentExisting } = await client
@@ -469,6 +485,13 @@ export class SupabaseTransactionService implements ITransactionService {
       .single();
 
     if (updateErr || !updated) {
+      if (
+        updateErr?.code === '22003' ||
+        updateErr?.message?.includes('Insufficient') ||
+        updateErr?.message?.includes('Cannot delete')
+      ) {
+        throw new ValidationError(updateErr.message);
+      }
       throw new Error(`Failed to update transaction: ${updateErr?.message || 'Unknown error'}`);
     }
 
@@ -501,6 +524,12 @@ export class SupabaseTransactionService implements ITransactionService {
       .eq('id', id);
 
     if (updateErr) {
+      if (
+        updateErr.code === '22003' ||
+        updateErr.message?.includes('Cannot delete')
+      ) {
+        throw new ValidationError(updateErr.message);
+      }
       throw new Error(`Failed to delete transaction: ${updateErr.message}`);
     }
 
@@ -550,6 +579,7 @@ export class InMemoryTransactionService implements ITransactionService {
   public transactions: StoredTransactionRecord[] = [];
   public categories: StoredCategoryRecord[] = [];
   public outboxEvents: StoredOutboxRecord[] = [];
+  public balanceService?: { getBalances: (userId: string) => Promise<AccountBalancesDTO> };
 
   constructor() {
     this.seedDefaultCategories('test-user-id');
@@ -646,6 +676,19 @@ export class InMemoryTransactionService implements ITransactionService {
       );
     }
 
+    if (input.type === 'expense' && this.balanceService) {
+      const currentBalances = await this.balanceService.getBalances(userId);
+      if (currentBalances.balances_configured && currentBalances.balances_configured_at) {
+        const avail = input.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+        const isPostBaseline = input.recorded_at > currentBalances.balances_configured_at;
+        if (isPostBaseline && Number(input.amount_paise) > avail) {
+          throw new ValidationError(
+            `Insufficient ${input.payment_method} balance. Available balance is ${avail} paise, but attempted expense is ${input.amount_paise} paise.`
+          );
+        }
+      }
+    }
+
     const now = new Date().toISOString();
     const newRecord: StoredTransactionRecord = {
       id: input.id,
@@ -659,7 +702,8 @@ export class InMemoryTransactionService implements ITransactionService {
       necessity: input.necessity,
       description: input.description,
       notes: input.notes,
-      created_at: now,
+      recorded_at: input.recorded_at,
+      created_at: input.created_at || now,
       updated_at: now,
       deleted_at: null,
     };
@@ -810,6 +854,25 @@ export class InMemoryTransactionService implements ITransactionService {
       }
     }
 
+    if (finalType === 'expense' && this.balanceService) {
+      const currentBalances = await this.balanceService.getBalances(userId);
+      if (!currentBalances.balances_configured) {
+        throw new ValidationError('Starting balances have not been configured yet. Available balance is 0.');
+      }
+      const finalMethod = input.payment_method ?? existing.payment_method;
+      let avail = finalMethod === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+      const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
+      if (existing.type === 'expense' && existing.payment_method === finalMethod && isExistingPostBaseline) {
+        avail += existing.amount_paise;
+      }
+      const newAmountPaise = input.amount_paise !== undefined ? Number(input.amount_paise) : existing.amount_paise;
+      if (newAmountPaise > avail) {
+        throw new ValidationError(
+          `Insufficient ${finalMethod} balance. Available balance is ${avail} paise, but attempted expense is ${newAmountPaise} paise.`
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     if (input.amount_paise !== undefined) existing.amount_paise = Number(input.amount_paise);
     existing.type = finalType;
@@ -843,6 +906,17 @@ export class InMemoryTransactionService implements ITransactionService {
     const existing = this.transactions.find((t) => t.id === id);
     if (!existing || existing.user_id !== userId || existing.deleted_at !== null) {
       throw new NotFoundError('Transaction not found or already deleted');
+    }
+
+    if (existing.type === 'income' && this.balanceService) {
+      const currentBalances = await this.balanceService.getBalances(userId);
+      const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
+      if (isExistingPostBaseline) {
+        const avail = existing.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
+        if (avail - existing.amount_paise < 0) {
+          throw new ValidationError(`Cannot delete income: remaining ${existing.payment_method} balance would become negative.`);
+        }
+      }
     }
 
     const now = new Date().toISOString();

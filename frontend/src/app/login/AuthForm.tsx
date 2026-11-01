@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
+import { getCachedPwaUser } from '@/lib/offline-db';
 import { useRouter } from 'next/navigation';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import {
@@ -45,6 +46,19 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
     initialMessage ? decodeURIComponent(initialMessage) : null
   );
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cached = await getCachedPwaUser();
+        if (cached) {
+          window.location.replace('/');
+        }
+      } catch {
+        // stay on login form
+      }
+    })();
+  }, []);
+
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
     setErrorMessage(null);
@@ -80,7 +94,7 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
           setUnconfirmedEmail(identifier.includes('@') ? identifier : '');
         }
       } else if (res.redirectUrl) {
-        window.location.href = res.redirectUrl;
+        window.location.replace(res.redirectUrl || '/');
       } else {
         router.refresh();
       }
@@ -121,7 +135,7 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
             'Account created! A confirmation link has been sent to your email address. Please check your email to confirm your account.'
         );
       } else if (res.redirectUrl) {
-        window.location.href = res.redirectUrl;
+        window.location.replace(res.redirectUrl || '/');
       } else {
         router.refresh();
       }

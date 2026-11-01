@@ -26,6 +26,7 @@ export interface ValidatedCreateTransfer {
   to_method: PaymentMethod;
   movement_date?: string;
   reason?: string | null;
+  recorded_at?: string;
 }
 
 export interface ValidatedCreateAdjustment {
@@ -35,6 +36,7 @@ export interface ValidatedCreateAdjustment {
   direction: 'increase' | 'decrease';
   reason: string;
   movement_date?: string;
+  recorded_at?: string;
 }
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -98,7 +100,7 @@ export function validateCreateTransfer(body: unknown): ValidatedCreateTransfer {
     throw new BalanceValidationError('Request body must be a JSON object');
   }
 
-  const { id, amount, from_method, to_method, movement_date, reason } =
+  const { id, amount, from_method, to_method, movement_date, reason, recorded_at } =
     body as Partial<CreateTransferRequest>;
 
   if (typeof amount !== 'string') {
@@ -132,6 +134,14 @@ export function validateCreateTransfer(body: unknown): ValidatedCreateTransfer {
     }
   }
 
+  let recordedAt: string | undefined = undefined;
+  if (recorded_at !== undefined && recorded_at !== null) {
+    if (typeof recorded_at !== 'string' || isNaN(Date.parse(recorded_at))) {
+      throw new BalanceValidationError('recorded_at must be a valid ISO 8601 timestamp string');
+    }
+    recordedAt = new Date(recorded_at).toISOString();
+  }
+
   return {
     id: typeof id === 'string' && id.trim() ? id.trim() : undefined,
     amount_paise: amountPaise,
@@ -139,6 +149,7 @@ export function validateCreateTransfer(body: unknown): ValidatedCreateTransfer {
     to_method,
     movement_date: movement_date || undefined,
     reason: typeof reason === 'string' ? reason.trim() : null,
+    recorded_at: recordedAt,
   };
 }
 
@@ -147,7 +158,7 @@ export function validateCreateAdjustment(body: unknown): ValidatedCreateAdjustme
     throw new BalanceValidationError('Request body must be a JSON object');
   }
 
-  const { id, payment_method, amount, direction, reason, movement_date } =
+  const { id, payment_method, amount, direction, reason, movement_date, recorded_at } =
     body as Partial<CreateAdjustmentRequest>;
 
   if (payment_method !== 'cash' && payment_method !== 'online') {
@@ -181,6 +192,14 @@ export function validateCreateAdjustment(body: unknown): ValidatedCreateAdjustme
     }
   }
 
+  let recordedAt: string | undefined = undefined;
+  if (recorded_at !== undefined && recorded_at !== null) {
+    if (typeof recorded_at !== 'string' || isNaN(Date.parse(recorded_at))) {
+      throw new BalanceValidationError('recorded_at must be a valid ISO 8601 timestamp string');
+    }
+    recordedAt = new Date(recorded_at).toISOString();
+  }
+
   const adjustmentPaise = direction === 'increase' ? absPaise : -absPaise;
 
   return {
@@ -190,5 +209,6 @@ export function validateCreateAdjustment(body: unknown): ValidatedCreateAdjustme
     direction,
     reason: reason.trim(),
     movement_date: movement_date || undefined,
+    recorded_at: recordedAt,
   };
 }

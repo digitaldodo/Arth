@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 describe('Database Schema & Migration Integrity Audit', () => {
-  const migrationsDir = path.resolve(process.cwd(), '../supabase/migrations');
+  const migrationsDir = fs.existsSync(path.resolve(process.cwd(), '../supabase/migrations'))
+    ? path.resolve(process.cwd(), '../supabase/migrations')
+    : path.resolve(process.cwd(), 'supabase/migrations');
 
-  test('All 24 numbered migration files exist in sequential order', () => {
+  test('All 25 numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -34,10 +36,22 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0021_dashboard_necessity_spending.sql',
       '0022_app_lock_webauthn.sql',
       '0023_fix_profiles_balances_configured.sql',
-      '0024_account_balances_rpc_hardening.sql'
+      '0024_account_balances_rpc_hardening.sql',
+      '0025_balance_snapshot_and_non_negative_balances.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  test('0025_balance_snapshot_and_non_negative_balances.sql enforces snapshot boundary, non-negative balance triggers, and FOR UPDATE locking', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0025_balance_snapshot_and_non_negative_balances.sql'), 'utf-8');
+    assert.ok(sql.includes('fn_validate_transaction_balance'), 'Must define fn_validate_transaction_balance trigger function');
+    assert.ok(sql.includes('fn_validate_movement_balance'), 'Must define fn_validate_movement_balance trigger function');
+    assert.ok(sql.includes('FOR UPDATE'), 'Must acquire row lock on profiles for concurrency safety');
+    assert.ok(sql.includes('balances_configured_at'), 'Must filter transactions by balances_configured_at snapshot timestamp');
+    assert.ok(sql.includes('recorded_at'), 'Must define and use recorded_at immutable timestamp');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_account_balances() FROM PUBLIC;'), 'Must revoke from PUBLIC');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_account_balances() TO authenticated;'), 'Must grant execute to authenticated role');
   });
 
 

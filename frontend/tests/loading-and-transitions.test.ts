@@ -40,6 +40,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: null,
         description: 'Tech Corp Salary',
         notes: 'Monthly direct credit',
+        recorded_at: '2026-10-01T10:00:00Z',
+
         created_at: '2026-10-01T10:00:00Z',
         updated_at: '2026-10-01T10:00:00Z',
       },
@@ -59,6 +61,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: 'essential',
         description: 'Groceries at Supermarket',
         notes: 'Weekly essentials',
+        recorded_at: '2026-10-05T10:00:00Z',
+
         created_at: '2026-10-05T10:00:00Z',
         updated_at: '2026-10-05T10:00:00Z',
       },
@@ -75,6 +79,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: 'luxury',
         description: 'Movie Ticket IMAX',
         notes: null,
+        recorded_at: '2026-10-06T10:00:00Z',
+
         created_at: '2026-10-06T10:00:00Z',
         updated_at: '2026-10-06T10:00:00Z',
       },
@@ -174,6 +180,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: 'essential',
         description: 'Dhaba Dinner',
         notes: 'Dinner with family',
+        recorded_at: '2026-10-10T10:00:00Z',
+
         created_at: '2026-10-10T10:00:00Z',
         updated_at: '2026-10-10T10:00:00Z',
       },
@@ -190,6 +198,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: 'essential',
         description: 'Metro Recharge',
         notes: null,
+        recorded_at: '2026-10-11T10:00:00Z',
+
         created_at: '2026-10-11T10:00:00Z',
         updated_at: '2026-10-11T10:00:00Z',
       },
@@ -206,6 +216,8 @@ describe('Arth — Loading States, Filtering & Smooth UI Transitions Suite', () 
         necessity: null,
         description: 'Design Consultancy',
         notes: 'Client payment',
+        recorded_at: '2026-10-12T10:00:00Z',
+
         created_at: '2026-10-12T10:00:00Z',
         updated_at: '2026-10-12T10:00:00Z',
       },

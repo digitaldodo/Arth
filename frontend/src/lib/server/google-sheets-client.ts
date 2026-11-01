@@ -12,6 +12,7 @@ export interface TransactionPayload {
   necessity?: 'need' | 'want' | null;
   description?: string | null;
   notes?: string | null;
+  recorded_at?: string;
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;

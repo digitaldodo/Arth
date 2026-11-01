@@ -357,6 +357,7 @@ export class InMemoryDashboardService implements IDashboardService {
           necessity: t.necessity,
           description: t.description,
           notes: t.notes,
+          recorded_at: (t as unknown as { recorded_at?: string }).recorded_at || t.created_at,
           created_at: t.created_at,
           updated_at: t.updated_at,
         };
