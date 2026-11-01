@@ -206,6 +206,7 @@ export async function fetchTransactions(
   if (query.necessity) params.set('necessity', query.necessity);
   if (query.start_date) params.set('start_date', query.start_date);
   if (query.end_date) params.set('end_date', query.end_date);
+  if (query.sort_by) params.set('sort_by', query.sort_by);
 
   const qs = params.toString();
   const url = qs ? `/api/backend/transactions?${qs}` : '/api/backend/transactions';

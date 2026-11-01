@@ -23,7 +23,102 @@ import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
-export type LedgerSortOption = 'date_desc' | 'amount_desc' | 'amount_asc';
+export type LedgerSortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
+
+export const LEDGER_SORT_STORAGE_KEY = 'arth_ledger_sort_preference';
+
+export function getInitialLedgerSortPreference(): LedgerSortOption {
+  if (typeof window === 'undefined') return 'date_desc';
+  try {
+    const saved = localStorage.getItem(LEDGER_SORT_STORAGE_KEY);
+    if (saved === 'date_desc' || saved === 'date_asc' || saved === 'amount_desc' || saved === 'amount_asc') {
+      return saved;
+    }
+  } catch {
+    // Ignore storage errors in restricted environments
+  }
+  return 'date_desc';
+}
+
+export function sortLedgerTransactions(
+  transactions: TransactionDTO[],
+  sortBy: LedgerSortOption
+): TransactionDTO[] {
+  return [...transactions].sort((a, b) => {
+    if (sortBy === 'amount_desc') {
+      if (b.amount_paise !== a.amount_paise) {
+        return b.amount_paise - a.amount_paise;
+      }
+      if (a.transaction_date !== b.transaction_date) {
+        return b.transaction_date.localeCompare(a.transaction_date);
+      }
+      const recA = a.recorded_at || a.created_at || '';
+      const recB = b.recorded_at || b.created_at || '';
+      if (recA !== recB) return recB.localeCompare(recA);
+      const crA = a.created_at || '';
+      const crB = b.created_at || '';
+      if (crA !== crB) return crB.localeCompare(crA);
+      return (b.id || '').localeCompare(a.id || '');
+    }
+
+    if (sortBy === 'amount_asc') {
+      if (a.amount_paise !== b.amount_paise) {
+        return a.amount_paise - b.amount_paise;
+      }
+      if (a.transaction_date !== b.transaction_date) {
+        return b.transaction_date.localeCompare(a.transaction_date);
+      }
+      const recA = a.recorded_at || a.created_at || '';
+      const recB = b.recorded_at || b.created_at || '';
+      if (recA !== recB) return recB.localeCompare(recA);
+      const crA = a.created_at || '';
+      const crB = b.created_at || '';
+      if (crA !== crB) return crB.localeCompare(crA);
+      return (b.id || '').localeCompare(a.id || '');
+    }
+
+    if (sortBy === 'date_asc') {
+      // 1. transaction_date ASC
+      if (a.transaction_date !== b.transaction_date) {
+        return a.transaction_date.localeCompare(b.transaction_date);
+      }
+      // 2. recorded_at ASC
+      const recA = a.recorded_at || a.created_at || '';
+      const recB = b.recorded_at || b.created_at || '';
+      if (recA !== recB) {
+        return recA.localeCompare(recB);
+      }
+      // 3. created_at ASC
+      const crA = a.created_at || '';
+      const crB = b.created_at || '';
+      if (crA !== crB) {
+        return crA.localeCompare(crB);
+      }
+      // 4. Transaction ID ASC (stable tie-breaker)
+      return (a.id || '').localeCompare(b.id || '');
+    }
+
+    // Default: 'date_desc' (Newest First)
+    // 1. transaction_date DESC
+    if (a.transaction_date !== b.transaction_date) {
+      return b.transaction_date.localeCompare(a.transaction_date);
+    }
+    // 2. recorded_at DESC
+    const recA = a.recorded_at || a.created_at || '';
+    const recB = b.recorded_at || b.created_at || '';
+    if (recA !== recB) {
+      return recB.localeCompare(recA);
+    }
+    // 3. created_at DESC
+    const crA = a.created_at || '';
+    const crB = b.created_at || '';
+    if (crA !== crB) {
+      return crB.localeCompare(crA);
+    }
+    // 4. Transaction ID DESC (stable tie-breaker)
+    return (b.id || '').localeCompare(a.id || '');
+  });
+}
 
 export interface TransactionLedgerProps {
   userProfile?: UserProfileSummary;
@@ -79,7 +174,16 @@ export function TransactionLedger({
     endDate: initialFilter.endDate,
   } : null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<LedgerSortOption>('date_desc');
+  const [sortBy, setSortByState] = useState<LedgerSortOption>(getInitialLedgerSortPreference);
+
+  const handleSortChange = (newSort: LedgerSortOption) => {
+    setSortByState(newSort);
+    try {
+      localStorage.setItem(LEDGER_SORT_STORAGE_KEY, newSort);
+    } catch {
+      // Ignore localStorage errors
+    }
+  };
 
   // Interactive transaction details & mutations state
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
@@ -157,6 +261,7 @@ export function TransactionLedger({
         necessity: selectedType === 'income' || selectedNecessity === 'all' ? undefined : selectedNecessity,
         start_date: activeDateRange.startDate,
         end_date: activeDateRange.endDate,
+        sort_by: sortBy,
         page_size: 50,
       }).then((result) => {
         if (querySeqRef.current !== currentSeq) return;
@@ -181,7 +286,7 @@ export function TransactionLedger({
       setIsInitialLoading(false);
       setIsRefreshing(false);
     });
-  }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, activeDateRange]);
+  }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, activeDateRange, sortBy]);
 
   // Clear query cache on external data mutations
   useEffect(() => {
@@ -234,13 +339,7 @@ export function TransactionLedger({
       });
     }
 
-    if (sortBy === 'amount_desc') {
-      result = [...result].sort((a, b) => b.amount_paise - a.amount_paise);
-    } else if (sortBy === 'amount_asc') {
-      result = [...result].sort((a, b) => a.amount_paise - b.amount_paise);
-    }
-
-    return result;
+    return sortLedgerTransactions(result, sortBy);
   }, [transactions, searchQuery, sortBy, selectedType, selectedCategory, selectedNecessity, selectedPaymentMethod, activeDateRange]);
 
   // Compute Net Cash Flow strictly from visible / filtered transactions
@@ -363,19 +462,22 @@ export function TransactionLedger({
     setSelectedType('all');
     setSelectedCategory('all');
     setSelectedNecessity('all');
+    setSelectedPaymentMethod('all');
     setSelectedDatePreset('all');
     setDateRangeOverride(null);
     setSearchQuery('');
-    setSortBy('date_desc');
+    handleSortChange('date_desc');
   };
 
   const isAnyFilterActive =
     selectedType !== 'all' ||
     selectedCategory !== 'all' ||
     selectedNecessity !== 'all' ||
+    selectedPaymentMethod !== 'all' ||
     selectedDatePreset !== 'all' ||
     dateRangeOverride !== null ||
-    searchQuery.trim().length > 0;
+    searchQuery.trim().length > 0 ||
+    sortBy !== 'date_desc';
 
   return (
     <div className="space-y-5">
@@ -574,11 +676,12 @@ export function TransactionLedger({
           <select
             aria-label="Sort transaction ordering"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as LedgerSortOption)}
+            onChange={(e) => handleSortChange(e.target.value as LedgerSortOption)}
             className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
             title="Sort transaction ordering"
           >
             <option value="date_desc">Newest First</option>
+            <option value="date_asc">Oldest First</option>
             <option value="amount_desc">Amount: High to Low</option>
             <option value="amount_asc">Amount: Low to High</option>
           </select>

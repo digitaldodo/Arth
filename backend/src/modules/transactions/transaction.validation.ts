@@ -69,6 +69,7 @@ export interface ValidatedTransactionListQuery {
   necessity?: NecessityClass;
   start_date?: string;
   end_date?: string;
+  sort_by?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 }
 
 export interface ValidatedCategoryListQuery {
@@ -281,6 +282,19 @@ export function validateTransactionListQuery(
     end_date = query.end_date;
   }
 
+  let sort_by: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | undefined = undefined;
+  if (query.sort_by !== undefined) {
+    if (
+      query.sort_by !== 'date_desc' &&
+      query.sort_by !== 'date_asc' &&
+      query.sort_by !== 'amount_desc' &&
+      query.sort_by !== 'amount_asc'
+    ) {
+      throw new ValidationError("Query sort_by must be 'date_desc', 'date_asc', 'amount_desc', or 'amount_asc'");
+    }
+    sort_by = query.sort_by;
+  }
+
   return {
     page,
     page_size,
@@ -289,6 +303,7 @@ export function validateTransactionListQuery(
     necessity,
     start_date,
     end_date,
+    sort_by,
   };
 }
 

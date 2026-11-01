@@ -254,25 +254,40 @@ export async function getCachedTransactions(userId: string): Promise<OfflineTran
       const tx = db.transaction('transactions', 'readonly');
       const store = tx.objectStore('transactions');
 
+      const processResults = (raw: OfflineTransactionDTO[]) => {
+        const filtered = raw.filter((t) => t.user_id === userId && !t.deleted_locally);
+        // Canonical deterministic newest-first ordering:
+        // 1. transaction_date DESC
+        // 2. recorded_at DESC
+        // 3. created_at DESC
+        // 4. Transaction ID DESC (stable tie-breaker)
+        filtered.sort((a, b) => {
+          if (a.transaction_date !== b.transaction_date) {
+            return b.transaction_date.localeCompare(a.transaction_date);
+          }
+          const recA = a.recorded_at || a.created_at || '';
+          const recB = b.recorded_at || b.created_at || '';
+          if (recA !== recB) {
+            return recB.localeCompare(recA);
+          }
+          const crA = a.created_at || '';
+          const crB = b.created_at || '';
+          if (crA !== crB) {
+            return crB.localeCompare(crA);
+          }
+          return (b.id || '').localeCompare(a.id || '');
+        });
+        resolve(filtered);
+      };
+
       if (store.indexNames.contains('user_id')) {
         const index = store.index('user_id');
         const req = index.getAll(userId);
-        req.onsuccess = () => {
-          const results = (req.result || []) as OfflineTransactionDTO[];
-          // Filter out locally deleted records
-          resolve(results.filter((t) => t.user_id === userId && !t.deleted_locally));
-        };
+        req.onsuccess = () => processResults((req.result || []) as OfflineTransactionDTO[]);
         req.onerror = () => resolve([]);
       } else {
         const req = store.getAll();
-        req.onsuccess = () => {
-          const results = (req.result || []) as OfflineTransactionDTO[];
-          resolve(
-            results.filter(
-              (t) => t.user_id === userId && !t.deleted_locally
-            )
-          );
-        };
+        req.onsuccess = () => processResults((req.result || []) as OfflineTransactionDTO[]);
         req.onerror = () => resolve([]);
       }
     });

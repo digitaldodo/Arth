@@ -75,6 +75,7 @@ export interface TransactionListQuery {
   necessity?: NecessityClass;
   start_date?: string; // YYYY-MM-DD
   end_date?: string; // YYYY-MM-DD
+  sort_by?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 }
 
 export interface TransactionListResponse {

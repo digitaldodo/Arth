@@ -476,6 +476,64 @@ describe('Backend Transactions & Categories API', () => {
     }
   });
 
+  test('GET /api/v1/transactions rejects invalid sort_by with 400', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions?sort_by=invalid_sort',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(res.statusCode, 400);
+    const body = res.json();
+    assert.match(body.message, /Query sort_by must be/);
+  });
+
+  test('GET /api/v1/transactions supports sort_by=date_desc and sort_by=date_asc', async () => {
+    const descRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions?sort_by=date_desc',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(descRes.statusCode, 200);
+    const descItems = descRes.json().items;
+
+    const ascRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions?sort_by=date_asc',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(ascRes.statusCode, 200);
+    const ascItems = ascRes.json().items;
+
+    if (descItems.length >= 2) {
+      assert.ok(descItems[0].transaction_date >= descItems[descItems.length - 1].transaction_date);
+      assert.ok(ascItems[0].transaction_date <= ascItems[ascItems.length - 1].transaction_date);
+      assert.equal(descItems[0].id, ascItems[ascItems.length - 1].id);
+    }
+  });
+
+  test('GET /api/v1/transactions supports sort_by=amount_desc and sort_by=amount_asc', async () => {
+    const descRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions?sort_by=amount_desc',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(descRes.statusCode, 200);
+    const descItems = descRes.json().items;
+
+    const ascRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/transactions?sort_by=amount_asc',
+      headers: { authorization: 'Bearer user-a-token' },
+    });
+    assert.equal(ascRes.statusCode, 200);
+    const ascItems = ascRes.json().items;
+
+    if (descItems.length >= 2) {
+      assert.ok(descItems[0].amount_paise >= descItems[descItems.length - 1].amount_paise);
+      assert.ok(ascItems[0].amount_paise <= ascItems[ascItems.length - 1].amount_paise);
+    }
+  });
+
   // 7. Transaction Updates, Soft Deletion, and Restoration
   test('PATCH /api/v1/transactions/:id updates transaction fields and records outbox event', async () => {
     const txnId = uuidv7();

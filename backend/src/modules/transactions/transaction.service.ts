@@ -242,7 +242,7 @@ export class SupabaseTransactionService implements ITransactionService {
     const { data: inserted, error: insertErr } = await client
       .from('transactions')
       .insert(insertPayload)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at')
       .single();
 
     if (insertErr || !inserted) {
@@ -257,7 +257,7 @@ export class SupabaseTransactionService implements ITransactionService {
         // Concurrent replay detected: another request inserted with this ID
         const { data: concurrentExisting } = await client
           .from('transactions')
-          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
           .eq('id', input.id)
           .maybeSingle();
 
@@ -310,13 +310,39 @@ export class SupabaseTransactionService implements ITransactionService {
     let qb = client
       .from('transactions')
       .select(
-        'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)',
+        'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)',
         { count: 'exact' }
       )
-      .is('deleted_at', null)
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false });
+      .is('deleted_at', null);
+
+    if (query.sort_by === 'date_asc') {
+      qb = qb
+        .order('transaction_date', { ascending: true })
+        .order('recorded_at', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
+    } else if (query.sort_by === 'amount_desc') {
+      qb = qb
+        .order('amount_paise', { ascending: false })
+        .order('transaction_date', { ascending: false })
+        .order('recorded_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+    } else if (query.sort_by === 'amount_asc') {
+      qb = qb
+        .order('amount_paise', { ascending: true })
+        .order('transaction_date', { ascending: false })
+        .order('recorded_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+    } else {
+      // Default: date_desc (Newest First)
+      qb = qb
+        .order('transaction_date', { ascending: false })
+        .order('recorded_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+    }
 
     if (query.type) {
       qb = qb.eq('type', query.type);
@@ -409,7 +435,7 @@ export class SupabaseTransactionService implements ITransactionService {
     // 1. Fetch existing transaction belonging to caller
     const { data: existing, error: fetchErr } = await client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .eq('id', id)
       .maybeSingle();
 
@@ -485,7 +511,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .from('transactions')
       .update(updateData)
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .single();
 
     if (updateErr || !updated) {
@@ -562,7 +588,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .from('transactions')
       .update({ deleted_at: null, updated_at: now })
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .single();
 
     if (updateErr || !restored) {
@@ -786,10 +812,41 @@ export class InMemoryTransactionService implements ITransactionService {
       filtered = filtered.filter((t) => t.transaction_date <= query.end_date!);
     }
 
-    // Deterministic sort: transaction_date DESC, created_at DESC, id DESC
+    const sortBy = query.sort_by || 'date_desc';
     filtered.sort((a, b) => {
+      if (sortBy === 'amount_desc') {
+        if (b.amount_paise !== a.amount_paise) {
+          return b.amount_paise - a.amount_paise;
+        }
+      } else if (sortBy === 'amount_asc') {
+        if (a.amount_paise !== b.amount_paise) {
+          return a.amount_paise - b.amount_paise;
+        }
+      }
+
+      if (sortBy === 'date_asc') {
+        if (a.transaction_date !== b.transaction_date) {
+          return a.transaction_date.localeCompare(b.transaction_date);
+        }
+        const recA = a.recorded_at || a.created_at || '';
+        const recB = b.recorded_at || b.created_at || '';
+        if (recA !== recB) {
+          return recA.localeCompare(recB);
+        }
+        if (a.created_at !== b.created_at) {
+          return a.created_at.localeCompare(b.created_at);
+        }
+        return a.id.localeCompare(b.id);
+      }
+
+      // Default: date_desc (Newest First)
       if (a.transaction_date !== b.transaction_date) {
         return b.transaction_date.localeCompare(a.transaction_date);
+      }
+      const recA = a.recorded_at || a.created_at || '';
+      const recB = b.recorded_at || b.created_at || '';
+      if (recA !== recB) {
+        return recB.localeCompare(recA);
       }
       if (a.created_at !== b.created_at) {
         return b.created_at.localeCompare(a.created_at);

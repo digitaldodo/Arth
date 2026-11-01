@@ -344,6 +344,11 @@ export class InMemoryDashboardService implements IDashboardService {
         if (a.transaction_date !== b.transaction_date) {
           return b.transaction_date.localeCompare(a.transaction_date);
         }
+        const recA = a.recorded_at || a.created_at || '';
+        const recB = b.recorded_at || b.created_at || '';
+        if (recA !== recB) {
+          return recB.localeCompare(recA);
+        }
         if (a.created_at !== b.created_at) {
           return b.created_at.localeCompare(a.created_at);
         }
