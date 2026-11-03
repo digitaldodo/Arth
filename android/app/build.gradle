@@ -11,6 +11,13 @@ def gradleValue = { String name, String fallback = '' ->
 }
 def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"' }
 
+def rawVersionCode = gradleValue('VERSION_CODE', gradleValue('versionCode', ''))
+def rawVersionName = gradleValue('VERSION_NAME', gradleValue('versionName', ''))
+def buildNumber = (gradleValue('BUILD_NUMBER', gradleValue('GITHUB_RUN_NUMBER', '3'))).toInteger()
+def baseVersionName = rawVersionName ?: '1.2.0'
+def finalVersionCode = rawVersionCode ? rawVersionCode.toInteger() : (1000 + buildNumber)
+def finalVersionName = rawVersionName ? (rawVersionName.contains('+build.') ? rawVersionName : "${rawVersionName}+build.${buildNumber}") : "${baseVersionName}+build.${buildNumber}"
+
 def keystoreFilePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE") ?: "release.keystore"
 def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
 def keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "arth"
@@ -24,8 +31,8 @@ android {
         applicationId "com.digitaldodo.arth"
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName "1.2.0"
+        versionCode finalVersionCode
+        versionName finalVersionName
 
         def defaultApiUrl = 'https://arth-backend-nchl.onrender.com'
         def defaultSupabaseUrl = 'https://fbmmkqdwkayrrsodueqd.supabase.co'
@@ -43,9 +50,9 @@ android {
         local {
             dimension "distribution"
             applicationIdSuffix ".local"
-            versionNameSuffix "-local"
+            versionNameSuffix ""
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
-            resValue "string", "appName", "Arth (Local)"
+            resValue "string", "appName", "Arth"
         }
         play {
             dimension "distribution"

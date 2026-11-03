@@ -345,6 +345,29 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/download"
+              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] rounded-xs transition-colors"
+              title="Download Native Android App"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Android App</span>
+            </Link>
             {user ? (
               <div className="hidden sm:flex items-center gap-3">
                 <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
@@ -776,6 +799,32 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
                       </div>
                       <ThemeToggle className="sm:w-64" />
                     </div>
+
+                    {/* Native Android App Card */}
+                    <Link
+                      href="/download"
+                      className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">📱</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                              Native Android Application
+                            </h3>
+                            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
+                              APK Release
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)]">
+                            Download the official offline-first native app with fingerprint unlock
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-[var(--text-muted)] group-hover:text-[var(--text-primary)] font-bold transition-colors">
+                        &rarr;
+                      </span>
+                    </Link>
 
                     <InstallPromptCard userId={user?.id} />
 
