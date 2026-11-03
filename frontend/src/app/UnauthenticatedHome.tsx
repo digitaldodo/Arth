@@ -5,10 +5,16 @@ import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { getCachedPwaUser, clearCachedPwaUserContext, type CachedPwaUser } from '@/lib/offline-db';
 import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
+import { isAndroidPhone } from '@/lib/device';
 
 export function UnauthenticatedHome() {
   const [cachedUser, setCachedUser] = useState<CachedPwaUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const [isAndroid, setIsAndroid] = useState(false);
+
+  useEffect(() => {
+    setIsAndroid(isAndroidPhone());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,47 +61,81 @@ export function UnauthenticatedHome() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
-      {/* Slim Header */}
-      <header className="w-full max-w-4xl mx-auto px-6 py-5 flex items-center justify-between border-b border-[var(--border-hairline)]">
-        <Link href="/" className="flex items-center gap-2 group">
-          <ArthLogo
-            variant="full"
-            className="h-6 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
-          />
-          <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
-            Ledger
-          </span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/download"
-            className="text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-2.5 py-1.5 rounded-[3px] flex items-center gap-1.5"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+      {/* Redesigned Header: Single clean row on desktop/iPhone, elegant two-row bar on Android */}
+      <header className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--border-hairline)] space-y-3 sm:space-y-0">
+        {/* Row 1: Brand Logo & Desktop / Standard Navigation */}
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 group">
+            <ArthLogo
+              variant="full"
+              className="h-6 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
+            />
+            <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
+              Ledger
+            </span>
+          </Link>
+
+          {/* Actions for Desktop & Unsupported/iOS Devices (hidden on Android mobile row) */}
+          <div className={`${isAndroid ? 'hidden md:flex' : 'flex'} items-center gap-2.5`}>
+            <Link
+              href="/login?mode=signup"
+              className="text-[13px] font-medium text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] transition-colors px-3 py-1.5 rounded-[3px] shadow-2xs whitespace-nowrap"
             >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            <span>Download App</span>
-          </Link>
-          <Link
-            href="/login"
-            className="text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-2.5 py-1.5 rounded-[3px]"
-          >
-            Sign In
-          </Link>
+              Sign Up
+            </Link>
+            <Link
+              href="/login"
+              className="text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-3 py-1.5 rounded-[3px] whitespace-nowrap"
+            >
+              Log In
+            </Link>
+          </div>
         </div>
+
+        {/* Row 2: Android Phone Actions (rendered ONLY on Android smartphones on mobile viewports) */}
+        {isAndroid && (
+          <div className="md:hidden grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-hairline)]">
+            <a
+              href="/api/android/download"
+              download="Arth.apk"
+              className="h-9 px-2 text-[11px] sm:text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-[4px] hover:bg-[var(--action-primary-hover)] transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
+              title="Download Arth Android APK directly"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="shrink-0"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span className="truncate">Download App</span>
+            </a>
+
+            <Link
+              href="/login?mode=signup"
+              className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
+            >
+              <span className="truncate">Sign Up</span>
+            </Link>
+
+            <Link
+              href="/login"
+              className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center cursor-pointer whitespace-nowrap min-w-0"
+            >
+              <span className="truncate">Log In</span>
+            </Link>
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}
@@ -114,12 +154,13 @@ export function UnauthenticatedHome() {
             authoritative record-keeping, and exact integer-paise calculations.
           </p>
 
+          {/* Primary Registration CTA - Replaced duplicate "Sign In" with "Get Started →" */}
           <div className="pt-2">
             <Link
-              href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center h-10 sm:h-9 px-6 rounded-[3px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[13px] font-medium hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2"
+              href="/login?mode=signup"
+              className="w-full sm:w-auto inline-flex items-center justify-center h-10 sm:h-9 px-6 rounded-[3px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[13px] font-semibold hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2"
             >
-              Sign In &rarr;
+              Get Started &rarr;
             </Link>
           </div>
 

@@ -20,8 +20,12 @@ export interface AndroidReleaseInfo {
 
 function getFallbackMetadata(): AndroidReleaseInfo {
   try {
-    const filePath = path.join(process.cwd(), 'public', 'android', 'release.json');
-    if (fs.existsSync(filePath)) {
+    const candidates = [
+      path.join(process.cwd(), 'public', 'android', 'release.json'),
+      path.join(process.cwd(), 'frontend', 'public', 'android', 'release.json'),
+    ];
+    const filePath = candidates.find((p) => fs.existsSync(p));
+    if (filePath) {
       const content = fs.readFileSync(filePath, 'utf-8');
       return JSON.parse(content) as AndroidReleaseInfo;
     }
@@ -31,16 +35,16 @@ function getFallbackMetadata(): AndroidReleaseInfo {
 
   return {
     version: '1.2.0',
-    versionCode: 1003,
-    buildNumber: 3,
+    versionCode: 1004,
+    buildNumber: 4,
     releaseDate: '2026-11-03',
     minAndroidVersion: 'Android 8.0 (API 26)',
     targetAndroidVersion: 'Android 15 (API 35)',
     apkFileName: 'Arth.apk',
-    apkSize: '8.4 MB',
-    downloadUrl: 'https://github.com/digitaldodo/Arth/releases/download/android-latest/Arth.apk',
+    apkSize: '13.5 MB',
+    downloadUrl: '/android/Arth.apk',
     githubReleaseUrl: 'https://github.com/digitaldodo/Arth/releases/tag/android-latest',
-    sha256: '4b611ddf4fa5e3e29f3d6dbf4369a84497914040f7b0df0200ca16215c0e181d',
+    sha256: 'b658dcb61a35e60bc88bfac6866d16f8de085522ea06977bb8f1e501dec4e284',
     highlights: [
       'Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system',
       'Offline-first transaction management with local Room database and Supabase synchronization',
@@ -95,7 +99,7 @@ export async function GET() {
       const releaseDate = data.published_at ? data.published_at.slice(0, 10) : fallback.releaseDate;
       const sizeBytes = apkAsset?.size;
       const apkSize = sizeBytes ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB` : fallback.apkSize;
-      const downloadUrl = apkAsset?.browser_download_url || fallback.downloadUrl;
+      const downloadUrl = '/api/android/download';
 
       return NextResponse.json(
         {

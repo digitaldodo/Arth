@@ -16,6 +16,7 @@ export default async function LoginPage({
     message?: string;
     code?: string;
     next?: string;
+    mode?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -157,7 +158,11 @@ export default async function LoginPage({
           {/* Right Column: Authentication Card Form */}
           <div className="w-full max-w-[440px] mx-auto lg:max-w-none lg:col-span-6">
             <div className="p-6 sm:p-8 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs">
-              <AuthForm initialError={resolvedError} initialMessage={resolvedMessage} />
+              <AuthForm
+                initialError={resolvedError}
+                initialMessage={resolvedMessage}
+                initialMode={params.mode === 'signup' ? 'signup' : 'signin'}
+              />
             </div>
           </div>
         </div>

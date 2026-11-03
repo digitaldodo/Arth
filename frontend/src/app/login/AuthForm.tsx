@@ -18,11 +18,23 @@ type AuthMode = 'signin' | 'signup' | 'forgot' | 'resend_confirm';
 interface AuthFormProps {
   initialError?: string;
   initialMessage?: string;
+  initialMode?: AuthMode;
 }
 
-export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
+export function AuthForm({
+  initialError,
+  initialMessage,
+  initialMode = 'signin',
+}: AuthFormProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>('signin');
+  const [mode, setMode] = useState<AuthMode>(() => {
+    if (typeof window !== 'undefined') {
+      const searchMode = new URLSearchParams(window.location.search).get('mode');
+      if (searchMode === 'signup') return 'signup';
+      if (searchMode === 'forgot') return 'forgot';
+    }
+    return initialMode;
+  });
   const [isPending, startTransition] = useTransition();
   const [isGooglePending, startGoogleTransition] = useTransition();
 

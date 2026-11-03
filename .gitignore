@@ -52,6 +52,7 @@ android/.idea/
 *.keystore
 *.jks
 *.apk
+!frontend/public/android/*.apk
 *.aab
 
 # Scratch files

@@ -65,10 +65,16 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             &larr; Web App
           </Link>
           <Link
-            href="/login"
-            className="text-[13px] font-medium px-3 py-1.5 rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors"
+            href="/login?mode=signup"
+            className="text-[13px] font-medium text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] transition-colors px-3 py-1.5 rounded-[3px] shadow-2xs"
           >
-            Sign In
+            Sign Up
+          </Link>
+          <Link
+            href="/login"
+            className="text-[13px] font-medium px-3 py-1.5 rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors"
+          >
+            Log In
           </Link>
         </div>
       </header>
@@ -99,6 +105,14 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
               Manage your finances with the native Arth Android application. Built with Kotlin and
               Jetpack Compose for speed, offline-first reliability, and biometric security.
             </p>
+
+            {/* Dedicated Android Exclusivity Notice */}
+            <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-start gap-3 text-xs text-[var(--text-secondary)]">
+              <span className="w-2 h-2 rounded-full bg-[var(--income-fg)] shrink-0 mt-1" />
+              <p className="leading-relaxed">
+                <strong className="text-[var(--text-primary)] font-semibold">Intended for Android Phones:</strong> This native package (.apk) is built specifically for devices running Android 8.0 (Oreo, API 26) or higher. iOS (iPhone/iPad) and desktop users should use the official Arth web application or install the PWA.
+              </p>
+            </div>
           </div>
 
           {/* Primary Action Button Bar */}
