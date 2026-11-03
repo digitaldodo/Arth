@@ -1,24 +1,29 @@
 package com.digitaldodo.arth
 
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.feature.auth.AuthViewModel
@@ -60,6 +65,7 @@ class MainActivity : FragmentActivity() {
     private val smsViewModel: SmsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         val secureStorage = SecureStorage(this)
@@ -81,14 +87,55 @@ class MainActivity : FragmentActivity() {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = androidx.compose.ui.Alignment.Center
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Locked with Biometrics",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Lock",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+
+                                Text(
+                                    text = "Arth is Locked",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+
+                                Text(
+                                    text = "Biometric authentication is required to access your financial records and balances.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = ArthTheme.colors.textSecondary,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                ArthButton(
+                                    text = "Unlock Arth",
+                                    icon = Icons.Default.Fingerprint,
+                                    onClick = {
+                                        promptBiometrics { isUnlocked = true }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(0.7f)
+                                )
+                            }
                         }
                     }
                 } else {
@@ -121,21 +168,30 @@ class MainActivity : FragmentActivity() {
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // If device doesn't have biometrics enrolled or error, let them in or finish
-                    if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS || errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT) {
+                    // If hardware is not present or no biometrics enrolled, unlock so user is not stuck
+                    if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS ||
+                        errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT ||
+                        errorCode == BiometricPrompt.ERROR_HW_UNAVAILABLE) {
                         onSuccess()
                     }
                 }
             }
         )
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Arth")
             .setSubtitle("Authenticate to view your financial ledger")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-            .build()
 
-        biometricPrompt.authenticate(promptInfo)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            promptInfoBuilder.setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+        } else {
+            promptInfoBuilder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            promptInfoBuilder.setNegativeButtonText("Cancel")
+        }
+
+        biometricPrompt.authenticate(promptInfoBuilder.build())
     }
 }
 

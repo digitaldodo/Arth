@@ -27,11 +27,29 @@ android {
         versionCode 3
         versionName "1.2.0"
 
-        buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL'))
-        buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY'))
-        buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL'))
+        def defaultApiUrl = 'https://arth-9h3f.vercel.app'
+        def defaultSupabaseUrl = 'https://arth-9h3f.vercel.app'
+        buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL', defaultSupabaseUrl))
+        buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY', ''))
+        buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL', defaultApiUrl))
 
         resValue "string", "appName", "Arth"
+    }
+
+    flavorDimensions = ["distribution"]
+    productFlavors {
+        local {
+            dimension "distribution"
+            applicationIdSuffix ".local"
+            versionNameSuffix "-local"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
+            resValue "string", "appName", "Arth (Local)"
+        }
+        play {
+            dimension "distribution"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
+            resValue "string", "appName", "Arth"
+        }
     }
 
     signingConfigs {
@@ -96,6 +114,7 @@ dependencies {
 
     // AndroidX & Architecture
     implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.biometric:biometric:1.1.0'

@@ -118,14 +118,26 @@ class AuthInterceptor(private val secureStorage: SecureStorage) : Interceptor {
 }
 
 object NetworkClient {
+    private const val DEFAULT_API_BASE_URL = "https://arth-9h3f.vercel.app/"
+    private const val DEFAULT_SUPABASE_BASE_URL = "https://arth-9h3f.vercel.app/"
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
     }
 
+    private fun sanitizeBaseUrl(configured: String?, defaultUrl: String): String {
+        val candidate = configured?.trim().orEmpty()
+        return if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+            candidate.trimEnd('/') + "/"
+        } else {
+            defaultUrl
+        }
+    }
+
     fun createArthApi(secureStorage: SecureStorage): ArthApi {
-        val baseUrl = BuildConfig.API_URL.trimEnd('/') + "/"
+        val baseUrl = sanitizeBaseUrl(BuildConfig.API_URL, DEFAULT_API_BASE_URL)
         val client = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(secureStorage))
             .addInterceptor(HttpLoggingInterceptor().apply {
@@ -144,13 +156,14 @@ object NetworkClient {
     }
 
     fun createSupabaseAuthApi(): SupabaseAuthApi {
-        val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/') + "/"
+        val baseUrl = sanitizeBaseUrl(BuildConfig.SUPABASE_URL, DEFAULT_SUPABASE_BASE_URL)
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
-                    .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                    .build()
-                chain.proceed(req)
+                if (BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
+                    req.addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                }
+                chain.proceed(req.build())
             }
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)

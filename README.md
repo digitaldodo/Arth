@@ -75,6 +75,11 @@ arth/
 │       ├── package.json
 │       └── tsconfig.json
 │
+├── android/                      # Native Kotlin + Jetpack Compose Android App
+│   ├── app/                      # Feature modules, Room DB, WorkManager sync, SMS parser
+│   ├── build.gradle              # Multi-flavor Gradle build (local vs play)
+│   └── src/                      # Kotlin source sets (main, local, play)
+│
 ├── supabase/                     # Database Infrastructure
 │   ├── migrations/               # Numbered, append-only SQL migrations
 │   ├── tests/                    # Database-level pgTAP tests

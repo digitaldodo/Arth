@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.digitaldodo.arth.BuildConfig
 import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthCard
@@ -38,19 +39,27 @@ fun SettingsScreen(
     val context = LocalContext.current
     val secureStorage = remember { SecureStorage(context) }
     var biometricLock by remember { mutableStateOf(secureStorage.isBiometricLockEnabled()) }
+    val isSmsSupported = BuildConfig.SMS_DETECTION_SUPPORTED
     var showSmsDisclosure by remember { mutableStateOf(false) }
+    var showLocalBuildNotice by remember { mutableStateOf(false) }
 
     var hasSmsPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+            if (isSmsSupported) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+            } else {
+                false
+            }
         )
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        hasSmsPermission = permissions[Manifest.permission.RECEIVE_SMS] == true ||
-            permissions[Manifest.permission.READ_SMS] == true
+        if (isSmsSupported) {
+            hasSmsPermission = permissions[Manifest.permission.RECEIVE_SMS] == true ||
+                permissions[Manifest.permission.READ_SMS] == true
+        }
     }
 
     val db = remember { ArthDatabase.getInstance(context) }
@@ -158,7 +167,9 @@ fun SettingsScreen(
 
             item {
                 ArthCard(onClick = {
-                    if (!hasSmsPermission) {
+                    if (!isSmsSupported) {
+                        showLocalBuildNotice = true
+                    } else if (!hasSmsPermission) {
                         showSmsDisclosure = true
                     } else {
                         onNavigateToSmsReview()
@@ -179,9 +190,17 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = if (hasSmsPermission) "Active • Tap to view pending queue" else "Tap to enable on-device detection",
+                                    text = when {
+                                        !isSmsSupported -> "Disabled in local build • Available in Play release"
+                                        hasSmsPermission -> "Active • Tap to view pending queue"
+                                        else -> "Tap to enable on-device detection"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (hasSmsPermission) ArthTheme.colors.emerald else ArthTheme.colors.amber
+                                    color = when {
+                                        !isSmsSupported -> ArthTheme.colors.textMuted
+                                        hasSmsPermission -> ArthTheme.colors.emerald
+                                        else -> ArthTheme.colors.amber
+                                    }
                                 )
                             }
                         }
@@ -282,6 +301,30 @@ fun SettingsScreen(
                         permissions.add(Manifest.permission.POST_NOTIFICATIONS)
                     }
                     permissionLauncher.launch(permissions.toTypedArray())
+                }
+            )
+        }
+
+        if (showLocalBuildNotice) {
+            AlertDialog(
+                onDismissRequest = { showLocalBuildNotice = false },
+                title = {
+                    Text(
+                        text = "Local Build Configuration",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Automatic SMS transaction detection is disabled in this local build to prevent Google Play Protect from blocking direct APK sideloading.\n\n" +
+                               "The official Google Play distribution build includes complete on-device SMS parsing with explicit privacy disclosures.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLocalBuildNotice = false }) {
+                        Text("Understood")
+                    }
                 }
             )
         }

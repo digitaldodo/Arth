@@ -12,4 +12,14 @@
         <item name="android:statusBarColor">#FBFBF9</item>
         <item name="android:navigationBarColor">#FBFBF9</item>
     </style>
+    <style name="Theme.Arth" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FBFBF9</item>
+        <item name="android:navigationBarColor">#FBFBF9</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="Theme.Arth.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FBFBF9</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Arth</item>
+    </style>
 </resources>
