@@ -44,8 +44,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Restore Gradle Cache
         uses: actions/cache@v4
@@ -86,8 +88,11 @@ jobs:
 
       - name: Decode Release Keystore
         id: prepare-keystore
+        env:
+          KEYSTORE_PRIMARY: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_FALLBACK: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          KEYSTORE_BASE64="${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}"
+          KEYSTORE_BASE64="${KEYSTORE_PRIMARY:-$KEYSTORE_FALLBACK}"
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "Decoding production signing keystore from GitHub Secrets..."
             echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
@@ -112,22 +117,29 @@ jobs:
         env:
           KEYSTORE_FILE: "release.keystore"
           ANDROID_KEYSTORE_PATH: "release.keystore"
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || env.EPHEMERAL_KEY_PASS }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || env.EPHEMERAL_KEY_PASS }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'arth' }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'arth' }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || env.EPHEMERAL_KEY_PASS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || env.EPHEMERAL_KEY_PASS }}
+          INPUT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          INPUT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          INPUT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           BUILD_NUMBER: ${{ env.BUILD_NUM }}
           VERSION_NAME: ${{ env.BASE_VERSION }}
           VERSION_CODE: ${{ env.VERSION_CODE }}
         run: |
+          export KEYSTORE_PASSWORD="${INPUT_KEYSTORE_PASSWORD:-$EPHEMERAL_KEY_PASS}"
+          export ANDROID_KEYSTORE_PASSWORD="${INPUT_KEYSTORE_PASSWORD:-$EPHEMERAL_KEY_PASS}"
+          export KEY_ALIAS="${INPUT_KEY_ALIAS:-arth}"
+          export ANDROID_KEY_ALIAS="${INPUT_KEY_ALIAS:-arth}"
+          export KEY_PASSWORD="${INPUT_KEY_PASSWORD:-$EPHEMERAL_KEY_PASS}"
+          export ANDROID_KEY_PASSWORD="${INPUT_KEY_PASSWORD:-$EPHEMERAL_KEY_PASS}"
           ./gradlew :app:assembleLocalRelease --no-daemon --stacktrace
 
       - name: Package & Prepare Artifacts
         id: package-artifacts
         run: |
-          RAW_APK=$(find android/app/build/outputs/apk/local/release -name "*.apk" | head -n 1)
+          RAW_APK=$(find android/app/build/outputs/apk/local/release -name "*.apk" ! -name "*unsigned*" | head -n 1)
+          if [ -z "$RAW_APK" ]; then
+            RAW_APK=$(find android/app/build/outputs/apk/local/release -name "*.apk" | head -n 1)
+          fi
+
           if [ -z "$RAW_APK" ] || [ ! -f "$RAW_APK" ]; then
             echo "::error::Expected APK was not generated in android/app/build/outputs/apk/local/release"
             exit 1
@@ -138,7 +150,10 @@ jobs:
 
           # Verify signature
           echo "Verifying APK signature with apksigner..."
-          BUILD_TOOLS_DIR=$(find $ANDROID_HOME/build-tools -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+          BUILD_TOOLS_DIR=$(find $ANDROID_HOME/build-tools -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$BUILD_TOOLS_DIR" ]; then
+            BUILD_TOOLS_DIR=$(find /usr/local/lib/android/sdk/build-tools -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1)
+          fi
           echo "Using build-tools at: $BUILD_TOOLS_DIR"
           "$BUILD_TOOLS_DIR/apksigner" verify --verbose Arth.apk || true
 
@@ -164,27 +179,27 @@ jobs:
 
           # Generate dynamic release metadata JSON
           cat <<EOF > release.json
-          {
-            "version": "${{ env.BASE_VERSION }}",
-            "versionCode": ${{ env.VERSION_CODE }},
-            "buildNumber": ${{ env.BUILD_NUM }},
-            "releaseDate": "$(date -u +%Y-%m-%d)",
-            "minAndroidVersion": "Android 8.0 (API 26)",
-            "targetAndroidVersion": "Android 15 (API 35)",
-            "apkFileName": "Arth.apk",
-            "apkSize": "${APK_SIZE_MB}",
-            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/android-latest/Arth.apk",
-            "githubReleaseUrl": "https://github.com/${{ github.repository }}/releases/tag/android-latest",
-            "sha256": "${SHA256_HASH}",
-            "highlights": [
-              "Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system",
-              "Offline-first transaction management with local Room database and Supabase synchronization",
-              "Biometric Fingerprint & Device Credential app lock with AndroidX BiometricPrompt",
-              "Direct distribution build with zero sensitive SMS permissions for user privacy and security"
-            ],
-            "disclaimer": "This direct APK release does not request or include SMS permissions. Financial transaction auto-detection from SMS is exclusive to the upcoming Google Play Store release."
-          }
-          EOF
+{
+  "version": "${{ env.BASE_VERSION }}",
+  "versionCode": ${{ env.VERSION_CODE }},
+  "buildNumber": ${{ env.BUILD_NUM }},
+  "releaseDate": "$(date -u +%Y-%m-%d)",
+  "minAndroidVersion": "Android 8.0 (API 26)",
+  "targetAndroidVersion": "Android 15 (API 35)",
+  "apkFileName": "Arth.apk",
+  "apkSize": "${APK_SIZE_MB}",
+  "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/android-latest/Arth.apk",
+  "githubReleaseUrl": "https://github.com/${{ github.repository }}/releases/tag/android-latest",
+  "sha256": "${SHA256_HASH}",
+  "highlights": [
+    "Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system",
+    "Offline-first transaction management with local Room database and Supabase synchronization",
+    "Biometric Fingerprint & Device Credential app lock with AndroidX BiometricPrompt",
+    "Direct distribution build with zero sensitive SMS permissions for user privacy and security"
+  ],
+  "disclaimer": "This direct APK release does not request or include SMS permissions. Financial transaction auto-detection from SMS is exclusive to the upcoming Google Play Store release."
+}
+EOF
 
       - name: Publish Perpetual Latest Release (tag android-latest)
         uses: softprops/action-gh-release@v2
