@@ -16,18 +16,20 @@ data class PeopleUiState(
     val selectedPerson: Person? = null,
     val selectedPersonTransactions: List<PersonTransaction> = emptyList(),
     val showAddPersonDialog: Boolean = false,
-    val showRecordDebtDialog: Boolean = false
+    val showRecordDebtDialog: Boolean = false,
+    val isLoading: Boolean = false
 )
 
 class PeopleViewModel(application: Application) : AndroidViewModel(application) {
     private val db = ArthDatabase.getInstance(application)
-    private val repo = PeopleRepository(db.personDao(), db.personTransactionDao())
+    private val repo = PeopleRepository(db.personDao(), db.personTransactionDao(), application)
 
     private val _uiState = MutableStateFlow(PeopleUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
         loadPeople()
+        refresh()
     }
 
     private fun loadPeople() {
@@ -50,6 +52,19 @@ class PeopleViewModel(application: Application) : AndroidViewModel(application) 
                         selectedPerson = current.selectedPerson?.let { sel -> list.find { it.id == sel.id } }
                     )
                 }
+            }
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                repo.refreshPeople()
+            } catch (_: Exception) {
+                // Ignore network errors; Room cache is primary
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

@@ -141,9 +141,9 @@ fun NecessityBadge(
     modifier: Modifier = Modifier
 ) {
     val (label, bg, fg) = when (necessity) {
-        NecessityTier.NEEDS -> Triple("Need", ArthTheme.colors.blueContainer, ArthTheme.colors.blue)
-        NecessityTier.WANTS -> Triple("Want", ArthTheme.colors.purpleContainer, ArthTheme.colors.purple)
-        NecessityTier.SAVINGS -> Triple("Savings", ArthTheme.colors.emeraldContainer, ArthTheme.colors.emerald)
+        NecessityTier.ESSENTIAL -> Triple("Essential", ArthTheme.colors.blueContainer, ArthTheme.colors.blue)
+        NecessityTier.OPTIONAL -> Triple("Optional", ArthTheme.colors.amberContainer, ArthTheme.colors.amber)
+        NecessityTier.LUXURY -> Triple("Luxury", ArthTheme.colors.purpleContainer, ArthTheme.colors.purple)
     }
 
     Box(
@@ -194,7 +194,6 @@ fun TypeBadge(
     val (label, bg, fg) = when (type) {
         TransactionType.INCOME -> Triple("Income", ArthTheme.colors.emeraldContainer, ArthTheme.colors.emerald)
         TransactionType.EXPENSE -> Triple("Expense", ArthTheme.colors.crimsonContainer, ArthTheme.colors.crimson)
-        TransactionType.TRANSFER -> Triple("Transfer", ArthTheme.colors.amberContainer, ArthTheme.colors.amber)
     }
 
     Box(
@@ -222,7 +221,6 @@ fun AmountDisplay(
     val color = when (type) {
         TransactionType.INCOME -> ArthTheme.colors.emerald
         TransactionType.EXPENSE -> ArthTheme.colors.crimson
-        TransactionType.TRANSFER -> ArthTheme.colors.amber
     }
 
     Text(

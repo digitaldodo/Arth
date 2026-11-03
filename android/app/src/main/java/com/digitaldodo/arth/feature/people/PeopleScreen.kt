@@ -38,7 +38,7 @@ fun PeopleScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "People & Debts",
+                        text = "People",
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -65,7 +65,7 @@ fun PeopleScreen(
                 ) {
                     ArthCard(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "You are owed",
+                            text = "Money Given (To Receive)",
                             style = MaterialTheme.typography.labelMedium,
                             color = ArthTheme.colors.textSecondary
                         )
@@ -79,7 +79,7 @@ fun PeopleScreen(
 
                     ArthCard(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "You owe",
+                            text = "Money Received (To Return)",
                             style = MaterialTheme.typography.labelMedium,
                             color = ArthTheme.colors.textSecondary
                         )

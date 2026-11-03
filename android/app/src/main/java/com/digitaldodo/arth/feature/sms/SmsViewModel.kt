@@ -60,7 +60,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         suggestion: SmsSuggestion,
         categoryId: String,
         categoryName: String,
-        necessity: NecessityTier
+        necessity: NecessityTier?
     ) {
         viewModelScope.launch {
             smsRepo.confirmSuggestion(suggestion, categoryId, categoryName, necessity)

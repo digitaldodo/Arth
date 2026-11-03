@@ -38,6 +38,17 @@
                     android:host="arth-9h3f.vercel.app"
                     android:pathPrefix="/" />
             </intent-filter>
+
+            <!-- Native OAuth redirect callback (arth://auth/callback) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="arth"
+                    android:host="auth"
+                    android:pathPrefix="/callback" />
+            </intent-filter>
         </activity>
 
         <provider

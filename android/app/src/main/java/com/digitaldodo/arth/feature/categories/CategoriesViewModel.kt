@@ -14,7 +14,8 @@ import java.util.UUID
 data class CategoriesUiState(
     val categories: List<Category> = emptyList(),
     val selectedType: TransactionType = TransactionType.EXPENSE,
-    val showAddDialog: Boolean = false
+    val showAddDialog: Boolean = false,
+    val isLoading: Boolean = false
 )
 
 class CategoriesViewModel(application: Application) : AndroidViewModel(application) {
@@ -26,12 +27,26 @@ class CategoriesViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         loadCategories()
+        refresh()
     }
 
     private fun loadCategories() {
         viewModelScope.launch {
             repo.observeCategories().collectLatest { list ->
                 _uiState.update { it.copy(categories = list) }
+            }
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                repo.refreshCategories()
+            } catch (_: Exception) {
+                // Ignore network errors; Room cache is primary
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -52,7 +67,7 @@ class CategoriesViewModel(application: Application) : AndroidViewModel(applicati
                     id = UUID.randomUUID().toString(),
                     name = name.trim(),
                     type = type,
-                    isSystem = false,
+                    isDefault = false,
                     sortOrder = 50
                 )
             )

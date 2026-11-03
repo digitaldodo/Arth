@@ -57,7 +57,7 @@ fun BalancesScreen(
             item {
                 ArthCard {
                     Text(
-                        text = "Total Current Net Worth",
+                        text = "Total Balance",
                         style = MaterialTheme.typography.labelMedium,
                         color = ArthTheme.colors.textSecondary
                     )
@@ -79,7 +79,7 @@ fun BalancesScreen(
                             modifier = Modifier.weight(1f)
                         )
                         ArthOutlinedButton(
-                            text = "Cash ↔ Online Transfer",
+                            text = "Transfer",
                             icon = Icons.Default.SyncAlt,
                             onClick = { viewModel.showTransferDialog(true) },
                             modifier = Modifier.weight(1f)
@@ -96,7 +96,7 @@ fun BalancesScreen(
                 ) {
                     ArthCard(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Cash in Hand",
+                            text = "Cash Balance",
                             style = MaterialTheme.typography.labelMedium,
                             color = ArthTheme.colors.textSecondary
                         )
@@ -108,7 +108,7 @@ fun BalancesScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Baseline: ${Money.formatPaise(state.startingBalances.cashPaise)}",
+                            text = "Starting: ${Money.formatPaise(state.startingBalances.cashPaise)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = ArthTheme.colors.textMuted
                         )
@@ -116,7 +116,7 @@ fun BalancesScreen(
 
                     ArthCard(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Online Accounts",
+                            text = "Online Balance",
                             style = MaterialTheme.typography.labelMedium,
                             color = ArthTheme.colors.textSecondary
                         )
@@ -128,7 +128,7 @@ fun BalancesScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Baseline: ${Money.formatPaise(state.startingBalances.onlinePaise)}",
+                            text = "Starting: ${Money.formatPaise(state.startingBalances.onlinePaise)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = ArthTheme.colors.textMuted
                         )

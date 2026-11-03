@@ -86,10 +86,10 @@ object PdfStatementGenerator {
         // Summary box
         canvas.drawLine(40f, y, 555f, y, linePaint)
         y += 20f
-        canvas.drawText("Total Inflow: ${Money.formatPaise(totalIncomePaise)}", 40f, y, headerPaint)
-        canvas.drawText("Total Outflow: ${Money.formatPaise(totalExpensePaise)}", 220f, y, headerPaint)
-        val netSavings = totalIncomePaise - totalExpensePaise
-        canvas.drawText("Net: ${Money.formatPaise(netSavings, showSign = true)}", 400f, y, headerPaint)
+        canvas.drawText("Total Income: ${Money.formatPaise(totalIncomePaise)}", 40f, y, headerPaint)
+        canvas.drawText("Total Expense: ${Money.formatPaise(totalExpensePaise)}", 220f, y, headerPaint)
+        val netCashFlow = totalIncomePaise - totalExpensePaise
+        canvas.drawText("Net: ${Money.formatPaise(netCashFlow, showSign = true)}", 400f, y, headerPaint)
         y += 15f
         canvas.drawLine(40f, y, 555f, y, linePaint)
         y += 25f
@@ -111,7 +111,7 @@ object PdfStatementGenerator {
             val dateStr = sdf.format(Date(tx.transactionDate))
             val desc = (tx.counterparty ?: tx.categoryName).take(24)
             val cat = tx.categoryName.take(18)
-            val mode = tx.paymentMode.name.take(6)
+            val mode = tx.paymentMode.label.take(6)
             val amtStr = tx.formattedAmount
 
             canvas.drawText(dateStr, 40f, y, bodyPaint)

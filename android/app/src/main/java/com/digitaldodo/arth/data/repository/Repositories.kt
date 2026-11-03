@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.work.*
 import com.digitaldodo.arth.core.database.*
 import com.digitaldodo.arth.core.model.*
+import com.digitaldodo.arth.core.network.CreateTransactionApiRequest
+import com.digitaldodo.arth.core.network.NetworkClient
+import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.core.sync.SyncWorker
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
@@ -39,23 +42,28 @@ class TransactionRepository(
         val entity = TransactionEntity.fromDomain(transaction.copy(syncStatus = SyncStatus.PENDING))
         transactionDao.insert(entity)
 
-        // Enqueue outbox sync payload
+        // Enqueue outbox sync payload formatted exactly to backend CreateTransactionRequest contract
         val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
-        val sdfTime = SimpleDateFormat("HH:mm", Locale.ROOT)
         val dateObj = Date(transaction.transactionDate)
 
         val amountRupees = String.format(Locale.ROOT, "%.2f", transaction.amountPaise / 100.0)
-        val payload = mapOf(
-            "id" to transaction.id,
-            "amount" to amountRupees,
-            "direction" to if (transaction.type == TransactionType.INCOME) "income" else "expense",
-            "merchant" to (transaction.counterparty ?: transaction.categoryName),
-            "transaction_date" to sdfDate.format(dateObj),
-            "transaction_time" to sdfTime.format(dateObj),
-            "payment_method" to (if (transaction.paymentMode == PaymentMode.CASH) "Cash" else "Online"),
-            "category_id" to transaction.categoryId,
-            "necessity" to transaction.necessity.name,
-            "notes" to transaction.notes.orEmpty()
+        val apiRequest = CreateTransactionApiRequest(
+            id = transaction.id,
+            amount = amountRupees,
+            type = if (transaction.type == TransactionType.INCOME) "income" else "expense",
+            categoryId = transaction.categoryId,
+            transactionDate = sdfDate.format(dateObj),
+            paymentMethod = if (transaction.paymentMode == PaymentMode.CASH) "cash" else "online",
+            necessity = if (transaction.type == TransactionType.EXPENSE) {
+                transaction.necessity?.apiValue ?: "essential"
+            } else {
+                null
+            },
+            description = transaction.counterparty ?: transaction.categoryName,
+            notes = transaction.notes,
+            recordedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(Date(transaction.createdAt))
         )
 
         outboxDao.insert(
@@ -63,7 +71,7 @@ class TransactionRepository(
                 entityType = "TRANSACTION",
                 entityId = transaction.id,
                 operation = "INSERT",
-                payloadJson = json.encodeToString(payload)
+                payloadJson = json.encodeToString(apiRequest)
             )
         )
 
@@ -104,6 +112,9 @@ class TransactionRepository(
             id = "primary",
             cashPaise = currentCash,
             onlinePaise = currentOnline,
+            totalAvailablePaise = currentCash + currentOnline,
+            startingCashPaise = starting.startingCashPaise,
+            startingOnlinePaise = starting.startingOnlinePaise,
             balancesConfiguredAt = configuredAt
         )
     }
@@ -129,7 +140,8 @@ class TransactionRepository(
 }
 
 class CategoryRepository(
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val context: Context? = null
 ) {
     fun observeCategories(): Flow<List<Category>> {
         return categoryDao.observeAll().map { list -> list.map { it.toDomain() } }
@@ -141,6 +153,34 @@ class CategoryRepository(
 
     suspend fun deleteCategory(id: String) {
         categoryDao.delete(id)
+    }
+
+    suspend fun refreshCategories() {
+        val ctx = context ?: return
+        val secureStorage = SecureStorage(ctx)
+        if (!secureStorage.isLoggedIn()) return
+
+        try {
+            val api = NetworkClient.createArthApi(secureStorage)
+            val response = api.getCategories()
+            if (response.categories.isNotEmpty()) {
+                val entities = response.categories.map { dto ->
+                    CategoryEntity(
+                        id = dto.id,
+                        name = dto.name,
+                        icon = dto.icon ?: "🏷️",
+                        color = dto.color ?: "#3B82F6",
+                        type = dto.type.uppercase(),
+                        isDefault = dto.isDefault,
+                        sortOrder = dto.sortOrder,
+                        isArchived = dto.isArchived
+                    )
+                }
+                categoryDao.insertAll(entities)
+            }
+        } catch (_: Exception) {
+            // Keep local cached categories if backend is unreachable
+        }
     }
 }
 
@@ -162,9 +202,34 @@ class BalanceRepository(
                 id = "primary",
                 cashPaise = cashPaise,
                 onlinePaise = onlinePaise,
+                startingCashPaise = cashPaise,
+                startingOnlinePaise = onlinePaise,
                 balancesConfiguredAt = now
             )
         )
+    }
+
+    suspend fun refreshBalances() {
+        val secureStorage = SecureStorage(context)
+        if (!secureStorage.isLoggedIn()) return
+
+        try {
+            val api = NetworkClient.createArthApi(secureStorage)
+            val dto = api.getBalances()
+            val existing = balancesDao.getPrimary()
+            balancesDao.upsert(
+                AccountBalancesEntity(
+                    id = "primary",
+                    cashPaise = dto.cashPaise,
+                    onlinePaise = dto.onlinePaise,
+                    startingCashPaise = dto.startingCashPaise,
+                    startingOnlinePaise = dto.startingOnlinePaise,
+                    balancesConfiguredAt = existing?.balancesConfiguredAt ?: System.currentTimeMillis()
+                )
+            )
+        } catch (_: Exception) {
+            // Fall back to local calculation
+        }
     }
 
     suspend fun recordTransfer(amountPaise: Long, fromCash: Boolean, notes: String?) {
@@ -176,13 +241,13 @@ class BalanceRepository(
         val outflow = Transaction(
             id = UUID.randomUUID().toString(),
             amountPaise = amountPaise,
-            type = TransactionType.TRANSFER,
+            type = TransactionType.EXPENSE,
             paymentMode = fromMode,
-            necessity = NecessityTier.NEEDS,
-            categoryId = "cat-misc-expense",
-            categoryName = "Transfer to $toMode",
+            necessity = NecessityTier.ESSENTIAL,
+            categoryId = "cat-other-expense",
+            categoryName = "Transfer to ${toMode.label}",
             transactionDate = now,
-            notes = notes ?: "Transfer from $fromMode to $toMode",
+            notes = notes ?: "Transfer from ${fromMode.label} to ${toMode.label}",
             createdAt = now,
             updatedAt = now
         )
@@ -193,11 +258,11 @@ class BalanceRepository(
             amountPaise = amountPaise,
             type = TransactionType.INCOME,
             paymentMode = toMode,
-            necessity = NecessityTier.NEEDS,
-            categoryId = "cat-misc-income",
-            categoryName = "Transfer from $fromMode",
-            transactionDate = now + 1, // ensure sequence
-            notes = notes ?: "Transfer received from $fromMode",
+            necessity = null,
+            categoryId = "cat-other-income",
+            categoryName = "Transfer from ${fromMode.label}",
+            transactionDate = now + 1,
+            notes = notes ?: "Transfer received from ${fromMode.label}",
             createdAt = now + 1,
             updatedAt = now + 1
         )
@@ -209,10 +274,15 @@ class BalanceRepository(
 
 class PeopleRepository(
     private val personDao: PersonDao,
-    private val personTransactionDao: PersonTransactionDao
+    private val personTransactionDao: PersonTransactionDao,
+    private val context: Context? = null
 ) {
     fun observePeople(): Flow<List<Person>> {
         return personDao.observeAll().map { list -> list.map { it.toDomain() } }
+    }
+
+    fun observeTransactionsForPerson(personId: String): Flow<List<PersonTransaction>> {
+        return personTransactionDao.observeForPerson(personId).map { list -> list.map { it.toDomain() } }
     }
 
     suspend fun addPerson(name: String, phone: String?, notes: String?): Person {
@@ -221,11 +291,15 @@ class PeopleRepository(
         return person
     }
 
-    fun observeTransactionsForPerson(personId: String): Flow<List<PersonTransaction>> {
-        return personTransactionDao.observeForPerson(personId).map { list -> list.map { it.toDomain() } }
-    }
-
     suspend fun recordPersonTransaction(
+        personId: String,
+        amountPaise: Long,
+        type: PersonTransactionType,
+        paymentMode: PaymentMode,
+        notes: String?
+    ) = recordTransaction(personId, amountPaise, type, paymentMode, notes)
+
+    suspend fun recordTransaction(
         personId: String,
         amountPaise: Long,
         type: PersonTransactionType,
@@ -244,12 +318,48 @@ class PeopleRepository(
         // Update person aggregate debt
         val person = personDao.getById(personId) ?: return
         val currentBalance = person.totalBalancePaise
-        val newBalance = when (type) {
-            PersonTransactionType.LENT -> currentBalance + amountPaise
-            PersonTransactionType.BORROWED -> currentBalance - amountPaise
-            PersonTransactionType.SETTLEMENT -> 0L
+        val currentGiven = person.moneyGivenPaise
+        val currentReceived = person.moneyReceivedPaise
+
+        val (newBalance, newGiven, newReceived) = when (type) {
+            PersonTransactionType.LENT -> Triple(currentBalance + amountPaise, currentGiven + amountPaise, currentReceived)
+            PersonTransactionType.BORROWED -> Triple(currentBalance - amountPaise, currentGiven, currentReceived + amountPaise)
+            PersonTransactionType.SETTLEMENT -> Triple(0L, currentGiven, currentReceived)
         }
-        personDao.update(person.copy(totalBalancePaise = newBalance))
+        personDao.update(
+            person.copy(
+                totalBalancePaise = newBalance,
+                moneyGivenPaise = newGiven,
+                moneyReceivedPaise = newReceived
+            )
+        )
+    }
+
+    suspend fun refreshPeople() {
+        val ctx = context ?: return
+        val secureStorage = SecureStorage(ctx)
+        if (!secureStorage.isLoggedIn()) return
+
+        try {
+            val api = NetworkClient.createArthApi(secureStorage)
+            val response = api.getPeople()
+            if (response.people.isNotEmpty()) {
+                val entities = response.people.map { dto ->
+                    PersonEntity(
+                        id = dto.id,
+                        name = dto.name,
+                        phone = null,
+                        notes = null,
+                        totalBalancePaise = dto.netBalancePaise,
+                        moneyGivenPaise = dto.moneyGivenPaise,
+                        moneyReceivedPaise = dto.moneyReceivedPaise
+                    )
+                }
+                personDao.insertAll(entities)
+            }
+        } catch (_: Exception) {
+            // Keep local data
+        }
     }
 }
 
@@ -269,15 +379,14 @@ class SmsSuggestionRepository(
         suggestion: SmsSuggestion,
         categoryId: String,
         categoryName: String,
-        necessity: NecessityTier
+        necessity: NecessityTier?
     ) {
-        // Create actual transaction
         val tx = Transaction(
             id = UUID.randomUUID().toString(),
             amountPaise = suggestion.amountPaise,
             type = suggestion.type,
             paymentMode = suggestion.paymentMode,
-            necessity = necessity,
+            necessity = if (suggestion.type == TransactionType.EXPENSE) (necessity ?: NecessityTier.ESSENTIAL) else null,
             categoryId = categoryId,
             categoryName = categoryName,
             transactionDate = suggestion.smsTimestamp,

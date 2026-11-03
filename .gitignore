@@ -38,6 +38,10 @@ next-env.d.ts
 # Vercel
 .vercel
 
+# IDEs
+.vscode/
+.idea/
+
 # Android build outputs & keystores
 android/.gradle/
 android/build/

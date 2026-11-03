@@ -8,7 +8,6 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 @Database(
     entities = [
@@ -20,7 +19,7 @@ import java.util.UUID
         SmsSuggestionEntity::class,
         SyncOutboxEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ArthDatabase : RoomDatabase() {
@@ -50,7 +49,6 @@ abstract class ArthDatabase : RoomDatabase() {
             ).addCallback(object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
-                    // Prepopulate standard categories on database creation
                     CoroutineScope(Dispatchers.IO).launch {
                         val dao = getInstance(context).categoryDao()
                         dao.insertAll(DEFAULT_CATEGORIES)
@@ -59,21 +57,23 @@ abstract class ArthDatabase : RoomDatabase() {
             }).fallbackToDestructiveMigration().build()
         }
 
+        // Canonical default categories matching supabase/migrations/0006_auth_trigger.sql
         val DEFAULT_CATEGORIES = listOf(
-            CategoryEntity("cat-food", "Food & Dining", "restaurant", "#F59E0B", "EXPENSE", true, 1),
-            CategoryEntity("cat-groceries", "Groceries", "shopping_cart", "#10B981", "EXPENSE", true, 2),
-            CategoryEntity("cat-transport", "Transportation", "commute", "#3B82F6", "EXPENSE", true, 3),
-            CategoryEntity("cat-utilities", "Bills & Utilities", "receipt_long", "#EF4444", "EXPENSE", true, 4),
-            CategoryEntity("cat-shopping", "Shopping", "storefront", "#8B5CF6", "EXPENSE", true, 5),
-            CategoryEntity("cat-housing", "Housing & Rent", "home", "#6366F1", "EXPENSE", true, 6),
-            CategoryEntity("cat-health", "Health & Medical", "medical_services", "#EC4899", "EXPENSE", true, 7),
-            CategoryEntity("cat-entertainment", "Entertainment", "movie", "#14B8A6", "EXPENSE", true, 8),
-            CategoryEntity("cat-education", "Education", "school", "#F97316", "EXPENSE", true, 9),
-            CategoryEntity("cat-salary", "Salary & Income", "payments", "#10B981", "INCOME", true, 10),
-            CategoryEntity("cat-freelance", "Freelance & Consulting", "work", "#3B82F6", "INCOME", true, 11),
-            CategoryEntity("cat-investments", "Investment Returns", "trending_up", "#8B5CF6", "INCOME", true, 12),
-            CategoryEntity("cat-misc-expense", "Other Expense", "more_horiz", "#78716C", "EXPENSE", true, 98),
-            CategoryEntity("cat-misc-income", "Other Income", "add_circle", "#78716C", "INCOME", true, 99)
+            CategoryEntity("cat-food-dining", "Food & Dining", "🍽️", "#3B82F6", "EXPENSE", true, 1),
+            CategoryEntity("cat-transport", "Transport", "🚗", "#3B82F6", "EXPENSE", true, 2),
+            CategoryEntity("cat-housing", "Housing", "🏠", "#3B82F6", "EXPENSE", true, 3),
+            CategoryEntity("cat-utilities", "Utilities", "⚡", "#3B82F6", "EXPENSE", true, 4),
+            CategoryEntity("cat-healthcare", "Healthcare", "💊", "#3B82F6", "EXPENSE", true, 5),
+            CategoryEntity("cat-entertainment", "Entertainment", "🎬", "#3B82F6", "EXPENSE", true, 6),
+            CategoryEntity("cat-shopping", "Shopping", "🛍️", "#3B82F6", "EXPENSE", true, 7),
+            CategoryEntity("cat-education", "Education", "📚", "#3B82F6", "EXPENSE", true, 8),
+            CategoryEntity("cat-personal-care", "Personal Care", "💈", "#3B82F6", "EXPENSE", true, 9),
+            CategoryEntity("cat-travel", "Travel", "✈️", "#3B82F6", "EXPENSE", true, 10),
+            CategoryEntity("cat-other-expense", "Other Expense", "🧾", "#3B82F6", "EXPENSE", true, 11),
+            CategoryEntity("cat-salary", "Salary", "💼", "#10B981", "INCOME", true, 1),
+            CategoryEntity("cat-freelance", "Freelance", "💻", "#10B981", "INCOME", true, 2),
+            CategoryEntity("cat-investments", "Investments", "📈", "#10B981", "INCOME", true, 3),
+            CategoryEntity("cat-other-income", "Other Income", "💵", "#10B981", "INCOME", true, 4)
         )
     }
 }

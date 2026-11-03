@@ -27,11 +27,13 @@ android {
         versionCode 3
         versionName "1.2.0"
 
-        def defaultApiUrl = 'https://arth-9h3f.vercel.app'
-        def defaultSupabaseUrl = 'https://arth-9h3f.vercel.app'
+        def defaultApiUrl = 'https://arth-backend-nchl.onrender.com'
+        def defaultSupabaseUrl = 'https://fbmmkqdwkayrrsodueqd.supabase.co'
+        def defaultWebUrl = 'https://arth-9h3f.vercel.app'
         buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL', defaultSupabaseUrl))
         buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY', ''))
         buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL', defaultApiUrl))
+        buildConfigField "String", "WEB_URL", javaString(gradleValue('ARTH_WEB_URL', defaultWebUrl))
 
         resValue "string", "appName", "Arth"
     }

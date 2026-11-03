@@ -16,43 +16,151 @@ import retrofit2.http.*
 import java.util.concurrent.TimeUnit
 
 @Serializable
-data class NativeTransactionDto(
-    val id: String,
-    val amount: String,
-    val direction: String,
-    val merchant: String? = null,
-    @SerialName("transaction_date") val transactionDate: String,
-    @SerialName("transaction_time") val transactionTime: String? = null,
-    @SerialName("payment_method") val paymentMethod: String? = null,
-    @SerialName("category_id") val categoryId: String? = null,
-    val necessity: String? = null,
-    val notes: String? = null,
-    val reference: String? = null
-)
-
-@Serializable
-data class NativeTransactionResponse(
-    val success: Boolean = true,
-    val message: String? = null,
-    val id: String? = null
-)
-
-@Serializable
 data class CategoryDto(
     val id: String,
     val name: String,
-    val icon: String = "category",
-    val color: String = "#3B82F6",
-    val type: String = "EXPENSE",
-    @SerialName("is_system") val isSystem: Boolean = false,
-    @SerialName("sort_order") val sortOrder: Int = 0
+    val type: String = "expense",
+    val icon: String? = null,
+    val color: String? = null,
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    @SerialName("is_default") val isDefault: Boolean = false,
+    @SerialName("archived_at") val archivedAt: String? = null,
+    @SerialName("is_archived") val isArchived: Boolean = false
+)
+
+@Serializable
+data class CategoryListResponseDto(
+    val categories: List<CategoryDto> = emptyList()
+)
+
+@Serializable
+data class CreateTransactionApiRequest(
+    val id: String,
+    val amount: String,
+    val type: String,
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("transaction_date") val transactionDate: String,
+    @SerialName("payment_method") val paymentMethod: String,
+    val necessity: String? = null,
+    val description: String? = null,
+    val notes: String? = null,
+    @SerialName("recorded_at") val recordedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null
+)
+
+@Serializable
+data class TransactionApiResponse(
+    val transaction: TransactionApiDto? = null,
+    @SerialName("idempotent_replay") val idempotentReplay: Boolean = false
+)
+
+@Serializable
+data class TransactionApiDto(
+    val id: String,
+    @SerialName("amount_paise") val amountPaise: Long = 0L,
+    @SerialName("amount_decimal") val amountDecimal: String? = null,
+    @SerialName("formatted_inr") val formattedInr: String? = null,
+    val type: String = "expense",
+    @SerialName("category_id") val categoryId: String = "",
+    @SerialName("category_name") val categoryName: String? = null,
+    @SerialName("transaction_date") val transactionDate: String = "",
+    @SerialName("payment_method") val paymentMethod: String = "online",
+    val necessity: String? = null,
+    val description: String? = null,
+    val notes: String? = null,
+    @SerialName("recorded_at") val recordedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class TransactionListApiResponse(
+    val items: List<TransactionApiDto> = emptyList(),
+    val page: Int = 1,
+    @SerialName("page_size") val pageSize: Int = 50,
+    @SerialName("total_count") val totalCount: Int = 0,
+    @SerialName("has_more") val hasMore: Boolean = false
 )
 
 @Serializable
 data class BalancesDto(
     @SerialName("cash_paise") val cashPaise: Long = 0L,
     @SerialName("online_paise") val onlinePaise: Long = 0L,
-    @SerialName("configured_at") val configuredAt: Long? = null
+    @SerialName("total_available_paise") val totalAvailablePaise: Long = 0L,
+    @SerialName("starting_cash_paise") val startingCashPaise: Long = 0L,
+    @SerialName("starting_online_paise") val startingOnlinePaise: Long = 0L,
+    @SerialName("configured_at") val configuredAt: String? = null
+)
+
+@Serializable
+data class DashboardSummaryDto(
+    val metrics: DashboardMetricsDto? = null,
+    @SerialName("spending_by_category") val spendingByCategory: List<CategorySpendingDto> = emptyList(),
+    @SerialName("spending_by_necessity") val spendingByNecessity: List<NecessitySpendingDto> = emptyList(),
+    @SerialName("recent_transactions") val recentTransactions: List<TransactionApiDto> = emptyList()
+)
+
+@Serializable
+data class DashboardMetricsDto(
+    @SerialName("total_income_paise") val totalIncomePaise: Long = 0L,
+    @SerialName("total_expense_paise") val totalExpensePaise: Long = 0L,
+    @SerialName("net_cash_flow_paise") val netCashFlowPaise: Long = 0L,
+    @SerialName("savings_rate_percent") val savingsRatePercent: Double = 0.0,
+    @SerialName("transaction_count") val transactionCount: Int = 0
+)
+
+@Serializable
+data class CategorySpendingDto(
+    @SerialName("category_id") val categoryId: String = "",
+    @SerialName("category_name") val categoryName: String = "",
+    @SerialName("amount_paise") val amountPaise: Long = 0L,
+    @SerialName("percentage_of_total") val percentageOfTotal: Double = 0.0
+)
+
+@Serializable
+data class NecessitySpendingDto(
+    val necessity: String = "",
+    val label: String = "",
+    @SerialName("amount_paise") val amountPaise: Long = 0L,
+    @SerialName("percentage_of_total") val percentageOfTotal: Double = 0.0
+)
+
+@Serializable
+data class PersonDto(
+    val id: String,
+    val name: String,
+    @SerialName("net_balance_paise") val netBalancePaise: Long = 0L,
+    @SerialName("money_given_paise") val moneyGivenPaise: Long = 0L,
+    @SerialName("money_received_paise") val moneyReceivedPaise: Long = 0L,
+    @SerialName("settlement_count") val settlementCount: Int = 0
+)
+
+@Serializable
+data class PeopleListResponseDto(
+    val people: List<PersonDto> = emptyList()
+)
+
+@Serializable
+data class CreatePersonApiRequest(
+    val name: String
+)
+
+@Serializable
+data class PersonApiResponse(
+    val person: PersonDto? = null
+)
+
+@Serializable
+data class SettlementApiRequest(
+    val amount: String,
+    @SerialName("payment_method") val paymentMethod: String = "online",
+    val notes: String? = null
+)
+
+@Serializable
+data class SettlementApiResponse(
+    val success: Boolean = true,
+    val message: String? = null
 )
 
 @Serializable
@@ -80,14 +188,46 @@ data class AuthUser(
 )
 
 interface ArthApi {
-    @POST("api/native/transactions")
-    suspend fun createTransaction(@Body transaction: NativeTransactionDto): NativeTransactionResponse
+    @GET("api/v1/categories")
+    suspend fun getCategories(): CategoryListResponseDto
 
-    @GET("api/native/categories")
-    suspend fun getCategories(): List<CategoryDto>
+    @POST("api/v1/transactions")
+    suspend fun createTransaction(@Body request: CreateTransactionApiRequest): TransactionApiResponse
+
+    @GET("api/v1/transactions")
+    suspend fun getTransactions(
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 50
+    ): TransactionListApiResponse
 
     @GET("api/v1/balances")
     suspend fun getBalances(): BalancesDto
+
+    @GET("api/v1/dashboard/summary")
+    suspend fun getDashboardSummary(
+        @Query("start_date") startDate: String? = null,
+        @Query("end_date") endDate: String? = null
+    ): DashboardSummaryDto
+
+    @GET("api/v1/people")
+    suspend fun getPeople(): PeopleListResponseDto
+
+    @POST("api/v1/people")
+    suspend fun createPerson(@Body request: CreatePersonApiRequest): PersonApiResponse
+
+    @POST("api/v1/people/{id}/settlements")
+    suspend fun recordSettlement(
+        @Path("id") id: String,
+        @Body request: SettlementApiRequest
+    ): SettlementApiResponse
+}
+
+interface NativeAuthApi {
+    @POST("api/native/auth/login")
+    suspend fun login(@Body body: LoginRequest): AuthResponse
+
+    @POST("api/native/auth/refresh")
+    suspend fun refreshToken(@Body body: RefreshRequest): AuthResponse
 }
 
 interface SupabaseAuthApi {
@@ -118,8 +258,9 @@ class AuthInterceptor(private val secureStorage: SecureStorage) : Interceptor {
 }
 
 object NetworkClient {
-    private const val DEFAULT_API_BASE_URL = "https://arth-9h3f.vercel.app/"
-    private const val DEFAULT_SUPABASE_BASE_URL = "https://arth-9h3f.vercel.app/"
+    private const val DEFAULT_API_BASE_URL = "https://arth-backend-nchl.onrender.com/"
+    private const val DEFAULT_SUPABASE_BASE_URL = "https://fbmmkqdwkayrrsodueqd.supabase.co/"
+    private const val DEFAULT_WEB_BASE_URL = "https://arth-9h3f.vercel.app/"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -143,8 +284,8 @@ object NetworkClient {
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
             })
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .build()
 
         return Retrofit.Builder()
@@ -153,6 +294,24 @@ object NetworkClient {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(ArthApi::class.java)
+    }
+
+    fun createNativeAuthApi(): NativeAuthApi {
+        val baseUrl = sanitizeBaseUrl(BuildConfig.WEB_URL, DEFAULT_WEB_BASE_URL)
+        val client = OkHttpClient.Builder()
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+            })
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(NativeAuthApi::class.java)
     }
 
     fun createSupabaseAuthApi(): SupabaseAuthApi {
@@ -165,8 +324,8 @@ object NetworkClient {
                 }
                 chain.proceed(req.build())
             }
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .build()
 
         return Retrofit.Builder()

@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -115,49 +114,49 @@ fun QuickAddSheet(
 
             Spacer(Modifier.height(14.dp))
 
-            // Payment Mode (Cash vs Online)
+            // Payment Mode (Online vs Cash)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SelectablePill(
-                    text = "Online Account",
+                    text = "Online",
                     selected = state.paymentMode == PaymentMode.ONLINE,
                     modifier = Modifier.weight(1f),
                     onClick = { viewModel.setPaymentMode(PaymentMode.ONLINE) }
                 )
                 SelectablePill(
-                    text = "Cash in Hand",
+                    text = "Cash",
                     selected = state.paymentMode == PaymentMode.CASH,
                     modifier = Modifier.weight(1f),
                     onClick = { viewModel.setPaymentMode(PaymentMode.CASH) }
                 )
             }
 
+            // Necessity selector (Essential / Optional / Luxury) - strictly Expense only
             if (state.type == TransactionType.EXPENSE) {
                 Spacer(Modifier.height(10.dp))
-                // Necessity selector (Needs / Wants / Savings)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     SelectablePill(
-                        text = "Needs (50%)",
-                        selected = state.necessity == NecessityTier.NEEDS,
+                        text = "Essential",
+                        selected = state.necessity == NecessityTier.ESSENTIAL,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.setNecessity(NecessityTier.NEEDS) }
+                        onClick = { viewModel.setNecessity(NecessityTier.ESSENTIAL) }
                     )
                     SelectablePill(
-                        text = "Wants (30%)",
-                        selected = state.necessity == NecessityTier.WANTS,
+                        text = "Optional",
+                        selected = state.necessity == NecessityTier.OPTIONAL,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.setNecessity(NecessityTier.WANTS) }
+                        onClick = { viewModel.setNecessity(NecessityTier.OPTIONAL) }
                     )
                     SelectablePill(
-                        text = "Savings (20%)",
-                        selected = state.necessity == NecessityTier.SAVINGS,
+                        text = "Luxury",
+                        selected = state.necessity == NecessityTier.LUXURY,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.setNecessity(NecessityTier.SAVINGS) }
+                        onClick = { viewModel.setNecessity(NecessityTier.LUXURY) }
                     )
                 }
             }
@@ -183,6 +182,7 @@ fun QuickAddSheet(
                     val isSelected = state.selectedCategory?.id == cat.id
                     val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
                     val fg = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    val label = if (!cat.icon.isNullOrBlank()) "${cat.icon} ${cat.name}" else cat.name
 
                     Box(
                         modifier = Modifier
@@ -193,7 +193,7 @@ fun QuickAddSheet(
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = cat.name,
+                            text = label,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                             color = fg
                         )
@@ -246,8 +246,6 @@ fun QuickAddSheet(
         }
     }
 }
-
-
 
 @Composable
 fun NumericKeypad(

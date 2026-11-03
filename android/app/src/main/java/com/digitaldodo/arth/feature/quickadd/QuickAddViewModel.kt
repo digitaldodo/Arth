@@ -15,7 +15,7 @@ data class QuickAddUiState(
     val amountPaise: Long = 0L,
     val type: TransactionType = TransactionType.EXPENSE,
     val paymentMode: PaymentMode = PaymentMode.ONLINE,
-    val necessity: NecessityTier = NecessityTier.NEEDS,
+    val necessity: NecessityTier? = NecessityTier.ESSENTIAL,
     val selectedCategory: Category? = null,
     val categories: List<Category> = emptyList(),
     val notes: String = "",
@@ -50,7 +50,8 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
                     val filtered = list.filter { it.type == current.type }
                     current.copy(
                         categories = filtered,
-                        selectedCategory = current.selectedCategory ?: filtered.firstOrNull()
+                        selectedCategory = current.selectedCategory?.takeIf { sel -> filtered.any { it.id == sel.id } }
+                            ?: filtered.firstOrNull()
                     )
                 }
             }
@@ -75,7 +76,11 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
 
     fun setType(type: TransactionType) {
         _uiState.update { current ->
-            current.copy(type = type)
+            current.copy(
+                type = type,
+                necessity = if (type == TransactionType.EXPENSE) (current.necessity ?: NecessityTier.ESSENTIAL) else null,
+                selectedCategory = null
+            )
         }
         loadCategories()
     }
@@ -114,7 +119,7 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
             amountPaise = state.amountPaise,
             type = state.type,
             paymentMode = state.paymentMode,
-            necessity = state.necessity,
+            necessity = if (state.type == TransactionType.EXPENSE) (state.necessity ?: NecessityTier.ESSENTIAL) else null,
             categoryId = category.id,
             categoryName = category.name,
             categoryIcon = category.icon,

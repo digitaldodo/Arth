@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.digitaldodo.arth.core.designsystem.*
 import com.digitaldodo.arth.core.model.TransactionType
 
@@ -94,11 +95,20 @@ fun CategoriesScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = cat.name,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!cat.icon.isNullOrBlank()) {
+                                Text(
+                                    text = cat.icon,
+                                    fontSize = 20.sp
+                                )
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Text(
+                                text = cat.name,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         if (!cat.isSystem) {
                             IconButton(onClick = { viewModel.deleteCategory(cat.id) }) {
                                 Icon(

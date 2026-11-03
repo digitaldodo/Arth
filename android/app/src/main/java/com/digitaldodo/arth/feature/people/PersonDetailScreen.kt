@@ -89,7 +89,7 @@ fun PersonDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     ArthButton(
-                        text = "Record Loan / Borrow",
+                        text = "Record Entry",
                         onClick = { showRecordDebt = true },
                         modifier = Modifier.weight(1f)
                     )
@@ -138,8 +138,8 @@ fun PersonDetailScreen(
                                 Column {
                                     Text(
                                         text = when (item.type) {
-                                            PersonTransactionType.LENT -> "You lent"
-                                            PersonTransactionType.BORROWED -> "You borrowed"
+                                            PersonTransactionType.LENT -> "Money Given"
+                                            PersonTransactionType.BORROWED -> "Money Received"
                                             PersonTransactionType.SETTLEMENT -> "Settlement"
                                         },
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -211,13 +211,13 @@ fun RecordDebtDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     SelectablePill(
-                        text = "You Lent",
+                        text = "Money Given",
                         selected = type == PersonTransactionType.LENT,
                         modifier = Modifier.weight(1f),
                         onClick = { type = PersonTransactionType.LENT }
                     )
                     SelectablePill(
-                        text = "You Borrowed",
+                        text = "Money Received",
                         selected = type == PersonTransactionType.BORROWED,
                         modifier = Modifier.weight(1f),
                         onClick = { type = PersonTransactionType.BORROWED }

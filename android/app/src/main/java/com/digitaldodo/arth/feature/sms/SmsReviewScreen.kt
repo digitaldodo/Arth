@@ -101,13 +101,13 @@ fun SmsReviewScreen(
 fun SmsSuggestionCard(
     suggestion: SmsSuggestion,
     categories: List<Category>,
-    onConfirm: (String, String, NecessityTier) -> Unit,
+    onConfirm: (String, String, NecessityTier?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedCat by remember {
         mutableStateOf(categories.firstOrNull { it.type == suggestion.type } ?: categories.firstOrNull())
     }
-    var selectedNecessity by remember { mutableStateOf(NecessityTier.NEEDS) }
+    var selectedNecessity by remember { mutableStateOf(NecessityTier.ESSENTIAL) }
 
     val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     val dateStr = sdf.format(Date(suggestion.smsTimestamp))
@@ -155,12 +155,12 @@ fun SmsSuggestionCard(
         }
 
         Spacer(Modifier.height(12.dp))
-        Divider(color = ArthTheme.colors.border)
+        HorizontalDivider(color = ArthTheme.colors.border)
         Spacer(Modifier.height(10.dp))
 
         // Category & Necessity Selection
         Text(
-            text = "Select Category & Necessity:",
+            text = "Select Category:",
             style = MaterialTheme.typography.labelSmall,
             color = ArthTheme.colors.textSecondary
         )
@@ -173,8 +173,9 @@ fun SmsSuggestionCard(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             categories.filter { it.type == suggestion.type }.forEach { cat ->
+                val label = if (!cat.icon.isNullOrBlank()) "${cat.icon} ${cat.name}" else cat.name
                 SelectablePill(
-                    text = cat.name,
+                    text = label,
                     selected = selectedCat?.id == cat.id,
                     onClick = { selectedCat = cat }
                 )
@@ -182,28 +183,34 @@ fun SmsSuggestionCard(
         }
 
         if (suggestion.type == TransactionType.EXPENSE) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Necessity Tier:",
+                style = MaterialTheme.typography.labelSmall,
+                color = ArthTheme.colors.textSecondary
+            )
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 SelectablePill(
-                    text = "Need",
-                    selected = selectedNecessity == NecessityTier.NEEDS,
+                    text = "Essential",
+                    selected = selectedNecessity == NecessityTier.ESSENTIAL,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedNecessity = NecessityTier.NEEDS }
+                    onClick = { selectedNecessity = NecessityTier.ESSENTIAL }
                 )
                 SelectablePill(
-                    text = "Want",
-                    selected = selectedNecessity == NecessityTier.WANTS,
+                    text = "Optional",
+                    selected = selectedNecessity == NecessityTier.OPTIONAL,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedNecessity = NecessityTier.WANTS }
+                    onClick = { selectedNecessity = NecessityTier.OPTIONAL }
                 )
                 SelectablePill(
-                    text = "Savings",
-                    selected = selectedNecessity == NecessityTier.SAVINGS,
+                    text = "Luxury",
+                    selected = selectedNecessity == NecessityTier.LUXURY,
                     modifier = Modifier.weight(1f),
-                    onClick = { selectedNecessity = NecessityTier.SAVINGS }
+                    onClick = { selectedNecessity = NecessityTier.LUXURY }
                 )
             }
         }
@@ -226,7 +233,8 @@ fun SmsSuggestionCard(
                 icon = Icons.Default.Check,
                 onClick = {
                     val cat = selectedCat ?: categories.firstOrNull() ?: Category(name = "General")
-                    onConfirm(cat.id, cat.name, selectedNecessity)
+                    val necessityToSave = if (suggestion.type == TransactionType.EXPENSE) selectedNecessity else null
+                    onConfirm(cat.id, cat.name, necessityToSave)
                 },
                 modifier = Modifier.weight(1f)
             )

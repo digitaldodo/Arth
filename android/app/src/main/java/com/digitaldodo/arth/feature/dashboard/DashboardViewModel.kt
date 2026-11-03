@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.model.*
-import com.digitaldodo.arth.data.repository.BalanceRepository
 import com.digitaldodo.arth.data.repository.SmsSuggestionRepository
 import com.digitaldodo.arth.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.*
@@ -23,14 +22,14 @@ data class DashboardUiState(
     val onlineBalancePaise: Long = 0L,
     val periodIncomePaise: Long = 0L,
     val periodExpensePaise: Long = 0L,
-    val needsExpensePaise: Long = 0L,
-    val wantsExpensePaise: Long = 0L,
-    val savingsExpensePaise: Long = 0L,
+    val essentialExpensePaise: Long = 0L,
+    val optionalExpensePaise: Long = 0L,
+    val luxuryExpensePaise: Long = 0L,
     val recentTransactions: List<Transaction> = emptyList(),
     val pendingSmsCount: Int = 0,
     val isLoading: Boolean = false
 ) {
-    val netSavingsPaise: Long get() = periodIncomePaise - periodExpensePaise
+    val netCashFlowPaise: Long get() = periodIncomePaise - periodExpensePaise
 }
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,10 +65,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            // 1. Calculate active account balances
-            val balances = transactionRepo.calculateBalances()
-
-            // 2. Observe pending SMS suggestions count
+            // Observe pending SMS suggestions count
             smsRepo.observePendingCount().collectLatest { count ->
                 _uiState.update { it.copy(pendingSmsCount = count) }
             }
@@ -104,9 +100,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 var income = 0L
                 var expense = 0L
-                var needs = 0L
-                var wants = 0L
-                var savings = 0L
+                var essential = 0L
+                var optional = 0L
+                var luxury = 0L
 
                 for (tx in periodTxs) {
                     if (tx.type == TransactionType.INCOME) {
@@ -114,9 +110,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     } else if (tx.type == TransactionType.EXPENSE) {
                         expense += tx.amountPaise
                         when (tx.necessity) {
-                            NecessityTier.NEEDS -> needs += tx.amountPaise
-                            NecessityTier.WANTS -> wants += tx.amountPaise
-                            NecessityTier.SAVINGS -> savings += tx.amountPaise
+                            NecessityTier.ESSENTIAL -> essential += tx.amountPaise
+                            NecessityTier.OPTIONAL -> optional += tx.amountPaise
+                            NecessityTier.LUXURY -> luxury += tx.amountPaise
+                            null -> {}
                         }
                     }
                 }
@@ -130,9 +127,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     onlineBalancePaise = balances.onlinePaise,
                     periodIncomePaise = income,
                     periodExpensePaise = expense,
-                    needsExpensePaise = needs,
-                    wantsExpensePaise = wants,
-                    savingsExpensePaise = savings,
+                    essentialExpensePaise = essential,
+                    optionalExpensePaise = optional,
+                    luxuryExpensePaise = luxury,
                     recentTransactions = transactions.take(6),
                     pendingSmsCount = _uiState.value.pendingSmsCount,
                     isLoading = false

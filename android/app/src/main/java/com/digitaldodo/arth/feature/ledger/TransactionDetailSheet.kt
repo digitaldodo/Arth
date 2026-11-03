@@ -49,7 +49,7 @@ fun TransactionDetailSheet(
                 TypeBadge(type = transaction.type)
             }
 
-            Divider(color = ArthTheme.colors.border)
+            HorizontalDivider(color = ArthTheme.colors.border)
 
             AmountDisplay(
                 amountFormatted = transaction.formattedAmount,
@@ -59,9 +59,9 @@ fun TransactionDetailSheet(
 
             DetailRow(title = "Counterparty", value = transaction.counterparty ?: "—")
             DetailRow(title = "Category", value = transaction.categoryName)
-            DetailRow(title = "Payment Mode", value = transaction.paymentMode.name)
-            if (transaction.type == TransactionType.EXPENSE) {
-                DetailRow(title = "Necessity", value = transaction.necessity.name)
+            DetailRow(title = "Payment Mode", value = transaction.paymentMode.label)
+            if (transaction.type == TransactionType.EXPENSE && transaction.necessity != null) {
+                DetailRow(title = "Necessity", value = transaction.necessity.label)
             }
             DetailRow(title = "Date & Time", value = dateFormatted)
             if (!transaction.notes.isNullOrBlank()) {

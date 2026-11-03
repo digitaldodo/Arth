@@ -73,7 +73,7 @@ fun ReportsScreen(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Financial Reports & Statements",
+                    text = "Reports",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -101,25 +101,25 @@ fun ReportsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Total Inflow", style = MaterialTheme.typography.labelMedium, color = ArthTheme.colors.textSecondary)
+                            Text("Total Income", style = MaterialTheme.typography.labelMedium, color = ArthTheme.colors.textSecondary)
                             Spacer(Modifier.height(2.dp))
                             Text(Money.formatPaise(totalIncome), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = ArthTheme.colors.emerald)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Total Outflow", style = MaterialTheme.typography.labelMedium, color = ArthTheme.colors.textSecondary)
+                            Text("Total Expense", style = MaterialTheme.typography.labelMedium, color = ArthTheme.colors.textSecondary)
                             Spacer(Modifier.height(2.dp))
                             Text(Money.formatPaise(totalExpense), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = ArthTheme.colors.crimson)
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Divider(color = ArthTheme.colors.border)
+                    HorizontalDivider(color = ArthTheme.colors.border)
                     Spacer(Modifier.height(12.dp))
                     val net = totalIncome - totalExpense
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Net Savings", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                        Text("Net Cash Flow", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
                         Text(
                             text = Money.formatPaise(net, showSign = true),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),

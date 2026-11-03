@@ -1,0 +1,50 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data.session) {
+      return NextResponse.json(
+        { error: error?.message || 'Invalid credentials' },
+        { status: 401, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        user: {
+          id: data.session.user.id,
+          email: data.session.user.email,
+        },
+      },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Authentication service error';
+    return NextResponse.json(
+      { error: message },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+}

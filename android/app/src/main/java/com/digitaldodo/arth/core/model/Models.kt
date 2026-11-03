@@ -4,22 +4,32 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 
 enum class TransactionType {
-    INCOME, EXPENSE, TRANSFER
+    INCOME, EXPENSE
 }
 
-enum class PaymentMode {
-    CASH, ONLINE
-}
-
-enum class NecessityTier {
-    NEEDS, WANTS, SAVINGS;
+enum class PaymentMode(val apiValue: String, val label: String) {
+    CASH("cash", "Cash"),
+    ONLINE("online", "Online");
 
     companion object {
-        fun fromString(value: String?): NecessityTier = when (value?.uppercase()) {
-            "NEEDS" -> NEEDS
-            "WANTS" -> WANTS
-            "SAVINGS", "INVESTMENTS" -> SAVINGS
-            else -> NEEDS
+        fun fromString(value: String?): PaymentMode = when (value?.lowercase()?.trim()) {
+            "cash" -> CASH
+            else -> ONLINE
+        }
+    }
+}
+
+enum class NecessityTier(val apiValue: String, val label: String) {
+    ESSENTIAL("essential", "Essential"),
+    OPTIONAL("optional", "Optional"),
+    LUXURY("luxury", "Luxury");
+
+    companion object {
+        fun fromString(value: String?): NecessityTier? = when (value?.lowercase()?.trim()) {
+            "essential", "needs", "must-have" -> ESSENTIAL
+            "optional", "wants" -> OPTIONAL
+            "luxury" -> LUXURY
+            else -> null
         }
     }
 }
@@ -28,8 +38,10 @@ enum class SyncStatus {
     SYNCED, PENDING, FAILED
 }
 
-enum class PersonTransactionType {
-    LENT, BORROWED, SETTLEMENT
+enum class PersonTransactionType(val label: String) {
+    LENT("Money Given"),
+    BORROWED("Money Received"),
+    SETTLEMENT("Settlement")
 }
 
 enum class SuggestionStatus {
@@ -43,7 +55,7 @@ data class Transaction(
     val amountPaise: Long = 0L,
     val type: TransactionType = TransactionType.EXPENSE,
     val paymentMode: PaymentMode = PaymentMode.ONLINE,
-    val necessity: NecessityTier = NecessityTier.NEEDS,
+    val necessity: NecessityTier? = null,
     val categoryId: String = "",
     val categoryName: String = "",
     val categoryIcon: String = "category",
@@ -66,22 +78,28 @@ data class Category(
     val icon: String = "category",
     val color: String = "#3B82F6",
     val type: TransactionType = TransactionType.EXPENSE,
-    val isSystem: Boolean = false,
+    val isDefault: Boolean = false,
     val sortOrder: Int = 0,
-    val monthlyBudgetPaise: Long = 0L
-)
+    val isArchived: Boolean = false
+) {
+    val isSystem: Boolean get() = isDefault
+}
 
 @Serializable
 data class AccountBalances(
     val id: String = "primary",
     val cashPaise: Long = 0L,
     val onlinePaise: Long = 0L,
+    val totalAvailablePaise: Long = cashPaise + onlinePaise,
+    val startingCashPaise: Long = 0L,
+    val startingOnlinePaise: Long = 0L,
     val balancesConfiguredAt: Long = 0L
 ) {
-    val totalPaise: Long get() = cashPaise + onlinePaise
-    val formattedTotal: String get() = Money.formatPaise(totalPaise)
+    val totalPaise: Long get() = totalAvailablePaise
+    val formattedTotal: String get() = Money.formatPaise(totalAvailablePaise)
     val formattedCash: String get() = Money.formatPaise(cashPaise)
     val formattedOnline: String get() = Money.formatPaise(onlinePaise)
+    val isConfigured: Boolean get() = balancesConfiguredAt > 0L
 }
 
 @Serializable
@@ -91,6 +109,8 @@ data class Person(
     val phone: String? = null,
     val notes: String? = null,
     val totalBalancePaise: Long = 0L, // Positive = they owe user; Negative = user owes them
+    val moneyGivenPaise: Long = 0L,
+    val moneyReceivedPaise: Long = 0L,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val formattedBalance: String get() = Money.formatPaise(kotlin.math.abs(totalBalancePaise))
@@ -139,16 +159,34 @@ data class SyncOutboxItem(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+data class CategorySpendingItem(
+    val categoryId: String,
+    val categoryName: String,
+    val amountPaise: Long,
+    val percentage: Double
+)
+
+data class NecessitySpendingItem(
+    val tier: NecessityTier,
+    val label: String,
+    val amountPaise: Long,
+    val percentage: Double
+)
+
 data class DashboardSummary(
     val totalBalancePaise: Long = 0L,
     val cashBalancePaise: Long = 0L,
     val onlineBalancePaise: Long = 0L,
     val totalIncomePaise: Long = 0L,
     val totalExpensePaise: Long = 0L,
-    val netSavingsPaise: Long = 0L,
-    val needsExpensePaise: Long = 0L,
-    val wantsExpensePaise: Long = 0L,
-    val savingsExpensePaise: Long = 0L,
+    val netCashFlowPaise: Long = 0L,
+    val savingsRatePercent: Double = 0.0,
+    val essentialExpensePaise: Long = 0L,
+    val optionalExpensePaise: Long = 0L,
+    val luxuryExpensePaise: Long = 0L,
+    val spendingByCategory: List<CategorySpendingItem> = emptyList(),
+    val spendingByNecessity: List<NecessitySpendingItem> = emptyList(),
     val recentTransactions: List<Transaction> = emptyList(),
-    val pendingSmsCount: Int = 0
+    val pendingSmsCount: Int = 0,
+    val balancesConfigured: Boolean = true
 )

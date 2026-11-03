@@ -124,11 +124,11 @@ fun DashboardScreen(
                 }
             }
 
-            // Net Balance Card
+            // Total Balance Card
             item {
                 ArthCard {
                     Text(
-                        text = "Net Balance",
+                        text = "Total Balance",
                         style = MaterialTheme.typography.titleMedium,
                         color = ArthTheme.colors.textSecondary
                     )
@@ -139,7 +139,7 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(16.dp))
-                    Divider(color = ArthTheme.colors.border, thickness = 1.dp)
+                    HorizontalDivider(color = ArthTheme.colors.border, thickness = 1.dp)
                     Spacer(Modifier.height(12.dp))
 
                     Row(
@@ -148,7 +148,7 @@ fun DashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Cash in Hand",
+                                text = "Cash Balance",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ArthTheme.colors.textSecondary
                             )
@@ -161,7 +161,7 @@ fun DashboardScreen(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "Online Accounts",
+                                text = "Online Balance",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ArthTheme.colors.textSecondary
                             )
@@ -176,7 +176,7 @@ fun DashboardScreen(
                 }
             }
 
-            // Inflow & Outflow Summary Cards
+            // Income, Expense, and Net Cash Flow Summary Cards
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -192,7 +192,7 @@ fun DashboardScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Inflow",
+                                text = "Income",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ArthTheme.colors.textSecondary
                             )
@@ -215,7 +215,7 @@ fun DashboardScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Outflow",
+                                text = "Expense",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = ArthTheme.colors.textSecondary
                             )
@@ -230,12 +230,12 @@ fun DashboardScreen(
                 }
             }
 
-            // 50/30/20 Necessity Breakdown Card
+            // Spending by Necessity (Essential / Optional / Luxury)
             item {
                 val totalExpense = state.periodExpensePaise
-                val needsPct = if (totalExpense > 0) ((state.needsExpensePaise * 100) / totalExpense).toInt() else 0
-                val wantsPct = if (totalExpense > 0) ((state.wantsExpensePaise * 100) / totalExpense).toInt() else 0
-                val savingsPct = if (totalExpense > 0) ((state.savingsExpensePaise * 100) / totalExpense).toInt() else 0
+                val essentialPct = if (totalExpense > 0) ((state.essentialExpensePaise * 100) / totalExpense).toInt() else 0
+                val optionalPct = if (totalExpense > 0) ((state.optionalExpensePaise * 100) / totalExpense).toInt() else 0
+                val luxuryPct = if (totalExpense > 0) ((state.luxuryExpensePaise * 100) / totalExpense).toInt() else 0
 
                 ArthCard {
                     Text(
@@ -253,28 +253,28 @@ fun DashboardScreen(
                             .clip(RoundedCornerShape(4.dp))
                             .background(ArthTheme.colors.border)
                     ) {
-                        if (needsPct > 0) {
+                        if (essentialPct > 0) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .weight(needsPct.toFloat().coerceAtLeast(1f))
+                                    .weight(essentialPct.toFloat().coerceAtLeast(1f))
                                     .background(ArthTheme.colors.blue)
                             )
                         }
-                        if (wantsPct > 0) {
+                        if (optionalPct > 0) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .weight(wantsPct.toFloat().coerceAtLeast(1f))
-                                    .background(ArthTheme.colors.purple)
+                                    .weight(optionalPct.toFloat().coerceAtLeast(1f))
+                                    .background(ArthTheme.colors.amber)
                             )
                         }
-                        if (savingsPct > 0) {
+                        if (luxuryPct > 0) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .weight(savingsPct.toFloat().coerceAtLeast(1f))
-                                    .background(ArthTheme.colors.emerald)
+                                    .weight(luxuryPct.toFloat().coerceAtLeast(1f))
+                                    .background(ArthTheme.colors.purple)
                             )
                         }
                     }
@@ -286,19 +286,19 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         NecessityStat(
-                            title = "Needs ($needsPct%)",
-                            amount = Money.formatPaise(state.needsExpensePaise),
+                            title = "Essential ($essentialPct%)",
+                            amount = Money.formatPaise(state.essentialExpensePaise),
                             color = ArthTheme.colors.blue
                         )
                         NecessityStat(
-                            title = "Wants ($wantsPct%)",
-                            amount = Money.formatPaise(state.wantsExpensePaise),
-                            color = ArthTheme.colors.purple
+                            title = "Optional ($optionalPct%)",
+                            amount = Money.formatPaise(state.optionalExpensePaise),
+                            color = ArthTheme.colors.amber
                         )
                         NecessityStat(
-                            title = "Savings ($savingsPct%)",
-                            amount = Money.formatPaise(state.savingsExpensePaise),
-                            color = ArthTheme.colors.emerald
+                            title = "Luxury ($luxuryPct%)",
+                            amount = Money.formatPaise(state.luxuryExpensePaise),
+                            color = ArthTheme.colors.purple
                         )
                     }
                 }
@@ -338,7 +338,7 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No transactions yet. Use Quick Add below.",
+                                text = "No transactions yet. Use Add below.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = ArthTheme.colors.textMuted
                             )
@@ -410,8 +410,10 @@ fun TransactionListItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                val primaryTitle = transaction.counterparty?.takeIf { it.isNotBlank() }
+                    ?: transaction.categoryName
                 Text(
-                    text = transaction.counterparty ?: transaction.categoryName,
+                    text = primaryTitle,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -421,7 +423,7 @@ fun TransactionListItem(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     PaymentBadge(mode = transaction.paymentMode)
-                    if (transaction.type == TransactionType.EXPENSE) {
+                    if (transaction.type == TransactionType.EXPENSE && transaction.necessity != null) {
                         NecessityBadge(necessity = transaction.necessity)
                     }
                     Text(

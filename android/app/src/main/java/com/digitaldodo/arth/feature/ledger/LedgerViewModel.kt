@@ -7,12 +7,13 @@ import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.model.NecessityTier
 import com.digitaldodo.arth.core.model.PaymentMode
 import com.digitaldodo.arth.core.model.Transaction
+import com.digitaldodo.arth.core.model.TransactionType
 import com.digitaldodo.arth.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class LedgerFilter {
-    ALL, CASH, ONLINE, NEEDS, WANTS, SAVINGS
+    ALL, EXPENSE, INCOME, CASH, ONLINE, ESSENTIAL, OPTIONAL, LUXURY
 }
 
 data class LedgerUiState(
@@ -96,11 +97,13 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
 
             val matchesFilter = when (filter) {
                 LedgerFilter.ALL -> true
+                LedgerFilter.EXPENSE -> tx.type == TransactionType.EXPENSE
+                LedgerFilter.INCOME -> tx.type == TransactionType.INCOME
                 LedgerFilter.CASH -> tx.paymentMode == PaymentMode.CASH
                 LedgerFilter.ONLINE -> tx.paymentMode == PaymentMode.ONLINE
-                LedgerFilter.NEEDS -> tx.necessity == NecessityTier.NEEDS
-                LedgerFilter.WANTS -> tx.necessity == NecessityTier.WANTS
-                LedgerFilter.SAVINGS -> tx.necessity == NecessityTier.SAVINGS
+                LedgerFilter.ESSENTIAL -> tx.necessity == NecessityTier.ESSENTIAL
+                LedgerFilter.OPTIONAL -> tx.necessity == NecessityTier.OPTIONAL
+                LedgerFilter.LUXURY -> tx.necessity == NecessityTier.LUXURY
             }
 
             matchesQuery && matchesFilter

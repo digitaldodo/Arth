@@ -5,7 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.model.SyncStatus
-import com.digitaldodo.arth.core.network.NativeTransactionDto
+import com.digitaldodo.arth.core.network.CreateTransactionApiRequest
 import com.digitaldodo.arth.core.network.NetworkClient
 import com.digitaldodo.arth.core.security.SecureStorage
 import kotlinx.serialization.json.Json
@@ -39,19 +39,18 @@ class SyncWorker(
             try {
                 if (item.entityType == "TRANSACTION") {
                     if (item.operation == "INSERT") {
-                        val dto = json.decodeFromString<NativeTransactionDto>(item.payloadJson)
-                        val response = arthApi.createTransaction(dto)
-                        if (response.success) {
+                        val request = json.decodeFromString<CreateTransactionApiRequest>(item.payloadJson)
+                        val response = arthApi.createTransaction(request)
+                        if (response.transaction != null || response.idempotentReplay) {
                             outboxDao.deleteById(item.id)
                             transactionDao.getById(item.entityId)?.let { current ->
                                 transactionDao.update(current.copy(syncStatus = SyncStatus.SYNCED.name))
                             }
                         } else {
-                            outboxDao.recordAttempt(item.id, response.message ?: "Server rejected transaction")
+                            outboxDao.recordAttempt(item.id, "Server failed to record transaction")
                             anyFailed = true
                         }
                     } else if (item.operation == "DELETE") {
-                        // Backend delete support
                         outboxDao.deleteById(item.id)
                     }
                 }

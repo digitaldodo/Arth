@@ -71,11 +71,13 @@ fun LedgerScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PeriodChip("All", state.activeFilter == LedgerFilter.ALL) { viewModel.setFilter(LedgerFilter.ALL) }
+                    PeriodChip("Expense", state.activeFilter == LedgerFilter.EXPENSE) { viewModel.setFilter(LedgerFilter.EXPENSE) }
+                    PeriodChip("Income", state.activeFilter == LedgerFilter.INCOME) { viewModel.setFilter(LedgerFilter.INCOME) }
                     PeriodChip("Cash", state.activeFilter == LedgerFilter.CASH) { viewModel.setFilter(LedgerFilter.CASH) }
                     PeriodChip("Online", state.activeFilter == LedgerFilter.ONLINE) { viewModel.setFilter(LedgerFilter.ONLINE) }
-                    PeriodChip("Needs", state.activeFilter == LedgerFilter.NEEDS) { viewModel.setFilter(LedgerFilter.NEEDS) }
-                    PeriodChip("Wants", state.activeFilter == LedgerFilter.WANTS) { viewModel.setFilter(LedgerFilter.WANTS) }
-                    PeriodChip("Savings", state.activeFilter == LedgerFilter.SAVINGS) { viewModel.setFilter(LedgerFilter.SAVINGS) }
+                    PeriodChip("Essential", state.activeFilter == LedgerFilter.ESSENTIAL) { viewModel.setFilter(LedgerFilter.ESSENTIAL) }
+                    PeriodChip("Optional", state.activeFilter == LedgerFilter.OPTIONAL) { viewModel.setFilter(LedgerFilter.OPTIONAL) }
+                    PeriodChip("Luxury", state.activeFilter == LedgerFilter.LUXURY) { viewModel.setFilter(LedgerFilter.LUXURY) }
                 }
             }
         }

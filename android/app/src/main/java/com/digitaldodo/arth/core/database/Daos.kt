@@ -121,7 +121,7 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(categories: List<CategoryEntity>)
 
-    @Query("DELETE FROM categories WHERE id = :id AND isSystem = 0")
+    @Query("DELETE FROM categories WHERE id = :id AND isDefault = 0")
     suspend fun delete(id: String)
 }
 
@@ -147,6 +147,9 @@ interface PersonDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(person: PersonEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(people: List<PersonEntity>)
 
     @Update
     suspend fun update(person: PersonEntity)

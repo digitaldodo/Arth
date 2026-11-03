@@ -1,7 +1,8 @@
 package com.digitaldodo.arth
 
+import android.content.Intent
 import android.os.Bundle
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
@@ -20,11 +21,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
+import com.digitaldodo.arth.core.network.EnvironmentValidator
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.feature.auth.AuthViewModel
 import com.digitaldodo.arth.feature.auth.LoginScreen
@@ -67,6 +70,9 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        EnvironmentValidator.validate()
+        handleAuthIntent(intent)
 
         val secureStorage = SecureStorage(this)
         val requireBiometric = secureStorage.isLoggedIn() && secureStorage.isBiometricLockEnabled()
@@ -155,6 +161,48 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAuthIntent(intent)
+    }
+
+    private fun handleAuthIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == "arth" && data.host == "auth" && data.path?.startsWith("/callback") == true) {
+            var accessToken = data.getQueryParameter("access_token")
+            var refreshToken = data.getQueryParameter("refresh_token")
+            var userId = data.getQueryParameter("user_id")
+            var email = data.getQueryParameter("email")
+            val error = data.getQueryParameter("error")
+            val errorDescription = data.getQueryParameter("error_description")
+
+            // Check fragment if query params were empty (e.g. standard OAuth hash fragment)
+            val fragment = data.fragment
+            if (accessToken.isNullOrBlank() && !fragment.isNullOrBlank()) {
+                val params = fragment.split("&").associate {
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
+                }
+                accessToken = params["access_token"]
+                refreshToken = params["refresh_token"]
+                userId = params["user_id"]
+                email = params["email"]
+            }
+
+            if (!error.isNullOrBlank()) {
+                authViewModel.onAuthError(errorDescription ?: error)
+            } else if (!accessToken.isNullOrBlank()) {
+                authViewModel.onSessionReceived(
+                    accessToken = accessToken,
+                    refreshToken = refreshToken,
+                    userId = userId ?: "",
+                    email = email
+                )
+            }
+        }
+    }
+
     private fun promptBiometrics(onSuccess: () -> Unit) {
         val executor = ContextCompat.getMainExecutor(this)
         val biometricPrompt = BiometricPrompt(
@@ -168,7 +216,6 @@ class MainActivity : FragmentActivity() {
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // If hardware is not present or no biometrics enrolled, unlock so user is not stuck
                     if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS ||
                         errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT ||
                         errorCode == BiometricPrompt.ERROR_HW_UNAVAILABLE) {
@@ -210,6 +257,16 @@ fun ArthAppNavHost(
     val navController = rememberNavController()
     var showQuickAddSheet by remember { mutableStateOf(false) }
 
+    val authState by authViewModel.uiState.collectAsState()
+
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated) {
+            navController.navigate("main") {
+                popUpTo("login") { inclusive = true }
+            }
+        }
+    }
+
     val startDestination = if (isLoggedInInitial) "main" else "login"
 
     NavHost(
@@ -238,8 +295,10 @@ fun ArthAppNavHost(
                 onNavigateToReports = { navController.navigate("reports") },
                 onNavigateToSmsReview = { navController.navigate("sms_review") },
                 onSignOut = {
-                    navController.navigate("login") {
-                        popUpTo("main") { inclusive = true }
+                    authViewModel.logout {
+                        navController.navigate("login") {
+                            popUpTo("main") { inclusive = true }
+                        }
                     }
                 }
             )
@@ -313,7 +372,15 @@ fun MainTabsScaffold(
 ) {
     val tabNavController = rememberNavController()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+
+    // Priority 2: Back navigation from any tab returns to Dashboard
+    BackHandler(enabled = currentRoute != Screen.Dashboard.route) {
+        tabNavController.navigate(Screen.Dashboard.route) {
+            popUpTo(Screen.Dashboard.route) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
 
     val items = listOf(
         Screen.Dashboard,
@@ -379,7 +446,7 @@ fun MainTabsScaffold(
                             }
                         },
                         onNavigateToSmsReview = onNavigateToSmsReview,
-                        onTransactionClick = { txId ->
+                        onTransactionClick = { _ ->
                             tabNavController.navigate(Screen.Ledger.route) {
                                 launchSingleTop = true
                             }

@@ -19,7 +19,7 @@ data class TransactionEntity(
     val amountPaise: Long,
     val type: String,
     val paymentMode: String,
-    val necessity: String,
+    val necessity: String?,
     val categoryId: String,
     val categoryName: String,
     val categoryIcon: String,
@@ -36,8 +36,8 @@ data class TransactionEntity(
         id = id,
         userId = userId,
         amountPaise = amountPaise,
-        type = runCatching { TransactionType.valueOf(type) }.getOrDefault(TransactionType.EXPENSE),
-        paymentMode = runCatching { PaymentMode.valueOf(paymentMode) }.getOrDefault(PaymentMode.ONLINE),
+        type = runCatching { TransactionType.valueOf(type.uppercase()) }.getOrDefault(TransactionType.EXPENSE),
+        paymentMode = runCatching { PaymentMode.valueOf(paymentMode.uppercase()) }.getOrDefault(PaymentMode.ONLINE),
         necessity = NecessityTier.fromString(necessity),
         categoryId = categoryId,
         categoryName = categoryName,
@@ -59,7 +59,7 @@ data class TransactionEntity(
             amountPaise = domain.amountPaise,
             type = domain.type.name,
             paymentMode = domain.paymentMode.name,
-            necessity = domain.necessity.name,
+            necessity = domain.necessity?.apiValue,
             categoryId = domain.categoryId,
             categoryName = domain.categoryName,
             categoryIcon = domain.categoryIcon,
@@ -82,19 +82,19 @@ data class CategoryEntity(
     val icon: String,
     val color: String,
     val type: String,
-    val isSystem: Boolean,
-    val sortOrder: Int,
-    val monthlyBudgetPaise: Long = 0L
+    val isDefault: Boolean = false,
+    val sortOrder: Int = 0,
+    val isArchived: Boolean = false
 ) {
     fun toDomain(): Category = Category(
         id = id,
         name = name,
         icon = icon,
         color = color,
-        type = runCatching { TransactionType.valueOf(type) }.getOrDefault(TransactionType.EXPENSE),
-        isSystem = isSystem,
+        type = runCatching { TransactionType.valueOf(type.uppercase()) }.getOrDefault(TransactionType.EXPENSE),
+        isDefault = isDefault,
         sortOrder = sortOrder,
-        monthlyBudgetPaise = monthlyBudgetPaise
+        isArchived = isArchived
     )
 
     companion object {
@@ -104,9 +104,9 @@ data class CategoryEntity(
             icon = domain.icon,
             color = domain.color,
             type = domain.type.name,
-            isSystem = domain.isSystem,
+            isDefault = domain.isDefault,
             sortOrder = domain.sortOrder,
-            monthlyBudgetPaise = domain.monthlyBudgetPaise
+            isArchived = domain.isArchived
         )
     }
 }
@@ -116,12 +116,16 @@ data class AccountBalancesEntity(
     @PrimaryKey val id: String = "primary",
     val cashPaise: Long = 0L,
     val onlinePaise: Long = 0L,
+    val startingCashPaise: Long = 0L,
+    val startingOnlinePaise: Long = 0L,
     val balancesConfiguredAt: Long = 0L
 ) {
     fun toDomain(): AccountBalances = AccountBalances(
         id = id,
         cashPaise = cashPaise,
         onlinePaise = onlinePaise,
+        startingCashPaise = startingCashPaise,
+        startingOnlinePaise = startingOnlinePaise,
         balancesConfiguredAt = balancesConfiguredAt
     )
 
@@ -130,6 +134,8 @@ data class AccountBalancesEntity(
             id = domain.id,
             cashPaise = domain.cashPaise,
             onlinePaise = domain.onlinePaise,
+            startingCashPaise = domain.startingCashPaise,
+            startingOnlinePaise = domain.startingOnlinePaise,
             balancesConfiguredAt = domain.balancesConfiguredAt
         )
     }
@@ -142,6 +148,8 @@ data class PersonEntity(
     val phone: String?,
     val notes: String?,
     val totalBalancePaise: Long = 0L,
+    val moneyGivenPaise: Long = 0L,
+    val moneyReceivedPaise: Long = 0L,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toDomain(): Person = Person(
@@ -150,6 +158,8 @@ data class PersonEntity(
         phone = phone,
         notes = notes,
         totalBalancePaise = totalBalancePaise,
+        moneyGivenPaise = moneyGivenPaise,
+        moneyReceivedPaise = moneyReceivedPaise,
         createdAt = createdAt
     )
 
@@ -160,6 +170,8 @@ data class PersonEntity(
             phone = domain.phone,
             notes = domain.notes,
             totalBalancePaise = domain.totalBalancePaise,
+            moneyGivenPaise = domain.moneyGivenPaise,
+            moneyReceivedPaise = domain.moneyReceivedPaise,
             createdAt = domain.createdAt
         )
     }
@@ -206,7 +218,7 @@ data class PersonTransactionEntity(
 
 @Entity(
     tableName = "sms_suggestions",
-    indices = [Index(value = ["status", "smsTimestamp"], orders = [Index.Order.ASC, Index.Order.DESC], name = "idx_sms_status")]
+    indices = [Index(value = ["smsTimestamp"], orders = [Index.Order.DESC], name = "idx_sms_ts")]
 )
 data class SmsSuggestionEntity(
     @PrimaryKey val id: String,
@@ -249,7 +261,10 @@ data class SmsSuggestionEntity(
     }
 }
 
-@Entity(tableName = "sync_outbox")
+@Entity(
+    tableName = "sync_outbox",
+    indices = [Index(value = ["createdAt"], name = "idx_outbox_created")]
+)
 data class SyncOutboxEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val entityType: String,
