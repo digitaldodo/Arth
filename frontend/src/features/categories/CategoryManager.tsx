@@ -18,6 +18,7 @@ import {
 } from './category-icons';
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useBackHandler } from '@/features/navigation';
 
 interface CategoryManagerProps {
   userId: string;
@@ -70,6 +71,44 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
   // Reorder loading indicator
   const [isReordering, setIsReordering] = useState<boolean>(false);
   const [loadTrigger, setLoadTrigger] = useState<number>(0);
+  // Priority 1: Back handler for category archiving confirmation dialog
+  useBackHandler({
+    id: 'dialog-archive-category',
+    priority: 'dialog',
+    enabled: Boolean(archivingCategory),
+    onBack: () => {
+      if (!isArchiving) {
+        setArchivingCategory(null);
+        return true;
+      }
+      return 'prevented';
+    },
+  });
+
+  // Priority 1b: Back handler for editing category
+  useBackHandler({
+    id: 'modal-edit-category',
+    priority: 'modal',
+    enabled: Boolean(editingId),
+    onBack: () => {
+      cancelEditing();
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for adding new category
+  useBackHandler({
+    id: 'modal-add-category',
+    priority: 'modal',
+    enabled: isAddingNew,
+    onBack: () => {
+      setIsAddingNew(false);
+      setNewName('');
+      setNewIcon('');
+      setCreateError(null);
+      return true;
+    },
+  });
 
   useEffect(() => {
     let isMounted = true;

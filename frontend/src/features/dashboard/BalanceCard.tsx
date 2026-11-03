@@ -7,6 +7,7 @@ import { ConfigureStartingBalancesModal } from './ConfigureStartingBalancesModal
 import { TransferModal } from './TransferModal';
 import { AdjustBalanceModal } from './AdjustBalanceModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
+import { useBackHandler } from '@/features/navigation';
 
 interface BalanceCardProps {
   balances: AccountBalancesDTO | null;
@@ -35,6 +36,35 @@ export function BalanceCard({
 
   const isConfigured = balances?.balances_configured ?? false;
   useCriticalOperation(isConfigureOpen || isTransferOpen || isAdjustOpen);
+  useBackHandler({
+    id: 'modal-balance-configure',
+    priority: 'modal',
+    enabled: isConfigureOpen,
+    onBack: () => {
+      setIsConfigureOpen(false);
+      return true;
+    },
+  });
+
+  useBackHandler({
+    id: 'modal-balance-transfer',
+    priority: 'modal',
+    enabled: isTransferOpen,
+    onBack: () => {
+      setIsTransferOpen(false);
+      return true;
+    },
+  });
+
+  useBackHandler({
+    id: 'modal-balance-adjust',
+    priority: 'modal',
+    enabled: isAdjustOpen,
+    onBack: () => {
+      setIsAdjustOpen(false);
+      return true;
+    },
+  });
 
   return (
     <>

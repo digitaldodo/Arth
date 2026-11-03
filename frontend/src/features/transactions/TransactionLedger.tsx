@@ -21,6 +21,7 @@ import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { getCachedTransactions, getCachedCategories, setCachedCategories, getSyncMeta } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useBackHandler } from '@/features/navigation';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 export type LedgerSortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
@@ -200,6 +201,41 @@ export function TransactionLedger({
 
   // PDF Export Dialog State
   const [isExportDialogOpen, setIsExportDialogOpen] = useState<boolean>(false);
+  // Priority 1: Back handler for Transaction Details Drawer
+  useBackHandler({
+    id: 'drawer-transaction-detail',
+    priority: 'modal',
+    enabled: Boolean(selectedTransaction),
+    onBack: () => {
+      setSelectedTransaction(null);
+      return true;
+    },
+  });
+
+  // Priority 1: Back handler for Delete Confirmation Dialog
+  useBackHandler({
+    id: 'dialog-delete-transaction',
+    priority: 'dialog',
+    enabled: Boolean(deletingTransaction),
+    onBack: () => {
+      if (!isDeleting) {
+        setDeletingTransaction(null);
+        return true;
+      }
+      return 'prevented';
+    },
+  });
+
+  // Priority 1: Back handler for PDF Export Dialog
+  useBackHandler({
+    id: 'modal-export-pdf',
+    priority: 'modal',
+    enabled: isExportDialogOpen,
+    onBack: () => {
+      setIsExportDialogOpen(false);
+      return true;
+    },
+  });
 
   // Sequence ref and AbortController to cancel obsolete in-flight requests and prevent race conditions
   const querySeqRef = useRef<number>(0);

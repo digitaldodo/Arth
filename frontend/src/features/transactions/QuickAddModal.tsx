@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v7 as uuidv7 } from 'uuid';
 import {
   type CategoryDTO,
@@ -17,6 +17,8 @@ import { getTodayIST, formatDateHuman } from '@/lib/format';
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useBackHandler } from '@/features/navigation';
+import { UnsavedChangesDialog } from '@/components/ui/UnsavedChangesDialog';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -77,6 +79,7 @@ export function QuickAddModal({
   const isSubmittingRef = useRef<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [consecutiveSuccessToast, setConsecutiveSuccessToast] = useState<string | null>(null);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState<boolean>(false);
 
   // Focus amount input when modal opens or after consecutive entry reset
   useEffect(() => {
@@ -175,16 +178,57 @@ export function QuickAddModal({
     };
   }, [isOpen, type, categoryVersion, editingTransaction, userId, isPwa]);
 
+  const isFormDirty = useCallback((): boolean => {
+    if (editingTransaction) {
+      return (
+        type !== editingTransaction.type ||
+        amount.trim() !== (editingTransaction.amount_decimal || '').trim() ||
+        categoryId !== editingTransaction.category_id ||
+        transactionDate !== editingTransaction.transaction_date ||
+        paymentMethod !== editingTransaction.payment_method ||
+        necessity !== (editingTransaction.necessity ?? null) ||
+        description.trim() !== (editingTransaction.description || '').trim() ||
+        notes.trim() !== (editingTransaction.notes || '').trim()
+      );
+    }
+    return amount.trim() !== '' || description.trim() !== '' || notes.trim() !== '';
+  }, [editingTransaction, type, amount, categoryId, transactionDate, paymentMethod, necessity, description, notes]);
+
+  const handleAttemptClose = useCallback(() => {
+    if (isSubmitting) return;
+    if (isFormDirty()) {
+      setShowUnsavedConfirm(true);
+    } else {
+      onClose();
+    }
+  }, [isSubmitting, isFormDirty, onClose]);
+
+  // Intercept Android back gesture / browser back (Priority: modal)
+  useBackHandler({
+    id: isEditMode ? 'modal-edit-transaction' : 'modal-quick-add',
+    priority: 'modal',
+    enabled: isOpen,
+    onBack: () => {
+      if (isSubmitting) return 'prevented';
+      if (isFormDirty()) {
+        setShowUnsavedConfirm(true);
+        return 'prevented';
+      }
+      onClose();
+      return true;
+    },
+  });
+
   // Handle Escape key to close modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isSubmitting) {
-        onClose();
+        handleAttemptClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isSubmitting, onClose]);
+  }, [isOpen, isSubmitting, handleAttemptClose]);
 
   if (!isOpen) return null;
 
@@ -342,7 +386,7 @@ export function QuickAddModal({
       <div
         className="fixed inset-0"
         onClick={() => {
-          if (!isSubmitting) onClose();
+          if (!isSubmitting) handleAttemptClose();
         }}
       />
 
@@ -368,7 +412,7 @@ export function QuickAddModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAttemptClose}
             disabled={isSubmitting}
             aria-label="Close dialog"
             className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-sm text-sm cursor-pointer"
@@ -725,6 +769,26 @@ export function QuickAddModal({
           </div>
         </form>
       </div>
+
+      <UnsavedChangesDialog
+        isOpen={showUnsavedConfirm}
+        title={isEditMode ? 'Discard changes to transaction?' : 'Discard unsaved transaction?'}
+        message={
+          isEditMode
+            ? 'You have modified this transaction. Are you sure you want to discard your edits?'
+            : 'You have entered transaction details. Are you sure you want to discard this entry?'
+        }
+        onCancel={() => setShowUnsavedConfirm(false)}
+        onDiscard={() => {
+          setShowUnsavedConfirm(false);
+          onClose();
+        }}
+        onSave={() => {
+          setShowUnsavedConfirm(false);
+          void executeSave(false);
+        }}
+        isSaving={isSubmitting}
+      />
     </div>
   );
 }

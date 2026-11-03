@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PwaRuntimeManager } from './PwaRuntimeManager';
+import { BackNavigationProvider } from '@/features/navigation';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -85,7 +86,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-[var(--bg-canvas)] text-[var(--text-primary)]">
         <PwaRuntimeManager />
-        {children}
+        <BackNavigationProvider>
+          {children}
+        </BackNavigationProvider>
       </body>
     </html>
   );

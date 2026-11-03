@@ -20,6 +20,7 @@ import {
 import { getTodayIST, formatPaiseToINR } from '@/lib/format';
 import { getCachedPeople, setCachedPeople, getCachedPersonDetail, setCachedPersonDetail } from '@/lib/offline-db';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useBackHandler } from '@/features/navigation';
 
 interface PeoplePageProps {
   userId: string;
@@ -82,6 +83,83 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
 
   // Record filter within detail view
   const [recordStatusFilter, setRecordStatusFilter] = useState<'all' | 'unsettled' | 'settled'>('all');
+  // Priority 1: Back handler for archive confirmation
+  useBackHandler({
+    id: 'dialog-archive-person',
+    priority: 'dialog',
+    enabled: isArchiveConfirmOpen,
+    onBack: () => {
+      setIsArchiveConfirmOpen(false);
+      return true;
+    },
+  });
+
+  // Priority 1: Back handler for change direction confirmation
+  useBackHandler({
+    id: 'dialog-change-direction',
+    priority: 'dialog',
+    enabled: isChangeDirOpen,
+    onBack: () => {
+      setIsChangeDirOpen(false);
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for settling money record
+  useBackHandler({
+    id: 'modal-settle-record',
+    priority: 'modal',
+    enabled: Boolean(settlingRecord),
+    onBack: () => {
+      setSettlingRecord(null);
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for rename person modal
+  useBackHandler({
+    id: 'modal-rename-person',
+    priority: 'modal',
+    enabled: isRenameOpen,
+    onBack: () => {
+      setIsRenameOpen(false);
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for add record modal
+  useBackHandler({
+    id: 'modal-add-record',
+    priority: 'modal',
+    enabled: isAddRecordOpen,
+    onBack: () => {
+      setIsAddRecordOpen(false);
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for person details drawer/modal
+  useBackHandler({
+    id: 'modal-person-detail',
+    priority: 'modal',
+    enabled: Boolean(personDetail),
+    onBack: () => {
+      setPersonDetail(null);
+      setSelectedPersonId(null);
+      return true;
+    },
+  });
+
+  // Priority 1b: Back handler for add person modal
+  useBackHandler({
+    id: 'modal-add-person',
+    priority: 'modal',
+    enabled: isAddPersonOpen,
+    onBack: () => {
+      setIsAddPersonOpen(false);
+      return true;
+    },
+  });
 
   // Load people list
   useEffect(() => {
