@@ -134,6 +134,8 @@ jobs:
 
       - name: Package & Prepare Artifacts
         id: package-artifacts
+        env:
+          REPO_NAME: ${{ github.repository }}
         run: |
           RAW_APK=$(find android/app/build/outputs/apk/local/release -name "*.apk" ! -name "*unsigned*" | head -n 1)
           if [ -z "$RAW_APK" ]; then
@@ -178,28 +180,30 @@ jobs:
           echo "APK_SIZE_MB=${APK_SIZE_MB}" >> $GITHUB_ENV
 
           # Generate dynamic release metadata JSON
-          cat <<EOF > release.json
-{
-  "version": "${{ env.BASE_VERSION }}",
-  "versionCode": ${{ env.VERSION_CODE }},
-  "buildNumber": ${{ env.BUILD_NUM }},
-  "releaseDate": "$(date -u +%Y-%m-%d)",
-  "minAndroidVersion": "Android 8.0 (API 26)",
-  "targetAndroidVersion": "Android 15 (API 35)",
-  "apkFileName": "Arth.apk",
-  "apkSize": "${APK_SIZE_MB}",
-  "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/android-latest/Arth.apk",
-  "githubReleaseUrl": "https://github.com/${{ github.repository }}/releases/tag/android-latest",
-  "sha256": "${SHA256_HASH}",
-  "highlights": [
-    "Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system",
-    "Offline-first transaction management with local Room database and Supabase synchronization",
-    "Biometric Fingerprint & Device Credential app lock with AndroidX BiometricPrompt",
-    "Direct distribution build with zero sensitive SMS permissions for user privacy and security"
-  ],
-  "disclaimer": "This direct APK release does not request or include SMS permissions. Financial transaction auto-detection from SMS is exclusive to the upcoming Google Play Store release."
-}
-EOF
+          node -e '
+            const fs = require("fs");
+            const meta = {
+              version: process.env.BASE_VERSION,
+              versionCode: Number(process.env.VERSION_CODE),
+              buildNumber: Number(process.env.BUILD_NUM),
+              releaseDate: new Date().toISOString().slice(0, 10),
+              minAndroidVersion: "Android 8.0 (API 26)",
+              targetAndroidVersion: "Android 15 (API 35)",
+              apkFileName: "Arth.apk",
+              apkSize: process.env.APK_SIZE_MB,
+              downloadUrl: `https://github.com/${process.env.REPO_NAME}/releases/download/android-latest/Arth.apk`,
+              githubReleaseUrl: `https://github.com/${process.env.REPO_NAME}/releases/tag/android-latest`,
+              sha256: process.env.SHA256_HASH,
+              highlights: [
+                "Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system",
+                "Offline-first transaction management with local Room database and Supabase synchronization",
+                "Biometric Fingerprint & Device Credential app lock with AndroidX BiometricPrompt",
+                "Direct distribution build with zero sensitive SMS permissions for user privacy and security"
+              ],
+              disclaimer: "This direct APK release does not request or include SMS permissions. Financial transaction auto-detection from SMS is exclusive to the upcoming Google Play Store release."
+            };
+            fs.writeFileSync("release.json", JSON.stringify(meta, null, 2) + "\n");
+          '
 
       - name: Publish Perpetual Latest Release (tag android-latest)
         uses: softprops/action-gh-release@v2
