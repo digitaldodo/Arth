@@ -62,7 +62,7 @@ class FinancialNotificationListener : NotificationListenerService() {
                 enableVibration(false)
             })
         }
-        val intent = Intent(this, DetectionActivity::class.java).putExtra("candidate_id", candidateId)
+        val intent = Intent(this, MainActivity::class.java).putExtra("candidate_id", candidateId)
         val pending = PendingIntent.getActivity(this, candidateId.toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
         val notification = NotificationCompat.Builder(this, CHANNEL)

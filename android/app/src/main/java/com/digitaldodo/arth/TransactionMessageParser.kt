@@ -56,14 +56,15 @@ object TransactionMessageParser {
         val merchant = merchantPattern.findAll(content).mapNotNull { it.groupValues.getOrNull(1)?.trim()?.trimEnd('.', ',') }
             .firstOrNull { it.length >= 2 && !Regex("^(your\\s+)?(bank\\s+)?account$|^a/c$", RegexOption.IGNORE_CASE).matches(it) }
         val reference = refPattern.find(content)?.groupValues?.getOrNull(1)?.uppercase(Locale.ROOT)
-        val parsedDate = dateFormats.firstNotNullOfOrNull { format ->
+        val parsedDateFromMessage = dateFormats.firstNotNullOfOrNull { format ->
             Regex("\\b(?:[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4}|[0-9]{1,2}\\s+[A-Za-z]{3,9},?\\s+[0-9]{2,4})\\b").find(content)?.value?.let { token ->
                 runCatching {
                     val parser = SimpleDateFormat(format, Locale.ENGLISH).apply { isLenient = false }
                     parser.parse(token)?.let { SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(it) }
                 }.getOrNull()
             }
-        } ?: if (postedAt > 0) SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(postedAt)) else null
+        }
+        val parsedDate = parsedDateFromMessage ?: if (postedAt > 0) SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(postedAt)) else null
         val timeToken = Regex("\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\s*(?:AM|PM)?\\b", RegexOption.IGNORE_CASE).find(content)?.value
         val parsedTime = timeToken?.let { token ->
             runCatching {
@@ -91,7 +92,7 @@ object TransactionMessageParser {
         if (direction != null) origins["direction"] = "rule"
         if (merchant != null) origins["merchant"] = "rule"
         if (reference != null) origins["reference"] = "message"
-        if (parsedDate != null) origins["date"] = if (Regex("\\b(?:[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4}|[0-9]{1,2}\\s+[A-Za-z]{3,9})\\b").containsMatchIn(content)) "message" else "notification_time"
+        if (parsedDate != null) origins["date"] = if (parsedDateFromMessage != null) "message" else "notification_time"
         if (parsedTime != null) origins["time"] = if (timeToken != null) "message" else "notification_time"
         if (method != null) origins["payment_method"] = "rule"
         val confidence = listOf(amount, direction, parsedDate).count { it != null } * 25 + (if (reference != null) 10 else 0) + (if (merchant != null) 10 else 0)

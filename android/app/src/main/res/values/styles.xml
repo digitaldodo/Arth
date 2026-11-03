@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.LauncherActivity" parent="Theme.SplashScreen">
-        <item name="android:windowBackground">@color/backgroundColor</item>
-        <item name="android:statusBarColor">@color/colorPrimary</item>
-        <item name="android:navigationBarColor">@color/colorPrimary</item>
+    <style name="Theme.LauncherActivity" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FBFBF9</item>
+        <item name="android:navigationBarColor">#FBFBF9</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
     <style name="Theme.ArthCompanion" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>

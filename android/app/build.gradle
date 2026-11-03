@@ -1,6 +1,9 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.devtools.ksp'
+    id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
 def gradleValue = { String name, String fallback = '' ->
@@ -12,26 +15,23 @@ def keystoreFilePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: System.getenv("
 def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
 def keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "arth"
 def keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
-def certFingerprint = System.getenv("ANDROID_CERT_SHA256") ?: "CERT_FINGERPRINT_PLACEHOLDER"
 
 android {
     namespace 'com.digitaldodo.arth'
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.digitaldodo.arth"
-        minSdk 23
-        targetSdk 36
-        versionCode 2
-        versionName "1.1.0"
+        minSdk 26
+        targetSdk 35
+        versionCode 3
+        versionName "1.2.0"
+
         buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL'))
         buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY'))
         buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL'))
 
         resValue "string", "appName", "Arth"
-        resValue "string", "defaultUrl", "https://arth-9h3f.vercel.app/"
-        resValue "string", "hostName", "arth-9h3f.vercel.app"
-        resValue "string", "assetStatements", '[{"relation": ["delegate_permission/common.handle_all_urls"], "target": {"namespace": "android_app", "package_name": "com.digitaldodo.arth", "sha256_cert_fingerprints": ["' + certFingerprint + '"]}}]'
     }
 
     signingConfigs {
@@ -64,15 +64,63 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    buildFeatures { buildConfig true }
+    kotlinOptions {
+        jvmTarget = "17"
+        freeCompilerArgs += [
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi"
+        ]
+    }
+
+    buildFeatures {
+        buildConfig true
+        compose true
+    }
 }
 
 dependencies {
-    implementation 'androidx.biometric:biometric:1.1.0'
-    implementation 'androidx.browser:browser:1.8.0'
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    // Compose BOM & Core
+    def composeBom = platform('androidx.compose:compose-bom:2024.10.01')
+    implementation composeBom
+    androidTestImplementation composeBom
+
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.navigation:navigation-compose:2.8.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.6'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6'
+
+    // AndroidX & Architecture
     implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
+    // Room Database with KSP
+    def roomVersion = '2.6.1'
+    implementation "androidx.room:room-runtime:$roomVersion"
+    implementation "androidx.room:room-ktx:$roomVersion"
+    ksp "androidx.room:room-compiler:$roomVersion"
+
+    // Networking & Serialization
+    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+    implementation 'com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+    // Testing
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1'
+    testImplementation "androidx.room:room-testing:$roomVersion"
+    testImplementation 'org.json:json:20240303'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }

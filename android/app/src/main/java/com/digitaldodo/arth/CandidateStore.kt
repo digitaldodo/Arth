@@ -1,6 +1,7 @@
 package com.digitaldodo.arth
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONObject
 import java.util.Locale
