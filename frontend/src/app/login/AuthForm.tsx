@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { getCachedPwaUser } from '@/lib/offline-db';
+import { getCachedPwaUser, clearCachedPwaUserContext } from '@/lib/offline-db';
 import { useRouter } from 'next/navigation';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import {
@@ -40,24 +40,42 @@ export function AuthForm({ initialError, initialMessage }: AuthFormProps) {
 
   // Status feedback
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    initialError ? decodeURIComponent(initialError) : null
+    initialError
+      ? initialError === 'expired_session'
+        ? 'Your authentication session expired. Please sign in again.'
+        : decodeURIComponent(initialError)
+      : null
   );
   const [successMessage, setSuccessMessage] = useState<string | null>(
     initialMessage ? decodeURIComponent(initialMessage) : null
   );
 
   useEffect(() => {
+    // If navigating to login with an error or explicit logout, clear stale cached user to prevent loops
+    const hasError =
+      Boolean(initialError) ||
+      (typeof window !== 'undefined' && window.location.search.includes('error='));
+    const isExplicitLogout =
+      typeof window !== 'undefined' && window.location.search.includes('logout=');
+
+    if (hasError || isExplicitLogout) {
+      void clearCachedPwaUserContext();
+      return;
+    }
+
     void (async () => {
       try {
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
         const cached = await getCachedPwaUser();
-        if (cached) {
+        // Only redirect to root if offline PWA session is cached
+        if (cached && isOffline) {
           window.location.replace('/');
         }
       } catch {
         // stay on login form
       }
     })();
-  }, []);
+  }, [initialError]);
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);

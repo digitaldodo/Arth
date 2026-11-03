@@ -1,33 +1,70 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Handles user sign-out, invalidating the session and clearing HTTP-only cookies.
+ * Handles user sign-out, invalidating the session and authoritatively clearing
+ * all HTTP-only session and auth cookies.
+ * Supports both AJAX/JSON clients and direct browser form navigations.
  */
-export async function POST(request: Request) {
+async function performSignOut(request: Request) {
   const requestUrl = new URL(request.url);
+  const acceptHeader = request.headers.get('accept') || '';
+  const isJson = acceptHeader.includes('application/json');
 
+  const redirectUrl = new URL('/login', requestUrl.origin);
+  const response = isJson
+    ? NextResponse.json({ ok: true, status: 'UNAUTHENTICATED' }, { status: 200 })
+    : NextResponse.redirect(redirectUrl, { status: 303 });
+
+  // 1. Invalidate remote session and bind Set-Cookie deletions to the outgoing response
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(response);
     await supabase.auth.signOut();
   } catch {
-    // If sign-out fails on remote, we still redirect to login and clear cookies
+    // If remote sign-out fails (e.g. network partition or expired token),
+    // proceed to clear local cookies authoritatively.
   }
 
-  return NextResponse.redirect(new URL('/login', requestUrl.origin), {
-    status: 303, // See Other for redirect after POST
-  });
+  // 2. Explicitly clear all Supabase and authentication cookies on response and cookieStore
+  try {
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    for (const cookie of allCookies) {
+      const name = cookie.name;
+      if (
+        name.startsWith('sb-') ||
+        name.includes('auth') ||
+        name.includes('token') ||
+        name.includes('session')
+      ) {
+        const expiredCookieOptions = {
+          path: '/',
+          maxAge: 0,
+          expires: new Date(0),
+          httpOnly: true,
+          sameSite: 'lax' as const,
+          secure: process.env.NODE_ENV === 'production',
+        };
+        response.cookies.set(name, '', expiredCookieOptions);
+        try {
+          cookieStore.set(name, '', expiredCookieOptions);
+        } catch {
+          // Ignore if cookieStore is read-only in this context
+        }
+      }
+    }
+  } catch {
+    // Best-effort cookie iteration
+  }
+
+  return response;
+}
+
+export async function POST(request: Request) {
+  return performSignOut(request);
 }
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-
-  try {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-  } catch {
-    // Ignore error and proceed with redirect
-  }
-
-  return NextResponse.redirect(new URL('/login', requestUrl.origin));
+  return performSignOut(request);
 }

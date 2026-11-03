@@ -175,12 +175,18 @@ export function BalanceCard({
             className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-3"
           >
             <div className="space-y-0.5">
-              <span className="font-semibold block">Showing saved balances</span>
+              <span className="font-semibold block">
+                {/401|403|unauthorized|session expired/i.test(error)
+                  ? 'Session expired'
+                  : 'Showing saved balances'}
+              </span>
               <span className="text-[11px] opacity-90">
-                Latest server refresh could not be completed{cachedAt ? ` (cached at ${new Date(cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}.
+                {/401|403|unauthorized|session expired/i.test(error)
+                  ? 'Authentication session ended. Sign in again to refresh balances.'
+                  : `Latest server refresh could not be completed${cachedAt ? ` (cached at ${new Date(cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}.`}
               </span>
             </div>
-            {onRetry && (
+            {onRetry && !/401|403|unauthorized|session expired/i.test(error) && (
               <button
                 type="button"
                 onClick={onRetry}

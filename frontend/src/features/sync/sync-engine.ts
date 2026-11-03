@@ -47,6 +47,7 @@ import {
 } from '../../lib/api-client';
 import { parseINRToPaise, formatPaiseToINR } from '../../lib/format';
 import { isStandalonePwaClient } from '../../lib/platform-mode';
+import { authEvents } from '../auth/auth-events';
 
 export interface SyncResourceErrors {
   balances: string | null;
@@ -170,6 +171,12 @@ class SyncEngine {
       refreshError: this.refreshError,
       resourceErrors: { ...this.resourceErrors },
     };
+  }
+
+  public notifyAuthSessionExpired(): void {
+    this.lastError = 'Authentication session expired';
+    this.mutationError = 'Authentication session expired';
+    this.notify();
   }
 
   private notify() {
@@ -529,7 +536,19 @@ class SyncEngine {
           const msg = itemErr instanceof Error ? itemErr.message : 'Server rejected mutation';
           this.mutationError = msg;
           this.lastError = msg;
-          if (statusCode === 400 || statusCode === 422) {
+
+          if (statusCode === 401 || statusCode === 403) {
+            // Authentication session expired — halt queue immediately and preserve mutation for next login
+            this.mutationError = 'Authentication session expired';
+            this.lastError = 'Authentication session expired';
+            await updatePendingMutation(mutation.id, {
+              status: 'pending',
+              lastAttemptAt: Date.now(),
+              lastError: 'Authentication session expired',
+            });
+            authEvents.emitSessionExpired();
+            break;
+          } else if (statusCode === 400 || statusCode === 422) {
             await updatePendingMutation(mutation.id, {
               status: 'failed',
               attempts: mutation.attempts + 1,
@@ -555,8 +574,12 @@ class SyncEngine {
         this.mutationError = null;
       }
 
-      // Reconcile with server if queue is empty or online
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
+      // Reconcile with server if queue is empty or online (and session not expired)
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine &&
+        this.lastError !== 'Authentication session expired'
+      ) {
         const refreshed = await this.reconcileServerState(userId);
         if (refreshed) {
           this.lastSyncedAt = Date.now();
@@ -682,6 +705,14 @@ class SyncEngine {
    * - Preserves pending local mutations so un-synced local edits are not overwritten.
    * - Identifies specific failing resources instead of returning generic errors.
    */
+  private checkAuthError(err: unknown): void {
+    const statusCode = (err as { statusCode?: number })?.statusCode;
+    if (statusCode === 401 || statusCode === 403) {
+      this.lastError = 'Authentication session expired';
+      authEvents.emitSessionExpired();
+    }
+  }
+
   private async reconcileServerState(userId: string): Promise<boolean> {
     const failedResources: string[] = [];
 
@@ -699,6 +730,7 @@ class SyncEngine {
       this.resourceErrors.balances = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh account balances:', err);
+      this.checkAuthError(err);
       this.resourceErrors.balances = err instanceof Error ? err.message : 'Failed to refresh balances';
       failedResources.push('Account balances');
     }
@@ -711,6 +743,7 @@ class SyncEngine {
       this.resourceErrors.categories = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh categories:', err);
+      this.checkAuthError(err);
       this.resourceErrors.categories = err instanceof Error ? err.message : 'Failed to refresh categories';
       failedResources.push('Categories');
     }
@@ -732,6 +765,7 @@ class SyncEngine {
       this.resourceErrors.transactions = null;
     } catch (err) {
       console.warn('[SyncEngine] Failed to refresh transactions:', err);
+      this.checkAuthError(err);
       this.resourceErrors.transactions = err instanceof Error ? err.message : 'Failed to refresh transactions';
       failedResources.push('Transaction history');
     }

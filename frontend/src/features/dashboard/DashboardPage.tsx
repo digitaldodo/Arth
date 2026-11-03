@@ -8,7 +8,7 @@ import {
   type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
-import { getCachedBalances, getCachedTransactions, getCachedCategories, getSyncMeta, setCachedBalances } from '@/lib/offline-db';
+import { getCachedBalances, getCachedTransactions, getCachedCategories, getSyncMeta, setCachedBalances, clearCachedPwaUserContext } from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
@@ -21,6 +21,7 @@ import { formatDateHuman } from '@/lib/format';
 import { formatPaiseToINR } from '@/lib/format';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useAuth } from '@/features/auth/AuthContext';
 
 interface DashboardPageProps {
   userId: string;
@@ -56,6 +57,12 @@ export function DashboardPage({
   onBalancesLoaded,
 }: DashboardPageProps) {
   const isPwa = useStandalonePwa();
+  let authContext: ReturnType<typeof useAuth> | null = null;
+  try {
+    authContext = useAuth();
+  } catch {
+    authContext = null;
+  }
   const [preset, setPreset] = useState<DashboardDateRangePreset>('lifetime');
   const [dateRange, setDateRange] = useState<{ start_date?: string; end_date?: string }>(() =>
     resolveDateRangePreset('lifetime')
@@ -289,11 +296,19 @@ export function DashboardPage({
     setDateRange({ start_date: startDate, end_date: endDate });
   };
 
-  const isAuthError =
-    error &&
-    (error.statusCode === 401 ||
-      error.statusCode === 403 ||
-      /token|session|unauthorized/i.test(error.message));
+  const isAuthError = Boolean(
+    (error &&
+      (error.statusCode === 401 ||
+        error.statusCode === 403 ||
+        /token|session|unauthorized/i.test(error.message))) ||
+    authContext?.status === 'SESSION_EXPIRED'
+  );
+
+  useEffect(() => {
+    if (isAuthError && authContext) {
+      authContext.notifySessionExpired();
+    }
+  }, [isAuthError, authContext]);
 
   return (
     <div className="space-y-6">
@@ -365,16 +380,9 @@ export function DashboardPage({
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
               <span className="text-[10px] font-mono font-semibold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
-                Authentication Required
+                Session Expired
               </span>
             </div>
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline"
-            >
-              Retry
-            </button>
           </div>
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-[var(--text-primary)]">
@@ -385,18 +393,35 @@ export function DashboardPage({
             </p>
           </div>
           <div className="pt-1 flex items-center gap-2.5">
-            <a
-              href="/login"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs"
-            >
-              Sign In Again &rarr;
-            </a>
             <button
               type="button"
-              onClick={handleRetry}
-              className="inline-flex items-center px-3 py-2 text-xs font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors"
+              onClick={() => {
+                if (authContext) {
+                  void authContext.recoverSession();
+                } else {
+                  void clearCachedPwaUserContext().then(() => {
+                    window.location.replace('/login?error=expired_session');
+                  });
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer"
             >
-              Retry
+              Sign In Again &rarr;
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (authContext) {
+                  void authContext.signOut();
+                } else {
+                  void clearCachedPwaUserContext().then(() => {
+                    window.location.replace('/login');
+                  });
+                }
+              }}
+              className="inline-flex items-center px-3 py-2 text-xs font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+            >
+              Sign Out
             </button>
           </div>
         </div>

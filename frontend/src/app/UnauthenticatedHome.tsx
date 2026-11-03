@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
-import { getCachedPwaUser, type CachedPwaUser } from '@/lib/offline-db';
+import { getCachedPwaUser, clearCachedPwaUserContext, type CachedPwaUser } from '@/lib/offline-db';
 import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
 
 export function UnauthenticatedHome() {
@@ -14,9 +14,16 @@ export function UnauthenticatedHome() {
     let cancelled = false;
     void (async () => {
       try {
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
         const user = await getCachedPwaUser();
         if (!cancelled && user) {
-          setCachedUser(user);
+          if (isOffline) {
+            // In offline PWA mode, hydrate local session so ledger operations remain accessible
+            setCachedUser(user);
+          } else {
+            // Online landing reached without active server session: clear stale context to prevent false session restoration
+            void clearCachedPwaUserContext();
+          }
         }
       } catch {
         // Continue to unauthenticated landing page

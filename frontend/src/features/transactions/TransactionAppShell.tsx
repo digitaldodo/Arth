@@ -33,6 +33,7 @@ import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { useBackHandler } from '@/features/navigation';
 import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';
+import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 
 interface TransactionAppShellProps {
   user: {
@@ -48,6 +49,15 @@ interface TransactionAppShellProps {
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
+  return (
+    <AuthProvider user={user}>
+      <TransactionAppShellContent user={user} />
+    </AuthProvider>
+  );
+}
+
+function TransactionAppShellContent({ user }: TransactionAppShellProps) {
+  const { signOut } = useAuth();
   const router = useRouter();
   const userId = user?.id ?? null;
   const isPwa = useStandalonePwa();
@@ -190,12 +200,8 @@ export function TransactionAppShell({ user }: TransactionAppShellProps) {
   }, [user, pendingSyncCount, isSyncing]);
 
   const handleSignOut = async (event: React.FormEvent<HTMLFormElement>) => {
-    if (!isPwa) return;
     event.preventDefault();
-    const form = event.currentTarget;
-    await clearCachedPwaUserContext();
-    navigator.serviceWorker?.controller?.postMessage({ type: 'PWA_SIGNED_OUT' });
-    form.submit();
+    await signOut();
   };
 
   // Guard critical operations: defer PWA updates while user is entering/saving transactions or syncing
