@@ -34,11 +34,11 @@ fun SettingsScreen(
     onNavigateToPeople: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToSmsReview: () -> Unit,
+    onNavigateToSecurity: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
     val secureStorage = remember { SecureStorage(context) }
-    var biometricLock by remember { mutableStateOf(secureStorage.isBiometricLockEnabled()) }
     val isSmsSupported = BuildConfig.SMS_DETECTION_SUPPORTED
     var showSmsDisclosure by remember { mutableStateOf(false) }
     var showLocalBuildNotice by remember { mutableStateOf(false) }
@@ -219,33 +219,12 @@ fun SettingsScreen(
             }
 
             item {
-                ArthCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Biometric App Lock",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = "Require fingerprint or face unlock on launch",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ArthTheme.colors.textSecondary
-                            )
-                        }
-                        Switch(
-                            checked = biometricLock,
-                            onCheckedChange = { checked ->
-                                biometricLock = checked
-                                secureStorage.setBiometricLockEnabled(checked)
-                            }
-                        )
-                    }
-                }
+                SettingsNavigationItem(
+                    icon = Icons.Default.Security,
+                    title = "Security & Biometric Lock",
+                    subtitle = "Fingerprint app lock, timeout, and hardware status",
+                    onClick = onNavigateToSecurity
+                )
             }
 
             item {

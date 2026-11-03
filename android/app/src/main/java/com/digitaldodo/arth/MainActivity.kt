@@ -5,29 +5,24 @@ import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
 import com.digitaldodo.arth.core.network.EnvironmentValidator
+import com.digitaldodo.arth.core.security.AppLockManager
+import com.digitaldodo.arth.core.security.BiometricAuthManager
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.feature.auth.AuthViewModel
 import com.digitaldodo.arth.feature.auth.LoginScreen
@@ -45,6 +40,8 @@ import com.digitaldodo.arth.feature.people.PersonDetailScreen
 import com.digitaldodo.arth.feature.quickadd.QuickAddSheet
 import com.digitaldodo.arth.feature.quickadd.QuickAddViewModel
 import com.digitaldodo.arth.feature.reports.ReportsScreen
+import com.digitaldodo.arth.feature.security.ArthLockScreen
+import com.digitaldodo.arth.feature.security.SecuritySettingsScreen
 import com.digitaldodo.arth.feature.settings.SettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
 import com.digitaldodo.arth.feature.sms.SmsViewModel
@@ -67,6 +64,8 @@ class MainActivity : FragmentActivity() {
     private val balancesViewModel: BalancesViewModel by viewModels()
     private val smsViewModel: SmsViewModel by viewModels()
 
+    private var biometricErrorMessage by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -75,75 +74,21 @@ class MainActivity : FragmentActivity() {
         handleAuthIntent(intent)
 
         val secureStorage = SecureStorage(this)
-        val requireBiometric = secureStorage.isLoggedIn() && secureStorage.isBiometricLockEnabled()
 
         setContent {
             ArthTheme {
-                var isUnlocked by remember { mutableStateOf(!requireBiometric) }
+                val isLocked by AppLockManager.isLocked.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    if (requireBiometric) {
-                        promptBiometrics { isUnlocked = true }
-                    }
-                }
-
-                if (!isUnlocked) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(72.dp)
-                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "Lock",
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-
-                                Text(
-                                    text = "Arth is Locked",
-                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-
-                                Text(
-                                    text = "Biometric authentication is required to access your financial records and balances.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = ArthTheme.colors.textSecondary,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-
-                                Spacer(Modifier.height(8.dp))
-
-                                ArthButton(
-                                    text = "Unlock Arth",
-                                    icon = Icons.Default.Fingerprint,
-                                    onClick = {
-                                        promptBiometrics { isUnlocked = true }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(0.7f)
-                                )
+                if (isLocked && secureStorage.isLoggedIn()) {
+                    ArthLockScreen(
+                        errorMessage = biometricErrorMessage,
+                        onUnlockClicked = { promptBiometricUnlock() },
+                        onSignOut = {
+                            authViewModel.logout {
+                                AppLockManager.unlock()
                             }
                         }
-                    }
+                    )
                 } else {
                     ArthAppNavHost(
                         authViewModel = authViewModel,
@@ -177,7 +122,6 @@ class MainActivity : FragmentActivity() {
             val error = data.getQueryParameter("error")
             val errorDescription = data.getQueryParameter("error_description")
 
-            // Check fragment if query params were empty (e.g. standard OAuth hash fragment)
             val fragment = data.fragment
             if (accessToken.isNullOrBlank() && !fragment.isNullOrBlank()) {
                 val params = fragment.split("&").associate {
@@ -203,42 +147,29 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun promptBiometrics(onSuccess: () -> Unit) {
-        val executor = ContextCompat.getMainExecutor(this)
-        val biometricPrompt = BiometricPrompt(
-            this,
-            executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    onSuccess()
+    private fun promptBiometricUnlock() {
+        BiometricAuthManager.authenticate(
+            activity = this,
+            title = "Unlock Arth",
+            subtitle = "Authenticate to access your financial information",
+            allowDeviceCredential = true,
+            onSuccess = {
+                AppLockManager.unlock()
+                biometricErrorMessage = null
+            },
+            onError = { errorCode, errString ->
+                biometricErrorMessage = when (errorCode) {
+                    BiometricPrompt.ERROR_USER_CANCELED, BiometricPrompt.ERROR_NEGATIVE_BUTTON ->
+                        "Authentication cancelled. Tap Unlock to try again."
+                    BiometricPrompt.ERROR_LOCKOUT, BiometricPrompt.ERROR_LOCKOUT_PERMANENT ->
+                        "Too many attempts. Please use your device PIN or wait a moment."
+                    else -> errString
                 }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    if (errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS ||
-                        errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT ||
-                        errorCode == BiometricPrompt.ERROR_HW_UNAVAILABLE) {
-                        onSuccess()
-                    }
-                }
+            },
+            onFailed = {
+                biometricErrorMessage = "Fingerprint not recognized. Please try again."
             }
         )
-
-        val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Arth")
-            .setSubtitle("Authenticate to view your financial ledger")
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            promptInfoBuilder.setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
-        } else {
-            promptInfoBuilder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-            promptInfoBuilder.setNegativeButtonText("Cancel")
-        }
-
-        biometricPrompt.authenticate(promptInfoBuilder.build())
     }
 }
 
@@ -294,6 +225,7 @@ fun ArthAppNavHost(
                 onNavigateToPeople = { navController.navigate("people") },
                 onNavigateToReports = { navController.navigate("reports") },
                 onNavigateToSmsReview = { navController.navigate("sms_review") },
+                onNavigateToSecurity = { navController.navigate("security_settings") },
                 onSignOut = {
                     authViewModel.logout {
                         navController.navigate("login") {
@@ -344,6 +276,12 @@ fun ArthAppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
+
+        composable("security_settings") {
+            SecuritySettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 
     if (showQuickAddSheet) {
@@ -368,6 +306,7 @@ fun MainTabsScaffold(
     onNavigateToPeople: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToSmsReview: () -> Unit,
+    onNavigateToSecurity: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val tabNavController = rememberNavController()
@@ -473,6 +412,7 @@ fun MainTabsScaffold(
                         onNavigateToPeople = onNavigateToPeople,
                         onNavigateToReports = onNavigateToReports,
                         onNavigateToSmsReview = onNavigateToSmsReview,
+                        onNavigateToSecurity = onNavigateToSecurity,
                         onSignOut = onSignOut
                     )
                 }
