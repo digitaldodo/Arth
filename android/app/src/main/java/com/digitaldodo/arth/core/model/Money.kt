@@ -25,6 +25,18 @@ object Money {
     }
 
     /**
+     * Converts paise (Long) to a plain decimal rupee string without currency symbol:
+     * e.g. 125050 paise -> "1250.50"
+     */
+    fun paiseToDecimalString(paise: Long): String {
+        val absPaise = kotlin.math.abs(paise)
+        val rupees = absPaise / PAISE_PER_RUPEE
+        val remainderPaise = absPaise % PAISE_PER_RUPEE
+        val sign = if (paise < 0) "-" else ""
+        return String.format(Locale.ROOT, "%s%d.%02d", sign, rupees, remainderPaise)
+    }
+
+    /**
      * Converts paise (Long) to a formatted INR string with the Indian grouping system:
      * e.g. 12345678 paise -> "₹1,23,456.78"
      */

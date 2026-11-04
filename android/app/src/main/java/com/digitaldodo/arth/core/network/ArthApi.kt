@@ -184,8 +184,35 @@ data class SettlementApiResponse(
 
 @Serializable
 data class LoginRequest(
-    val email: String,
+    val email: String? = null,
+    val identifier: String? = null,
     val password: String
+)
+
+@Serializable
+data class ForgotPasswordRequest(
+    val identifier: String
+)
+
+@Serializable
+data class ForgotPasswordResponse(
+    val message: String? = null
+)
+
+@Serializable
+data class SignUpRequest(
+    val email: String,
+    val password: String,
+    val username: String? = null
+)
+
+@Serializable
+data class SignUpResponse(
+    @SerialName("access_token") val accessToken: String? = null,
+    @SerialName("refresh_token") val refreshToken: String? = null,
+    val user: AuthUser? = null,
+    @SerialName("needsConfirmation") val needsConfirmation: Boolean = false,
+    val message: String? = null
 )
 
 @Serializable
@@ -250,6 +277,12 @@ interface NativeAuthApi {
 
     @POST("api/native/auth/google")
     suspend fun loginWithGoogleIdToken(@Body body: GoogleIdTokenRequest): AuthResponse
+
+    @POST("api/native/auth/forgot-password")
+    suspend fun forgotPassword(@Body body: ForgotPasswordRequest): ForgotPasswordResponse
+
+    @POST("api/native/auth/signup")
+    suspend fun signUp(@Body body: SignUpRequest): SignUpResponse
 }
 
 interface SupabaseAuthApi {
@@ -291,6 +324,10 @@ object NetworkClient {
         ignoreUnknownKeys = true
         isLenient = true
         encodeDefaults = true
+    }
+
+    fun getWebBaseUrl(configured: String? = BuildConfig.WEB_URL): String {
+        return sanitizeBaseUrl(configured, DEFAULT_WEB_BASE_URL)
     }
 
     private fun sanitizeBaseUrl(configured: String?, defaultUrl: String): String {

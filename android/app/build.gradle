@@ -53,7 +53,7 @@ android {
             dimension "distribution"
             applicationIdSuffix ".local"
             versionNameSuffix ""
-            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
             resValue "string", "appName", "Arth"
         }
         play {

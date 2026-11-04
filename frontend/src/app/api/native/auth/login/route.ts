@@ -1,30 +1,64 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isValidUsername } from '@/lib/username';
+import { resolveEmailFromUsername } from '@/app/login/actions';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const rawIdentifier = (
+      typeof body.identifier === 'string'
+        ? body.identifier
+        : typeof body.username === 'string'
+        ? body.username
+        : typeof body.email === 'string'
+        ? body.email
+        : ''
+    ).trim();
+
     const password = typeof body.password === 'string' ? body.password : '';
 
-    if (!email || !password) {
+    if (!rawIdentifier || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Email or username and password are required' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
+    let targetEmail = '';
+    if (rawIdentifier.includes('@')) {
+      targetEmail = rawIdentifier.toLowerCase();
+    } else {
+      // Input is a username
+      const normalizedUsername = rawIdentifier.toLowerCase();
+      if (!isValidUsername(normalizedUsername)) {
+        return NextResponse.json(
+          { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+          { status: 401, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      const resolved = await resolveEmailFromUsername(normalizedUsername);
+      if (!resolved) {
+        return NextResponse.json(
+          { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+          { status: 401, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+      targetEmail = resolved;
+    }
+
     const supabase = await createClient();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: targetEmail,
       password,
     });
 
     if (error || !data.session) {
       return NextResponse.json(
-        { error: error?.message || 'Invalid credentials' },
+        { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } }
       );
     }

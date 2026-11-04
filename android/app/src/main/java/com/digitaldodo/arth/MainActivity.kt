@@ -1,24 +1,35 @@
 package com.digitaldodo.arth
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.digitaldodo.arth.core.designsystem.ArthTheme
@@ -47,11 +58,11 @@ import com.digitaldodo.arth.feature.security.SecuritySettingsScreen
 import com.digitaldodo.arth.feature.settings.SettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
 import com.digitaldodo.arth.feature.sms.SmsViewModel
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Outlined.Home, Icons.Filled.Home)
-    object Ledger : Screen("ledger", "Ledger", Icons.Outlined.ReceiptLong, Icons.Filled.ReceiptLong)
-    object QuickAdd : Screen("quick_add", "Add", Icons.Outlined.AddCircleOutline, Icons.Filled.AddCircle)
+    object Ledger : Screen("ledger", "Ledger", Icons.AutoMirrored.Outlined.ReceiptLong, Icons.AutoMirrored.Filled.ReceiptLong)
     object Categories : Screen("categories", "Categories", Icons.Outlined.Category, Icons.Filled.Category)
     object More : Screen("more", "More", Icons.Outlined.MoreHoriz, Icons.Filled.MoreHoriz)
 }
@@ -227,12 +238,10 @@ fun ArthAppNavHost(
                 dashboardViewModel = dashboardViewModel,
                 ledgerViewModel = ledgerViewModel,
                 categoriesViewModel = categoriesViewModel,
+                peopleViewModel = peopleViewModel,
+                balancesViewModel = balancesViewModel,
+                smsViewModel = smsViewModel,
                 onOpenQuickAdd = { showQuickAddSheet = true },
-                onNavigateToBalances = { navController.navigate("balances") },
-                onNavigateToPeople = { navController.navigate("people") },
-                onNavigateToReports = { navController.navigate("reports") },
-                onNavigateToSmsReview = { navController.navigate("sms_review") },
-                onNavigateToSecurity = { navController.navigate("security_settings") },
                 onSignOut = {
                     authViewModel.logout {
                         navController.navigate("login") {
@@ -240,53 +249,6 @@ fun ArthAppNavHost(
                         }
                     }
                 }
-            )
-        }
-
-        composable("balances") {
-            BalancesScreen(
-                viewModel = balancesViewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable("people") {
-            PeopleScreen(
-                viewModel = peopleViewModel,
-                onPersonClick = { person ->
-                    navController.navigate("person_detail/${person.id}")
-                }
-            )
-        }
-
-        composable("person_detail/{personId}") { backStackEntry ->
-            val personId = backStackEntry.arguments?.getString("personId")
-            val person = peopleViewModel.uiState.collectAsState().value.people.find { it.id == personId }
-            if (person != null) {
-                PersonDetailScreen(
-                    person = person,
-                    viewModel = peopleViewModel,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-        }
-
-        composable("reports") {
-            ReportsScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable("sms_review") {
-            SmsReviewScreen(
-                viewModel = smsViewModel,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable("security_settings") {
-            SecuritySettingsScreen(
-                onBack = { navController.popBackStack() }
             )
         }
     }
@@ -298,6 +260,7 @@ fun ArthAppNavHost(
                 showQuickAddSheet = false
                 quickAddViewModel.reset()
                 dashboardViewModel.refresh()
+                ledgerViewModel.refresh()
             }
         )
     }
@@ -308,51 +271,76 @@ fun MainTabsScaffold(
     dashboardViewModel: DashboardViewModel,
     ledgerViewModel: LedgerViewModel,
     categoriesViewModel: CategoriesViewModel,
+    peopleViewModel: PeopleViewModel,
+    balancesViewModel: BalancesViewModel,
+    smsViewModel: SmsViewModel,
     onOpenQuickAdd: () -> Unit,
-    onNavigateToBalances: () -> Unit,
-    onNavigateToPeople: () -> Unit,
-    onNavigateToReports: () -> Unit,
-    onNavigateToSmsReview: () -> Unit,
-    onNavigateToSecurity: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val tabNavController = rememberNavController()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    // Priority 2: Back navigation from any tab returns to Dashboard
-    BackHandler(enabled = currentRoute != Screen.Dashboard.route) {
+    val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "security_settings")
+    val isPersonDetail = currentRoute.startsWith("person_detail")
+
+    // Priority 1: Back from person detail returns to people
+    BackHandler(enabled = isPersonDetail) {
+        tabNavController.popBackStack()
+    }
+
+    // Priority 2: Back from sub-screens returns to More hub
+    BackHandler(enabled = isSubScreen) {
+        tabNavController.navigate(Screen.More.route) {
+            popUpTo(Screen.Dashboard.route) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+
+    // Priority 3: Back from other top-level tabs returns to Dashboard
+    val isOtherTab = currentRoute in listOf(Screen.Ledger.route, Screen.Categories.route, Screen.More.route)
+    BackHandler(enabled = isOtherTab) {
         tabNavController.navigate(Screen.Dashboard.route) {
             popUpTo(Screen.Dashboard.route) { inclusive = false }
             launchSingleTop = true
         }
     }
 
-    val items = listOf(
-        Screen.Dashboard,
-        Screen.Ledger,
-        Screen.QuickAdd,
-        Screen.Categories,
-        Screen.More
-    )
+    // Priority 4: From Dashboard, double-back exits
+    val isDashboard = currentRoute == Screen.Dashboard.route
+    var lastBackPressedTime by remember { mutableLongStateOf(0L) }
+    val context = LocalContext.current
+    val activity = context as? Activity
+
+    BackHandler(enabled = isDashboard) {
+        val now = System.currentTimeMillis()
+        if (now - lastBackPressedTime < 2000L) {
+            activity?.finish()
+        } else {
+            lastBackPressedTime = now
+            Toast.makeText(context, "Press back again to exit Arth", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
-            ) {
-                items.forEach { screen ->
-                    val isSelected = currentRoute == screen.route
+            if (!isPersonDetail) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.border(BorderStroke(1.dp, ArthTheme.colors.border))
+                ) {
+                    // 1. Dashboard Tab
+                    val isDashboardSelected = currentRoute == Screen.Dashboard.route
                     NavigationBarItem(
                         icon = {
                             Icon(
-                                imageVector = if (isSelected) screen.selectedIcon else screen.icon,
-                                contentDescription = screen.title
+                                imageVector = if (isDashboardSelected) Screen.Dashboard.selectedIcon else Screen.Dashboard.icon,
+                                contentDescription = Screen.Dashboard.title
                             )
                         },
-                        label = { Text(screen.title) },
-                        selected = isSelected,
+                        label = { Text(Screen.Dashboard.title) },
+                        selected = isDashboardSelected,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onSurface,
                             selectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -361,16 +349,116 @@ fun MainTabsScaffold(
                             unselectedTextColor = ArthTheme.colors.textMuted
                         ),
                         onClick = {
-                            if (screen == Screen.QuickAdd) {
-                                onOpenQuickAdd()
-                            } else {
-                                tabNavController.navigate(screen.route) {
-                                    popUpTo(tabNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+                            tabNavController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+
+                    // 2. Ledger Tab
+                    val isLedgerSelected = currentRoute == Screen.Ledger.route
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = if (isLedgerSelected) Screen.Ledger.selectedIcon else Screen.Ledger.icon,
+                                contentDescription = Screen.Ledger.title
+                            )
+                        },
+                        label = { Text(Screen.Ledger.title) },
+                        selected = isLedgerSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unselectedIconColor = ArthTheme.colors.textMuted,
+                            unselectedTextColor = ArthTheme.colors.textMuted
+                        ),
+                        onClick = {
+                            tabNavController.navigate(Screen.Ledger.route) {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+
+                    // 3. Central Floating Quick Add Action (+)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .border(BorderStroke(2.dp, MaterialTheme.colorScheme.surface), CircleShape)
+                                .clickable { onOpenQuickAdd() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Transaction",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    // 4. Categories Tab
+                    val isCategoriesSelected = currentRoute == Screen.Categories.route
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = if (isCategoriesSelected) Screen.Categories.selectedIcon else Screen.Categories.icon,
+                                contentDescription = Screen.Categories.title
+                            )
+                        },
+                        label = { Text(Screen.Categories.title) },
+                        selected = isCategoriesSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unselectedIconColor = ArthTheme.colors.textMuted,
+                            unselectedTextColor = ArthTheme.colors.textMuted
+                        ),
+                        onClick = {
+                            tabNavController.navigate(Screen.Categories.route) {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+
+                    // 5. More Tab
+                    val isMoreSelected = currentRoute == Screen.More.route || isSubScreen
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                imageVector = if (isMoreSelected) Screen.More.selectedIcon else Screen.More.icon,
+                                contentDescription = Screen.More.title
+                            )
+                        },
+                        label = { Text(Screen.More.title) },
+                        selected = isMoreSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unselectedIconColor = ArthTheme.colors.textMuted,
+                            unselectedTextColor = ArthTheme.colors.textMuted
+                        ),
+                        onClick = {
+                            tabNavController.navigate(Screen.More.route) {
+                                popUpTo(Screen.Dashboard.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
                     )
@@ -391,7 +479,11 @@ fun MainTabsScaffold(
                                 launchSingleTop = true
                             }
                         },
-                        onNavigateToSmsReview = onNavigateToSmsReview,
+                        onNavigateToSmsReview = {
+                            tabNavController.navigate("sms_review") {
+                                launchSingleTop = true
+                            }
+                        },
                         onTransactionClick = { _ ->
                             tabNavController.navigate(Screen.Ledger.route) {
                                 launchSingleTop = true
@@ -415,12 +507,59 @@ fun MainTabsScaffold(
 
                 composable(Screen.More.route) {
                     SettingsScreen(
-                        onNavigateToBalances = onNavigateToBalances,
-                        onNavigateToPeople = onNavigateToPeople,
-                        onNavigateToReports = onNavigateToReports,
-                        onNavigateToSmsReview = onNavigateToSmsReview,
-                        onNavigateToSecurity = onNavigateToSecurity,
+                        onNavigateToBalances = { tabNavController.navigate("balances") },
+                        onNavigateToPeople = { tabNavController.navigate("people") },
+                        onNavigateToReports = { tabNavController.navigate("reports") },
+                        onNavigateToSmsReview = { tabNavController.navigate("sms_review") },
+                        onNavigateToSecurity = { tabNavController.navigate("security_settings") },
                         onSignOut = onSignOut
+                    )
+                }
+
+                composable("balances") {
+                    BalancesScreen(
+                        viewModel = balancesViewModel,
+                        onBack = { tabNavController.popBackStack() }
+                    )
+                }
+
+                composable("people") {
+                    PeopleScreen(
+                        viewModel = peopleViewModel,
+                        onPersonClick = { person ->
+                            tabNavController.navigate("person_detail/${person.id}")
+                        }
+                    )
+                }
+
+                composable("person_detail/{personId}") { backStackEntry ->
+                    val personId = backStackEntry.arguments?.getString("personId")
+                    val person = peopleViewModel.uiState.collectAsState().value.people.find { it.id == personId }
+                    if (person != null) {
+                        PersonDetailScreen(
+                            person = person,
+                            viewModel = peopleViewModel,
+                            onBack = { tabNavController.popBackStack() }
+                        )
+                    }
+                }
+
+                composable("reports") {
+                    ReportsScreen(
+                        onBack = { tabNavController.popBackStack() }
+                    )
+                }
+
+                composable("sms_review") {
+                    SmsReviewScreen(
+                        viewModel = smsViewModel,
+                        onBack = { tabNavController.popBackStack() }
+                    )
+                }
+
+                composable("security_settings") {
+                    SecuritySettingsScreen(
+                        onBack = { tabNavController.popBackStack() }
                     )
                 }
             }

@@ -12,18 +12,22 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 data class QuickAddUiState(
+    val amountInput: String = "",
     val amountPaise: Long = 0L,
     val type: TransactionType = TransactionType.EXPENSE,
     val paymentMode: PaymentMode = PaymentMode.ONLINE,
     val necessity: NecessityTier? = NecessityTier.ESSENTIAL,
     val selectedCategory: Category? = null,
     val categories: List<Category> = emptyList(),
+    val transactionDate: Long = System.currentTimeMillis(),
+    val description: String = "",
     val notes: String = "",
-    val counterparty: String = "",
+    val isSubmitting: Boolean = false,
     val isSaved: Boolean = false,
     val errorMessage: String? = null
 ) {
     val formattedAmount: String get() = Money.formatPaise(amountPaise, includeSymbol = true)
+    val hasUnsavedChanges: Boolean get() = amountPaise > 0L || description.isNotBlank() || notes.isNotBlank()
 }
 
 class QuickAddViewModel(application: Application) : AndroidViewModel(application) {
@@ -34,7 +38,7 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
         db.syncOutboxDao(),
         application
     )
-    private val categoryRepo = CategoryRepository(db.categoryDao())
+    private val categoryRepo = CategoryRepository(db.categoryDao(), application)
 
     private val _uiState = MutableStateFlow(QuickAddUiState())
     val uiState = _uiState.asStateFlow()
@@ -58,20 +62,33 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun onAmountInputChanged(raw: String) {
+        val clean = raw.filter { it.isDigit() || it == '.' }
+        val paise = try {
+            if (clean.isBlank()) 0L else Money.rupeesToPaise(clean)
+        } catch (_: Exception) {
+            _uiState.value.amountPaise
+        }
+        _uiState.update { it.copy(amountInput = clean, amountPaise = paise, errorMessage = null) }
+    }
+
     fun onDigitPressed(digit: Int) {
         val current = _uiState.value.amountPaise
-        if (current > 100_000_000L) return // Cap at reasonable limit (₹1,00,00,000)
+        if (current > 100_000_000L) return // Cap at ₹1,00,00,000
         val newAmount = current * 10 + digit
-        _uiState.update { it.copy(amountPaise = newAmount, errorMessage = null) }
+        val inrString = Money.paiseToDecimalString(newAmount)
+        _uiState.update { it.copy(amountPaise = newAmount, amountInput = inrString, errorMessage = null) }
     }
 
     fun onBackspacePressed() {
         val current = _uiState.value.amountPaise
-        _uiState.update { it.copy(amountPaise = current / 10) }
+        val newAmount = current / 10
+        val inrString = if (newAmount == 0L) "" else Money.paiseToDecimalString(newAmount)
+        _uiState.update { it.copy(amountPaise = newAmount, amountInput = inrString) }
     }
 
     fun onClearPressed() {
-        _uiState.update { it.copy(amountPaise = 0L) }
+        _uiState.update { it.copy(amountPaise = 0L, amountInput = "") }
     }
 
     fun setType(type: TransactionType) {
@@ -97,18 +114,22 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(selectedCategory = category) }
     }
 
-    fun onNotesChanged(notes: String) {
-        _uiState.update { it.copy(notes = notes) }
+    fun setTransactionDate(dateMillis: Long) {
+        _uiState.update { it.copy(transactionDate = dateMillis) }
     }
 
-    fun onCounterpartyChanged(counterparty: String) {
-        _uiState.update { it.copy(counterparty = counterparty) }
+    fun onDescriptionChanged(desc: String) {
+        _uiState.update { it.copy(description = desc) }
+    }
+
+    fun onNotesChanged(notes: String) {
+        _uiState.update { it.copy(notes = notes) }
     }
 
     fun save(onSuccess: () -> Unit) {
         val state = _uiState.value
         if (state.amountPaise <= 0L) {
-            _uiState.update { it.copy(errorMessage = "Please enter an amount") }
+            _uiState.update { it.copy(errorMessage = "Please enter an amount greater than zero") }
             return
         }
 
@@ -124,16 +145,21 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
             categoryName = category.name,
             categoryIcon = category.icon,
             categoryColor = category.color,
-            transactionDate = System.currentTimeMillis(),
+            transactionDate = state.transactionDate,
             notes = state.notes.trim().takeIf { it.isNotBlank() },
-            counterparty = state.counterparty.trim().takeIf { it.isNotBlank() },
+            counterparty = state.description.trim().takeIf { it.isNotBlank() },
             syncStatus = SyncStatus.PENDING
         )
 
         viewModelScope.launch {
-            transactionRepo.addTransaction(tx)
-            _uiState.update { it.copy(isSaved = true) }
-            onSuccess()
+            _uiState.update { it.copy(isSubmitting = true) }
+            try {
+                transactionRepo.addTransaction(tx)
+                _uiState.update { it.copy(isSubmitting = false, isSaved = true) }
+                onSuccess()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSubmitting = false, errorMessage = e.message ?: "Failed to save transaction") }
+            }
         }
     }
 

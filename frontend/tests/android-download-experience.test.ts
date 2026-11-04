@@ -62,18 +62,18 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     assert.ok(content.includes('Native Android Application'), 'More hub must feature Native Android Application card');
   });
 
-  test('Android build configuration enforces privacy invariants for direct release', () => {
+  test('Android build configuration enforces SMS detection across all distribution builds', () => {
     const buildGradlePath = path.join(process.cwd(), '..', 'android', 'app', 'build.gradle');
     const buildGradle = fs.readFileSync(buildGradlePath, 'utf-8');
 
-    // Local distribution flavor must disable SMS detection and set app name to Arth
-    assert.ok(buildGradle.includes('SMS_DETECTION_SUPPORTED", "false"'), 'Local flavor must disable SMS detection');
+    // Local distribution flavor supports SMS detection and sets app name to Arth
+    assert.ok(buildGradle.includes('SMS_DETECTION_SUPPORTED", "true"'), 'Local flavor must support SMS detection');
     assert.ok(buildGradle.includes('appName", "Arth"'), 'Local flavor appName must be Arth');
 
-    // Main manifest must not request READ_SMS or RECEIVE_SMS
+    // Main manifest declares RECEIVE_SMS and READ_SMS for financial transaction detection
     const mainManifestPath = path.join(process.cwd(), '..', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
     const mainManifest = fs.readFileSync(mainManifestPath, 'utf-8');
-    assert.ok(!mainManifest.includes('android.permission.READ_SMS'), 'main AndroidManifest must NOT have READ_SMS');
-    assert.ok(!mainManifest.includes('android.permission.RECEIVE_SMS'), 'main AndroidManifest must NOT have RECEIVE_SMS');
+    assert.ok(mainManifest.includes('android.permission.READ_SMS'), 'main AndroidManifest must declare READ_SMS');
+    assert.ok(mainManifest.includes('android.permission.RECEIVE_SMS'), 'main AndroidManifest must declare RECEIVE_SMS');
   });
 });
