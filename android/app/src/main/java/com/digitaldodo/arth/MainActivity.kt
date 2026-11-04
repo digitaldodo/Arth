@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.digitaldodo.arth.core.designsystem.ArthTheme
@@ -74,6 +76,11 @@ class MainActivity : FragmentActivity() {
         handleAuthIntent(intent)
 
         val secureStorage = SecureStorage(this)
+        if (secureStorage.isLoggedIn()) {
+            lifecycleScope.launch {
+                com.digitaldodo.arth.core.sync.AccountSyncService.getInstance(this@MainActivity).syncAll()
+            }
+        }
 
         setContent {
             ArthTheme {

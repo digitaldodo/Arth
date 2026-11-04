@@ -37,6 +37,17 @@ class BalancesViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadBalances()
+        refresh()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            try {
+                balanceRepo.refreshBalances()
+                val current = transactionRepo.calculateBalances()
+                _uiState.update { it.copy(currentBalances = current) }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun loadBalances() {

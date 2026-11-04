@@ -84,37 +84,48 @@ data class TransactionListApiResponse(
 
 @Serializable
 data class BalancesDto(
-    @SerialName("cash_paise") val cashPaise: Long = 0L,
-    @SerialName("online_paise") val onlinePaise: Long = 0L,
+    @SerialName("current_cash_paise") val currentCashPaise: Long = 0L,
+    @SerialName("current_online_paise") val currentOnlinePaise: Long = 0L,
+    @SerialName("cash_paise") val cashPaiseFallback: Long = 0L,
+    @SerialName("online_paise") val onlinePaiseFallback: Long = 0L,
     @SerialName("total_available_paise") val totalAvailablePaise: Long = 0L,
     @SerialName("starting_cash_paise") val startingCashPaise: Long = 0L,
     @SerialName("starting_online_paise") val startingOnlinePaise: Long = 0L,
-    @SerialName("configured_at") val configuredAt: String? = null
-)
+    @SerialName("balances_configured") val balancesConfigured: Boolean = false,
+    @SerialName("balances_configured_at") val balancesConfiguredAt: String? = null,
+    @SerialName("configured_at") val configuredAtFallback: String? = null
+) {
+    val cashPaise: Long get() = if (currentCashPaise != 0L) currentCashPaise else cashPaiseFallback
+    val onlinePaise: Long get() = if (currentOnlinePaise != 0L) currentOnlinePaise else onlinePaiseFallback
+    val configuredAt: String? get() = balancesConfiguredAt ?: configuredAtFallback
+}
 
 @Serializable
 data class DashboardSummaryDto(
-    val metrics: DashboardMetricsDto? = null,
-    @SerialName("spending_by_category") val spendingByCategory: List<CategorySpendingDto> = emptyList(),
-    @SerialName("spending_by_necessity") val spendingByNecessity: List<NecessitySpendingDto> = emptyList(),
-    @SerialName("recent_transactions") val recentTransactions: List<TransactionApiDto> = emptyList()
-)
-
-@Serializable
-data class DashboardMetricsDto(
-    @SerialName("total_income_paise") val totalIncomePaise: Long = 0L,
-    @SerialName("total_expense_paise") val totalExpensePaise: Long = 0L,
+    @SerialName("start_date") val startDate: String? = null,
+    @SerialName("end_date") val endDate: String? = null,
+    @SerialName("income_paise") val incomePaise: Long = 0L,
+    @SerialName("expenses_paise") val expensesPaise: Long = 0L,
     @SerialName("net_cash_flow_paise") val netCashFlowPaise: Long = 0L,
-    @SerialName("savings_rate_percent") val savingsRatePercent: Double = 0.0,
-    @SerialName("transaction_count") val transactionCount: Int = 0
+    @SerialName("formatted_income") val formattedIncome: String? = null,
+    @SerialName("formatted_expenses") val formattedExpenses: String? = null,
+    @SerialName("formatted_net_cash_flow") val formattedNetCashFlow: String? = null,
+    @SerialName("spending_composition") val spendingComposition: List<CategorySpendingDto> = emptyList(),
+    @SerialName("spending_by_necessity") val spendingByNecessity: List<NecessitySpendingDto> = emptyList(),
+    @SerialName("recent_transactions") val recentTransactions: List<TransactionApiDto> = emptyList(),
+    @SerialName("has_activity_in_range") val hasActivityInRange: Boolean = false,
+    @SerialName("total_active_transaction_count") val totalActiveTransactionCount: Int = 0
 )
 
 @Serializable
 data class CategorySpendingDto(
     @SerialName("category_id") val categoryId: String = "",
     @SerialName("category_name") val categoryName: String = "",
+    @SerialName("category_color") val categoryColor: String? = null,
+    @SerialName("category_icon") val categoryIcon: String? = null,
     @SerialName("amount_paise") val amountPaise: Long = 0L,
-    @SerialName("percentage_of_total") val percentageOfTotal: Double = 0.0
+    @SerialName("formatted_inr") val formattedInr: String? = null,
+    @SerialName("share_percentage") val sharePercentage: Double = 0.0
 )
 
 @Serializable
@@ -122,7 +133,15 @@ data class NecessitySpendingDto(
     val necessity: String = "",
     val label: String = "",
     @SerialName("amount_paise") val amountPaise: Long = 0L,
-    @SerialName("percentage_of_total") val percentageOfTotal: Double = 0.0
+    @SerialName("formatted_inr") val formattedInr: String? = null,
+    @SerialName("share_percentage") val sharePercentage: Double = 0.0
+)
+
+@Serializable
+data class GoogleIdTokenRequest(
+    @SerialName("id_token") val idToken: String,
+    val nonce: String? = null,
+    val provider: String = "google"
 )
 
 @Serializable
@@ -228,6 +247,9 @@ interface NativeAuthApi {
 
     @POST("api/native/auth/refresh")
     suspend fun refreshToken(@Body body: RefreshRequest): AuthResponse
+
+    @POST("api/native/auth/google")
+    suspend fun loginWithGoogleIdToken(@Body body: GoogleIdTokenRequest): AuthResponse
 }
 
 interface SupabaseAuthApi {
@@ -236,6 +258,9 @@ interface SupabaseAuthApi {
 
     @POST("auth/v1/token?grant_type=refresh_token")
     suspend fun refreshToken(@Body body: RefreshRequest): AuthResponse
+
+    @POST("auth/v1/token?grant_type=id_token")
+    suspend fun loginWithGoogleIdToken(@Body body: GoogleIdTokenRequest): AuthResponse
 }
 
 class AuthInterceptor(private val secureStorage: SecureStorage) : Interceptor {

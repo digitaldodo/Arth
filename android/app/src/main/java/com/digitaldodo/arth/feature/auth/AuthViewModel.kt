@@ -1,5 +1,6 @@
 package com.digitaldodo.arth.feature.auth
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -8,10 +9,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.digitaldodo.arth.BuildConfig
 import com.digitaldodo.arth.core.network.AuthErrorDiagnostics
+import com.digitaldodo.arth.core.network.GoogleIdTokenRequest
 import com.digitaldodo.arth.core.network.LoginRequest
 import com.digitaldodo.arth.core.network.NetworkClient
 import com.digitaldodo.arth.core.network.RefreshRequest
+import com.digitaldodo.arth.core.security.GoogleAuthManager
+import com.digitaldodo.arth.core.security.GoogleAuthResult
 import com.digitaldodo.arth.core.security.SecureStorage
+import com.digitaldodo.arth.core.sync.AccountSyncService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -68,17 +73,24 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                val resolvedEmail = response.user.email ?: email
                 secureStorage.saveSession(
                     accessToken = response.accessToken,
                     refreshToken = response.refreshToken,
                     userId = response.user.id,
-                    email = response.user.email ?: email
+                    email = resolvedEmail
                 )
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isAuthenticated = true,
-                    userEmail = response.user.email ?: email
+                    userEmail = resolvedEmail
                 )
+
+                // Trigger immediate initial synchronization
+                launch {
+                    AccountSyncService.getInstance(getApplication()).syncAll()
+                }
+
                 onSuccess()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -89,7 +101,72 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startGoogleSignIn(context: Context) {
+    /**
+     * Native Google Sign-In using AndroidX Credential Manager.
+     * The user remains within the application while choosing their registered Google account.
+     */
+    fun signInWithNativeGoogle(activity: Activity, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            val googleAuthManager = GoogleAuthManager(activity)
+            when (val result = googleAuthManager.signIn(activity)) {
+                is GoogleAuthResult.Cancelled -> {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
+                is GoogleAuthResult.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = result.message
+                    )
+                }
+                is GoogleAuthResult.Success -> {
+                    try {
+                        val req = GoogleIdTokenRequest(idToken = result.idToken)
+                        val response = try {
+                            nativeAuthApi.loginWithGoogleIdToken(req)
+                        } catch (firstErr: Exception) {
+                            try {
+                                supabaseAuthApi.loginWithGoogleIdToken(req)
+                            } catch (_: Exception) {
+                                throw firstErr
+                            }
+                        }
+
+                        val resolvedEmail = response.user.email ?: result.email ?: ""
+                        secureStorage.saveSession(
+                            accessToken = response.accessToken,
+                            refreshToken = response.refreshToken,
+                            userId = response.user.id,
+                            email = resolvedEmail
+                        )
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            isAuthenticated = true,
+                            userEmail = resolvedEmail,
+                            errorMessage = null
+                        )
+
+                        // Trigger immediate initial synchronization into Room DB
+                        launch {
+                            AccountSyncService.getInstance(getApplication()).syncAll()
+                        }
+
+                        onSuccess()
+                    } catch (e: Exception) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = AuthErrorDiagnostics.diagnose(e)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Fallback browser-based Google Sign-In for environments without Credential Manager.
+     */
+    fun startBrowserGoogleSignIn(context: Context) {
         val webBaseUrl = BuildConfig.WEB_URL.trimEnd('/')
         val googleAuthUrl = "$webBaseUrl/api/native/auth/google"
 
@@ -124,6 +201,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             userEmail = email,
             errorMessage = null
         )
+
+        viewModelScope.launch {
+            AccountSyncService.getInstance(getApplication()).syncAll()
+        }
+
         onSuccess()
     }
 

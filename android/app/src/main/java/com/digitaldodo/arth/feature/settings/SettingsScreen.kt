@@ -18,15 +18,21 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.digitaldodo.arth.BuildConfig
 import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthCard
+import com.digitaldodo.arth.core.designsystem.ArthOutlinedButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
 import com.digitaldodo.arth.core.security.SecureStorage
-import com.digitaldodo.arth.data.repository.TransactionRepository
+import com.digitaldodo.arth.core.sync.AccountSyncService
+import com.digitaldodo.arth.core.sync.SyncState
 import com.digitaldodo.arth.feature.sms.SmsDisclosureDialog
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun SettingsScreen(
@@ -38,6 +44,7 @@ fun SettingsScreen(
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val secureStorage = remember { SecureStorage(context) }
     val isSmsSupported = BuildConfig.SMS_DETECTION_SUPPORTED
     var showSmsDisclosure by remember { mutableStateOf(false) }
@@ -64,6 +71,8 @@ fun SettingsScreen(
 
     val db = remember { ArthDatabase.getInstance(context) }
     val pendingOutboxCount by db.syncOutboxDao().observePendingCount().collectAsState(initial = 0)
+    val syncService = remember { AccountSyncService.getInstance(context) }
+    val syncState by syncService.syncState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -77,6 +86,11 @@ fun SettingsScreen(
                     text = "More & Settings",
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Preferences, Security & Data Sync",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArthTheme.colors.textMuted
                 )
             }
         }
@@ -100,18 +114,25 @@ fun SettingsScreen(
                             Icons.Default.AccountCircle,
                             contentDescription = null,
                             modifier = Modifier.size(40.dp),
-                            tint = ArthTheme.colors.blue
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.width(12.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = secureStorage.getUserEmail() ?: "Arth User",
+                                text = secureStorage.getUserEmail() ?: "Arth Account",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(2.dp))
+                            val lastSync = secureStorage.getLastSyncTimestamp()
+                            val syncText = if (lastSync > 0L) {
+                                val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+                                "Synced ${sdf.format(Date(lastSync))}"
+                            } else {
+                                "Connected to Arth Cloud"
+                            }
                             Text(
-                                text = "Local & Cloud Synchronized",
+                                text = syncText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = ArthTheme.colors.textMuted
                             )
@@ -123,8 +144,8 @@ fun SettingsScreen(
             // Financial Modules
             item {
                 Text(
-                    text = "Financial Tools",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    text = "FINANCIAL TOOLS",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.SemiBold),
                     color = ArthTheme.colors.textSecondary
                 )
             }
@@ -133,7 +154,7 @@ fun SettingsScreen(
                 SettingsNavigationItem(
                     icon = Icons.Default.AccountBalance,
                     title = "Starting Balances & Transfers",
-                    subtitle = "Configure cash & online baselines and transfers",
+                    subtitle = "Configure Cash & Online baselines and movements",
                     onClick = onNavigateToBalances
                 )
             }
@@ -159,8 +180,8 @@ fun SettingsScreen(
             // Automation & Intelligence
             item {
                 Text(
-                    text = "Automation & Privacy",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    text = "AUTOMATION & PRIVACY",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.SemiBold),
                     color = ArthTheme.colors.textSecondary
                 )
             }
@@ -181,7 +202,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Mail, contentDescription = null, tint = ArthTheme.colors.blue)
+                            Icon(Icons.Default.Mail, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
@@ -212,8 +233,8 @@ fun SettingsScreen(
             // Security & Sync
             item {
                 Text(
-                    text = "Security & Synchronization",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    text = "SECURITY & SYNCHRONIZATION",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.SemiBold),
                     color = ArthTheme.colors.textSecondary
                 )
             }
@@ -221,8 +242,8 @@ fun SettingsScreen(
             item {
                 SettingsNavigationItem(
                     icon = Icons.Default.Security,
-                    title = "Security & Biometric Lock",
-                    subtitle = "Fingerprint app lock, timeout, and hardware status",
+                    title = "Biometric App Lock",
+                    subtitle = "Fingerprint unlock, timeout, and hardware status",
                     onClick = onNavigateToSecurity
                 )
             }
@@ -236,31 +257,43 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Sync Outbox",
+                                text = "Account Synchronization",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                             )
                             Spacer(Modifier.height(2.dp))
+                            val isSyncing = syncState is SyncState.Syncing
+                            val subtitleText = when {
+                                isSyncing -> "Syncing transactions, balances & categories…"
+                                pendingOutboxCount > 0 -> "$pendingOutboxCount local mutations pending upload"
+                                else -> "All local transactions synchronized"
+                            }
                             Text(
-                                text = "$pendingOutboxCount items pending upload",
+                                text = subtitleText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ArthTheme.colors.textSecondary
+                                color = if (isSyncing) MaterialTheme.colorScheme.primary else ArthTheme.colors.textSecondary
                             )
                         }
+
+                        val isSyncing = syncState is SyncState.Syncing
                         ArthButton(
-                            text = "Sync Now",
-                            onClick = { TransactionRepository.triggerSync(context) }
+                            text = if (isSyncing) "Syncing…" else "Sync Now",
+                            enabled = !isSyncing,
+                            onClick = {
+                                coroutineScope.launch {
+                                    syncService.syncAll()
+                                }
+                            }
                         )
                     }
                 }
             }
 
-            // Sign out
+            // Sign out button matching PWA style
             item {
-                Spacer(Modifier.height(8.dp))
-                ArthButton(
-                    text = "Sign Out",
-                    backgroundColor = ArthTheme.colors.crimson,
-                    contentColor = MaterialTheme.colorScheme.onError,
+                Spacer(Modifier.height(12.dp))
+                ArthOutlinedButton(
+                    text = "Sign Out of Arth",
+                    borderColor = ArthTheme.colors.border,
                     onClick = {
                         secureStorage.clearSession()
                         onSignOut()

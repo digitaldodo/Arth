@@ -53,12 +53,18 @@ class SecureStorage(context: Context) {
 
     fun isBiometricLockEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_LOCK, false)
 
+    fun getLastSyncTimestamp(): Long = prefs.getLong(KEY_LAST_SYNC, 0L)
+    fun setLastSyncTimestamp(timestamp: Long) {
+        prefs.edit().putLong(KEY_LAST_SYNC, timestamp).apply()
+    }
+
     fun clearSession() {
         prefs.edit()
             .remove(KEY_ACCESS_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_USER_ID)
             .remove(KEY_USER_EMAIL)
+            .remove(KEY_LAST_SYNC)
             .apply()
     }
 
@@ -68,5 +74,6 @@ class SecureStorage(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
+        private const val KEY_LAST_SYNC = "last_sync_timestamp"
     }
 }

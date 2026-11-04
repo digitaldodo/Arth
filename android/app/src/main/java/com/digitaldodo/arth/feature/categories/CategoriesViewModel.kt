@@ -20,7 +20,7 @@ data class CategoriesUiState(
 
 class CategoriesViewModel(application: Application) : AndroidViewModel(application) {
     private val db = ArthDatabase.getInstance(application)
-    private val repo = CategoryRepository(db.categoryDao())
+    private val repo = CategoryRepository(db.categoryDao(), application)
 
     private val _uiState = MutableStateFlow(CategoriesUiState())
     val uiState = _uiState.asStateFlow()

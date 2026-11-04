@@ -1,7 +1,9 @@
 package com.digitaldodo.arth.feature.auth
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -34,6 +36,7 @@ fun LoginScreen(
     val state by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val activity = context as? Activity
 
     LaunchedEffect(state.isAuthenticated) {
         if (state.isAuthenticated) {
@@ -67,12 +70,20 @@ fun LoginScreen(
 
             Spacer(Modifier.height(36.dp))
 
-            // Google Sign-In Button
-            ArthOutlinedButton(
-                text = "Continue with Google",
-                onClick = { viewModel.startGoogleSignIn(context) },
+            // Native Google Sign-In Button (Credential Manager)
+            ArthButton(
+                text = "Sign in with Google",
+                onClick = {
+                    if (activity != null) {
+                        viewModel.signInWithNativeGoogle(activity, onLoginSuccess)
+                    } else {
+                        viewModel.startBrowserGoogleSignIn(context)
+                    }
+                },
+                isLoading = state.isLoading,
                 modifier = Modifier.fillMaxWidth(),
-                borderColor = ArthTheme.colors.borderStrong
+                backgroundColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
 
             Spacer(Modifier.height(20.dp))
@@ -145,21 +156,33 @@ fun LoginScreen(
                         .border(1.dp, ArthTheme.colors.crimson.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Error",
-                            tint = ArthTheme.colors.crimson,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Error",
+                                tint = ArthTheme.colors.crimson,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = state.errorMessage ?: "",
+                                color = ArthTheme.colors.crimson,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Browser fallback link if native credential sign-in fails
                         Text(
-                            text = state.errorMessage ?: "",
+                            text = "Trouble signing in? Open in browser →",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = ArthTheme.colors.crimson,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .clickable { viewModel.startBrowserGoogleSignIn(context) }
+                                .padding(top = 4.dp)
                         )
                     }
                 }
@@ -167,13 +190,12 @@ fun LoginScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            ArthButton(
-                text = "Sign In",
+            ArthOutlinedButton(
+                text = "Sign In with Password",
                 onClick = {
                     focusManager.clearFocus()
                     viewModel.login(onLoginSuccess)
                 },
-                isLoading = state.isLoading,
                 modifier = Modifier.fillMaxWidth()
             )
 

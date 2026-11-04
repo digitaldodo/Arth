@@ -92,6 +92,87 @@ class TransactionRepository(
         triggerSync(context)
     }
 
+    suspend fun refreshTransactions(): Result<Int> {
+        val secureStorage = SecureStorage(context)
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
+
+        return try {
+            val api = NetworkClient.createArthApi(secureStorage)
+            val currentUserId = secureStorage.getUserId() ?: ""
+            var page = 1
+            var totalFetched = 0
+            val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+            val sdfIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val pendingOutboxIds = outboxDao.getPending(1000).map { it.entityId }.toSet()
+
+            while (true) {
+                val response = api.getTransactions(page = page, pageSize = 50)
+                if (response.items.isEmpty()) break
+
+                val entities = response.items.mapNotNull { dto ->
+                    // Do not overwrite local changes if this entity is pending in outbox
+                    if (pendingOutboxIds.contains(dto.id)) {
+                        return@mapNotNull null
+                    }
+
+                    val txDateMillis = try {
+                        sdfDate.parse(dto.transactionDate)?.time ?: System.currentTimeMillis()
+                    } catch (_: Exception) {
+                        System.currentTimeMillis()
+                    }
+
+                    val createdMillis = try {
+                        val str = dto.createdAt ?: dto.recordedAt
+                        if (str != null) sdfIso.parse(str)?.time ?: txDateMillis else txDateMillis
+                    } catch (_: Exception) {
+                        txDateMillis
+                    }
+
+                    val updatedMillis = try {
+                        val str = dto.updatedAt ?: dto.createdAt
+                        if (str != null) sdfIso.parse(str)?.time ?: createdMillis else createdMillis
+                    } catch (_: Exception) {
+                        createdMillis
+                    }
+
+                    TransactionEntity(
+                        id = dto.id,
+                        userId = currentUserId,
+                        amountPaise = dto.amountPaise,
+                        type = dto.type.uppercase(),
+                        paymentMode = dto.paymentMethod.uppercase(),
+                        necessity = dto.necessity,
+                        categoryId = dto.categoryId,
+                        categoryName = dto.categoryName ?: "General",
+                        categoryIcon = "🧾",
+                        categoryColor = "#78716C",
+                        transactionDate = txDateMillis,
+                        notes = dto.notes,
+                        counterparty = dto.description,
+                        isDeleted = false,
+                        syncStatus = SyncStatus.SYNCED.name,
+                        createdAt = createdMillis,
+                        updatedAt = updatedMillis
+                    )
+                }
+
+                if (entities.isNotEmpty()) {
+                    transactionDao.insertAll(entities)
+                    totalFetched += entities.size
+                }
+
+                if (!response.hasMore || response.items.size < 50) break
+                page++
+            }
+
+            Result.success(totalFetched)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Calculates the true current balances based on:
      * Baseline Starting Balances + Σ(Inflow post-baseline) - Σ(Outflow post-baseline)
@@ -155,12 +236,12 @@ class CategoryRepository(
         categoryDao.delete(id)
     }
 
-    suspend fun refreshCategories() {
-        val ctx = context ?: return
+    suspend fun refreshCategories(): Result<Int> {
+        val ctx = context ?: return Result.failure(IllegalStateException("No context available"))
         val secureStorage = SecureStorage(ctx)
-        if (!secureStorage.isLoggedIn()) return
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
 
-        try {
+        return try {
             val api = NetworkClient.createArthApi(secureStorage)
             val response = api.getCategories()
             if (response.categories.isNotEmpty()) {
@@ -178,8 +259,9 @@ class CategoryRepository(
                 }
                 categoryDao.insertAll(entities)
             }
-        } catch (_: Exception) {
-            // Keep local cached categories if backend is unreachable
+            Result.success(response.categories.size)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }
@@ -209,26 +291,39 @@ class BalanceRepository(
         )
     }
 
-    suspend fun refreshBalances() {
+    suspend fun refreshBalances(): Result<AccountBalances> {
         val secureStorage = SecureStorage(context)
-        if (!secureStorage.isLoggedIn()) return
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
 
-        try {
+        return try {
             val api = NetworkClient.createArthApi(secureStorage)
             val dto = api.getBalances()
             val existing = balancesDao.getPrimary()
-            balancesDao.upsert(
-                AccountBalancesEntity(
-                    id = "primary",
-                    cashPaise = dto.cashPaise,
-                    onlinePaise = dto.onlinePaise,
-                    startingCashPaise = dto.startingCashPaise,
-                    startingOnlinePaise = dto.startingOnlinePaise,
-                    balancesConfiguredAt = existing?.balancesConfiguredAt ?: System.currentTimeMillis()
-                )
+
+            val configuredAtMillis = if (!dto.configuredAt.isNullOrBlank()) {
+                try {
+                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.parse(dto.configuredAt!!)?.time ?: (existing?.balancesConfiguredAt ?: 0L)
+                } catch (_: Exception) {
+                    existing?.balancesConfiguredAt ?: 0L
+                }
+            } else {
+                existing?.balancesConfiguredAt ?: 0L
+            }
+
+            val entity = AccountBalancesEntity(
+                id = "primary",
+                cashPaise = dto.cashPaise,
+                onlinePaise = dto.onlinePaise,
+                startingCashPaise = dto.startingCashPaise,
+                startingOnlinePaise = dto.startingOnlinePaise,
+                balancesConfiguredAt = configuredAtMillis
             )
-        } catch (_: Exception) {
-            // Fall back to local calculation
+            balancesDao.upsert(entity)
+            Result.success(entity.toDomain())
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

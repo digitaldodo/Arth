@@ -37,10 +37,12 @@ android {
         def defaultApiUrl = 'https://arth-backend-nchl.onrender.com'
         def defaultSupabaseUrl = 'https://fbmmkqdwkayrrsodueqd.supabase.co'
         def defaultWebUrl = 'https://arth-9h3f.vercel.app'
+        def defaultGoogleClientId = '973069107406-nharoaodd1gp3bbu91vh31akt2jibfl5.apps.googleusercontent.com'
         buildConfigField "String", "SUPABASE_URL", javaString(gradleValue('ARTH_SUPABASE_URL', defaultSupabaseUrl))
         buildConfigField "String", "SUPABASE_ANON_KEY", javaString(gradleValue('ARTH_SUPABASE_ANON_KEY', ''))
         buildConfigField "String", "API_URL", javaString(gradleValue('ARTH_API_URL', defaultApiUrl))
         buildConfigField "String", "WEB_URL", javaString(gradleValue('ARTH_WEB_URL', defaultWebUrl))
+        buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", javaString(gradleValue('GOOGLE_WEB_CLIENT_ID', defaultGoogleClientId))
 
         resValue "string", "appName", "Arth"
     }
@@ -128,6 +130,9 @@ dependencies {
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
+    implementation 'androidx.credentials:credentials:1.3.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
 
     // Room Database with KSP
     def roomVersion = '2.6.1'

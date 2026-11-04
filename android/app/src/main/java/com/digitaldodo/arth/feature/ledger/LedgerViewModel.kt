@@ -39,6 +39,19 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         loadTransactions()
+        refresh()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                repo.refreshTransactions()
+            } catch (_: Exception) {
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
     }
 
     private fun loadTransactions() {
