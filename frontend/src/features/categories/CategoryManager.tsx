@@ -19,6 +19,7 @@ import {
 import { getCachedCategories, setCachedCategories } from '@/lib/offline-db';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useBackHandler } from '@/features/navigation';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface CategoryManagerProps {
   userId: string;
@@ -130,7 +131,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : 'Failed to load categories';
+        const msg = sanitizeUserFacingError(err, 'Failed to load categories. Please check your connection.');
         if (!isPwa) { setErrorMessage(msg); setIsLoading(false); return; }
         void getCachedCategories(userId).then((cached) => {
           if (!isMounted || cached.length) return;
@@ -178,8 +179,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
     } catch (err: unknown) {
       // Rollback on failure
       setCategories(previousList);
-      const msg = err instanceof Error ? err.message : 'Failed to save category order';
-      setErrorMessage(msg);
+      setErrorMessage(sanitizeUserFacingError(err, 'Failed to save category order. Please try again.'));
     } finally {
       setIsReordering(false);
     }
@@ -225,11 +225,11 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       onCategoryChange?.();
       showNotification(`Added category "${trimmed}"`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create category';
+      const msg = err instanceof Error ? err.message : '';
       if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('conflict')) {
         setCreateError(`A category with the name "${trimmed}" already exists.`);
       } else {
-        setCreateError(msg);
+        setCreateError(sanitizeUserFacingError(err, 'Failed to create category. Please try again.'));
       }
     } finally {
       setIsCreating(false);
@@ -299,11 +299,11 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       onCategoryChange?.();
       showNotification(`Updated category "${trimmed}"`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update category';
+      const msg = err instanceof Error ? err.message : '';
       if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('conflict')) {
         setUpdateError(`A category named "${trimmed}" already exists.`);
       } else {
-        setUpdateError(msg);
+        setUpdateError(sanitizeUserFacingError(err, 'Failed to update category. Please try again.'));
       }
     } finally {
       setIsUpdating(false);
@@ -322,8 +322,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       onCategoryChange?.();
       showNotification(`Archived "${name}"`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to archive category';
-      setErrorMessage(msg);
+      setErrorMessage(sanitizeUserFacingError(err, 'Failed to archive category. Please try again.'));
     } finally {
       setIsArchiving(false);
     }
@@ -337,8 +336,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
       onCategoryChange?.();
       showNotification(`Restored "${cat.name}"`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to restore category';
-      setErrorMessage(msg);
+      setErrorMessage(sanitizeUserFacingError(err, 'Failed to restore category. Please try again.'));
     }
   };
 

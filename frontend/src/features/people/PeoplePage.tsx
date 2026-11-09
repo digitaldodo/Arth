@@ -21,6 +21,7 @@ import { getTodayIST, formatPaiseToINR } from '@/lib/format';
 import { getCachedPeople, setCachedPeople, getCachedPersonDetail, setCachedPersonDetail } from '@/lib/offline-db';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useBackHandler } from '@/features/navigation';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface PeoplePageProps {
   userId: string;
@@ -181,7 +182,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : 'Failed to load people';
+        const msg = sanitizeUserFacingError(err, 'Failed to load people. Check your connection.');
         if (!isPwa) { setErrorMessage(msg); setIsLoading(false); return; }
         void getCachedPeople(userId).then((cached) => {
           if (!isMounted || cached.length) return;
@@ -213,7 +214,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : 'Failed to load person details';
+        const msg = sanitizeUserFacingError(err, 'Failed to load person details. Check your connection.');
         if (!isPwa) { setErrorMessage(msg); setIsDetailLoading(false); return; }
         void getCachedPersonDetail(userId, selectedPersonId).then((cached) => {
           if (!isMounted || cached) return;
@@ -280,8 +281,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       showNotification(`Added ${res.person.name}`);
       setSelectedPersonId(res.person.id);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to add person';
-      setAddPersonError(msg);
+      setAddPersonError(sanitizeUserFacingError(err, 'Failed to add person. Please try again.'));
     } finally {
       setIsCreatingPerson(false);
     }
@@ -319,8 +319,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       onRefreshShell?.();
       showNotification(`Recorded ${trimmed}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create record';
-      setRecordError(msg);
+      setRecordError(sanitizeUserFacingError(err, 'Failed to create record. Please try again.'));
     } finally {
       setIsSubmittingRecord(false);
     }
@@ -360,8 +359,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       onRefreshShell?.();
       showNotification('Settlement recorded successfully');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record settlement';
-      setSettlementError(msg);
+      setSettlementError(sanitizeUserFacingError(err, 'Failed to record settlement. Please try again.'));
     } finally {
       setIsSubmittingSettlement(false);
     }
@@ -383,8 +381,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       setLoadTrigger((prev) => prev + 1);
       showNotification(`Renamed to "${trimmed}"`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to rename person';
-      setRenameError(msg);
+      setRenameError(sanitizeUserFacingError(err, 'Failed to rename person. Please try again.'));
     }
   };
 
@@ -402,8 +399,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
         `Direction changed to "${targetDirection === 'i_owe_them' ? 'I owe them' : 'They owe me'}"`
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to change direction';
-      setChangeDirError(msg);
+      setChangeDirError(sanitizeUserFacingError(err, 'Failed to change direction. Please try again.'));
     }
   };
 
@@ -417,8 +413,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
       setLoadTrigger((prev) => prev + 1);
       showNotification(targetState ? `Archived ${personDetail.name}` : `Restored ${personDetail.name}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to archive/restore person';
-      setErrorMessage(msg);
+      setErrorMessage(sanitizeUserFacingError(err, 'Failed to update person. Please try again.'));
     }
   };
 

@@ -7,6 +7,7 @@ import {
   getAuthCallbackUrl,
   getAuthConfirmUrl,
 } from '@/lib/auth-config';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 import {
   RESERVED_USERNAMES,
@@ -202,7 +203,7 @@ export async function signInWithEmailAction(
         };
       }
       return {
-        error: error.message || 'Unable to sign in. Please try again.',
+        error: sanitizeUserFacingError(error.message, 'Unable to sign in. Please check your credentials and try again.'),
       };
     }
 
@@ -217,8 +218,7 @@ export async function signInWithEmailAction(
 
     return { success: true, redirectUrl: '/' };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Sign-in failed';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') };
   }
 }
 
@@ -336,7 +336,7 @@ export async function signUpWithEmailAction(
         };
       }
       return {
-        error: error.message || 'Registration failed. Please try again.',
+        error: sanitizeUserFacingError(error.message, 'Registration failed. Please try again.'),
       };
     }
 
@@ -361,8 +361,7 @@ export async function signUpWithEmailAction(
         'Confirmation request accepted. A confirmation link has been dispatched to your email address. Please check your inbox (including spam/junk folders) to activate your account.',
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Registration failed';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Registration failed. Please try again.') };
   }
 }
 
@@ -429,9 +428,7 @@ export async function resendConfirmationEmailAction(
         'If an unconfirmed account exists with this email address, a confirmation email has been dispatched. Please check your inbox and spam folder.',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'Unable to resend confirmation email';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Unable to resend confirmation email. Please try again.') };
   }
 }
 
@@ -542,9 +539,7 @@ export async function updatePasswordAction(
       message: 'Your password has been successfully updated.',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'Password update failed';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Password update failed. Please try again.') };
   }
 }
 
@@ -695,9 +690,7 @@ export async function changePasswordAction(
         : 'Password successfully set! You can now sign in using your email or username and password, or continue using Google sign-in.',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'Password update failed';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Password update failed. Please try again.') };
   }
 }
 
@@ -778,9 +771,7 @@ export async function setAccountPasswordAction(
         'Password successfully set! You can now sign in using your email and password, or continue using Google sign-in.',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'Password update failed';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Password update failed. Please try again.') };
   }
 }
 
@@ -816,7 +807,7 @@ export async function signInWithGoogleAction(clientOrigin?: string): Promise<{
     });
 
     if (error) {
-      return { error: error.message };
+      return { error: sanitizeUserFacingError(error.message, 'Unable to initiate Google sign-in. Please try again.') };
     }
 
     if (data.url) {
@@ -825,8 +816,7 @@ export async function signInWithGoogleAction(clientOrigin?: string): Promise<{
 
     return { error: 'Unable to initiate Google sign-in. Please try again.' };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'OAuth error';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Unable to initiate Google sign-in. Please try again.') };
   }
 }
 

@@ -58,7 +58,7 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
       {/* Responsive Header Bar */}
-      <header className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex items-center justify-between">
+      <header className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-4 sm:py-5 flex items-center justify-between">
         <Link
           href="/"
           className="text-xs sm:text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-2 font-medium cursor-pointer"
@@ -68,7 +68,7 @@ export default async function LoginPage({
       </header>
 
       {/* Main Authentication Section: 2-column on desktop, 1-column on mobile */}
-      <main className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 my-auto py-6 sm:py-10">
+      <main className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 my-auto py-8 sm:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-center">
           {/* Left Column: Product Branding & Ledger Minimal Design Showcase (Visible on lg+) */}
           <div className="hidden lg:flex lg:col-span-6 flex-col justify-center space-y-8 pr-4">
@@ -135,22 +135,23 @@ export default async function LoginPage({
               </div>
             </div>
 
-            {/* Subtle Visual Ledger Preview */}
+            {/* Architectural Ledger Invariants (Neutral, authentic preview without fake salary numbers) */}
             <div className="p-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2.5 font-mono text-xs">
               <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] border-b border-[var(--border-hairline)] pb-1.5 uppercase tracking-wider">
-                <span>Date</span>
-                <span>Category</span>
-                <span className="text-right">Amount (INR)</span>
+                <span>Ledger Architecture</span>
+                <span>Invariant Specification</span>
               </div>
               <div className="flex items-center justify-between text-xs text-[var(--text-primary)]">
-                <span className="text-[var(--text-muted)]">2026-10-25</span>
-                <span>Salary / Consulting</span>
-                <span className="text-[var(--income-fg)] font-semibold tabular-nums">+₹1,25,000.00</span>
+                <span className="text-[var(--text-muted)]">Precision</span>
+                <span>64-bit integer paise (PostgreSQL BIGINT)</span>
               </div>
               <div className="flex items-center justify-between text-xs text-[var(--text-primary)]">
-                <span className="text-[var(--text-muted)]">2026-10-25</span>
-                <span>Groceries & Kitchen</span>
-                <span className="text-rose-700 dark:text-rose-400 font-semibold tabular-nums">-₹4,250.00</span>
+                <span className="text-[var(--text-muted)]">Balances</span>
+                <span>Cash &amp; Online segregated snapshot model</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-[var(--text-primary)]">
+                <span className="text-[var(--text-muted)]">Isolation</span>
+                <span>Row-Level Security gated by verified JWT</span>
               </div>
             </div>
           </div>
@@ -169,7 +170,7 @@ export default async function LoginPage({
       </main>
 
       {/* Subtle Minimal Footer */}
-      <footer className="w-full max-w-5xl 2xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center text-xs font-mono text-[var(--text-muted)]">
+      <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 text-center text-xs font-mono text-[var(--text-muted)]">
         Arth &middot; Ledger Minimal &middot; Confidential &amp; Sovereign
       </footer>
     </div>

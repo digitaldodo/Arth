@@ -3,6 +3,7 @@
 import React, { useState, useTransition, useEffect, useCallback } from 'react';
 import { changePasswordAction } from '@/app/login/actions';
 import type { PasswordStatus } from '@/lib/auth/password-status';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -118,7 +119,7 @@ export function ChangePasswordModal({
     startTransition(async () => {
       const res = await changePasswordAction(formData);
       if (res.error) {
-        setErrorMessage(res.error);
+        setErrorMessage(sanitizeUserFacingError(res.error, 'Failed to update password. Please try again.'));
       } else {
         const msg =
           res.message ||

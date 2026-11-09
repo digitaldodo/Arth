@@ -19,6 +19,7 @@ import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useBackHandler } from '@/features/navigation';
 import { UnsavedChangesDialog } from '@/components/ui/UnsavedChangesDialog';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -353,13 +354,14 @@ export function QuickAddModal({
         }
       }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : isEditMode
-          ? 'Failed to update transaction'
-          : 'Failed to record transaction';
-      setErrorMessage(msg);
+      setErrorMessage(
+        sanitizeUserFacingError(
+          err,
+          isEditMode
+            ? 'Failed to update transaction. Please try again.'
+            : 'Failed to record transaction. Please try again.'
+        )
+      );
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);

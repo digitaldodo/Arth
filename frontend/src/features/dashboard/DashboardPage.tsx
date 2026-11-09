@@ -19,6 +19,7 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { getLatestRecentTransactions } from './recent-transactions';
 import { formatDateHuman } from '@/lib/format';
 import { formatPaiseToINR } from '@/lib/format';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { fetchDashboardSummary, fetchBalances } from '@/lib/api-client';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -274,9 +275,7 @@ export function DashboardPage({
         if (userId) void setCachedBalances(currentBalances, userId);
       })
       .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : 'Failed to calculate account balances';
-        setBalancesError(message);
+        setBalancesError(sanitizeUserFacingError(err, 'Failed to calculate account balances.'));
       })
       .finally(() => {
         setBalancesLoading(false);
@@ -429,7 +428,7 @@ export function DashboardPage({
 
       {error && !isAuthError && !summary && !isPwa && (
         <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
-          Dashboard could not be loaded: {error.message}
+          Dashboard could not be loaded: {sanitizeUserFacingError(error.message, 'Unable to load dashboard data. Please try again.')}
           <button type="button" onClick={handleRetry} className="ml-3 underline">Retry</button>
         </div>
       )}

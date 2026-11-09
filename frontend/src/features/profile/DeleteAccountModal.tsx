@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import { deleteAccountAction } from '@/app/login/actions';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface DeleteAccountModalProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ export function DeleteAccountModal({
 
       const res = await deleteAccountAction(formData);
       if (res.error) {
-        setError(res.error);
+        setError(sanitizeUserFacingError(res.error, 'Failed to delete account. Please try again.'));
         return;
       }
 

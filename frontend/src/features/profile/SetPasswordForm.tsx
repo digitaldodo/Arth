@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import { setAccountPasswordAction } from '@/app/login/actions';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface SetPasswordFormProps {
   userEmail?: string;
@@ -53,7 +54,7 @@ export function SetPasswordForm({
     startTransition(async () => {
       const res = await setAccountPasswordAction(formData);
       if (res.error) {
-        setErrorMessage(res.error);
+        setErrorMessage(sanitizeUserFacingError(res.error, 'Failed to set password. Please try again.'));
       } else {
         setSuccessMessage(
           res.message ||

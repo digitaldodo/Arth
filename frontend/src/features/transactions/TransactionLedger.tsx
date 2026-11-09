@@ -11,6 +11,7 @@ import {
 } from '@arth/contracts';
 import { fetchCategories, fetchTransactions, restoreTransaction } from '@/lib/api-client';
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { computePresetDateRange } from './date-range-utils';
 import { ExportPdfDialog } from './ExportPdfDialog';
 import { type UserProfileSummary } from './ledger-pdf-exporter';
@@ -307,7 +308,7 @@ export function TransactionLedger({
         setIsRefreshing(false);
       }).catch((err: unknown) => {
         if (querySeqRef.current !== currentSeq) return;
-        setError(err instanceof Error ? err.message : 'Could not load transactions. Check your connection.');
+        setError(sanitizeUserFacingError(err, 'Could not load transactions. Check your connection.'));
         setTransactions([]);
         setIsInitialLoading(false);
         setIsRefreshing(false);
@@ -479,8 +480,7 @@ export function TransactionLedger({
       // Notify parent to refresh dashboard totals
       onTransactionMutated?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to restore transaction';
-      setError(msg);
+      setError(sanitizeUserFacingError(err, 'Failed to restore transaction. Please try again.'));
     } finally {
       setIsUndoing(false);
     }
@@ -866,80 +866,155 @@ export function TransactionLedger({
           )}
         </div>
       ) : (
-        <div
-          className={`space-y-2 min-h-[160px] transition-opacity duration-150 ${
-            isRefreshing ? 'opacity-65' : 'opacity-100'
-          }`}
-        >
-          {filteredTransactions.map((txn) => {
-            const isIncome = txn.type === 'income';
-            return (
-              <div
-                key={txn.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Transaction ${txn.description || txn.category_name || 'entry'}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}`}
-                onClick={() => setSelectedTransaction(txn)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setSelectedTransaction(txn);
-                  }
-                }}
-                className="flex items-center justify-between p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden transition-all cursor-pointer group"
-              >
-                {/* Left: Category, Date, Badges */}
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:underline underline-offset-2">
-                      {txn.description || txn.category_name || 'Uncategorized'}
-                    </span>
-                    {txn.description && txn.category_name && (
-                      <span className="text-xs text-[var(--text-secondary)] truncate max-w-[160px] md:max-w-xs">
-                        • {txn.category_name}
-                      </span>
-                    )}
+        <div className="space-y-2 min-h-[160px]">
+          {/* Desktop Column Alignment Header */}
+          <div className="hidden md:grid grid-cols-12 items-center px-4 py-2 text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] rounded-lg">
+            <span className="col-span-4">Transaction / Category</span>
+            <span className="col-span-2">Date</span>
+            <span className="col-span-2">Payment Method</span>
+            <span className="col-span-2">Necessity</span>
+            <span className="col-span-2 text-right">Amount (INR)</span>
+          </div>
+
+          <div
+            className={`space-y-2 transition-opacity duration-150 ${
+              isRefreshing ? 'opacity-65' : 'opacity-100'
+            }`}
+          >
+            {filteredTransactions.map((txn) => {
+              const isIncome = txn.type === 'income';
+              return (
+                <div
+                  key={txn.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Transaction ${txn.description || txn.category_name || 'entry'}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}`}
+                  onClick={() => setSelectedTransaction(txn)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedTransaction(txn);
+                    }
+                  }}
+                  className="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden transition-all cursor-pointer group"
+                >
+                  {/* Mobile Layout (< md) */}
+                  <div className="flex md:hidden items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:underline underline-offset-2">
+                          {txn.description || txn.category_name || 'Uncategorized'}
+                        </span>
+                        {txn.description && txn.category_name && (
+                          <span className="text-xs text-[var(--text-secondary)] truncate max-w-[160px]">
+                            • {txn.category_name}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
+                        <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
+                        <span>•</span>
+                        <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
+                          {txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                        </Badge>
+                        {('sync_status' in txn && txn.sync_status === 'pending') && (
+                          <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
+                            Pending sync
+                          </Badge>
+                        )}
+                        {txn.necessity && (
+                          <Badge variant={txn.necessity} size="xs" dot={true}>
+                            <span className="capitalize">{txn.necessity}</span>
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div
+                        className={`font-mono text-sm font-semibold tracking-tight tabular-nums ${
+                          isIncome
+                            ? 'text-[var(--income-fg)]'
+                            : 'text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                      </div>
+                      {txn.notes && (
+                        <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
+                          note 📝
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
-                    <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
-                    <span>•</span>
-                    <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
-                      {txn.payment_method === 'online' ? 'Online' : 'Cash'}
-                    </Badge>
-                    {('sync_status' in txn && txn.sync_status === 'pending') && (
-                      <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
-                        Pending sync
-                      </Badge>
-                    )}
-                    {txn.necessity && (
-                      <Badge variant={txn.necessity} size="xs" dot={true}>
-                        <span className="capitalize">{txn.necessity}</span>
-                      </Badge>
-                    )}
-                  </div>
-                </div>
+                  {/* Desktop Tabular Grid Layout (>= md) */}
+                  <div className="hidden md:grid grid-cols-12 items-center gap-2">
+                    {/* Col 1-4: Description & Category */}
+                    <div className="col-span-4 min-w-0 pr-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-[var(--text-primary)] truncate group-hover:underline underline-offset-2">
+                          {txn.description || txn.category_name || 'Uncategorized'}
+                        </span>
+                        {txn.notes && (
+                          <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
+                            📝
+                          </span>
+                        )}
+                      </div>
+                      {txn.description && txn.category_name && (
+                        <span className="text-xs text-[var(--text-secondary)] truncate block">
+                          {txn.category_name}
+                        </span>
+                      )}
+                    </div>
 
-                {/* Right: Amount & Note Marker */}
-                <div className="text-right">
-                  <div
-                    className={`font-mono text-sm md:text-base font-semibold tracking-tight ${
-                      isIncome
-                        ? 'text-[var(--income-fg)]'
-                        : 'text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                    {/* Col 5-6: Date */}
+                    <div className="col-span-2 text-xs font-mono text-[var(--text-secondary)]">
+                      {formatDateHuman(txn.transaction_date)}
+                    </div>
+
+                    {/* Col 7-8: Payment Method & Sync Status */}
+                    <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                      <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
+                        {txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                      </Badge>
+                      {('sync_status' in txn && txn.sync_status === 'pending') && (
+                        <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
+                          Pending sync
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Col 9-10: Necessity */}
+                    <div className="col-span-2">
+                      {txn.necessity ? (
+                        <Badge variant={txn.necessity} size="xs" dot={true}>
+                          <span className="capitalize">{txn.necessity}</span>
+                        </Badge>
+                      ) : (
+                        <span className="text-[11px] font-mono text-[var(--text-muted)]">—</span>
+                      )}
+                    </div>
+
+                    {/* Col 11-12: Amount */}
+                    <div className="col-span-2 text-right">
+                      <div
+                        className={`font-mono text-base font-semibold tracking-tight tabular-nums ${
+                          isIncome
+                            ? 'text-[var(--income-fg)]'
+                            : 'text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                      </div>
+                    </div>
                   </div>
-                  {txn.notes && (
-                    <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
-                      note 📝
-                    </span>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 

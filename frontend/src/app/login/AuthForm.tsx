@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition } from 'react';
 import { getCachedPwaUser, clearCachedPwaUserContext } from '@/lib/offline-db';
 import { useRouter } from 'next/navigation';
 import { ArthLogo } from '@/components/brand/ArthLogo';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 import {
   signInWithEmailAction,
   signUpWithEmailAction,
@@ -55,7 +56,7 @@ export function AuthForm({
     initialError
       ? initialError === 'expired_session'
         ? 'Your authentication session expired. Please sign in again.'
-        : decodeURIComponent(initialError)
+        : sanitizeUserFacingError(decodeURIComponent(initialError))
       : null
   );
   const [successMessage, setSuccessMessage] = useState<string | null>(

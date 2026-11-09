@@ -9,6 +9,7 @@ import {
   isValidUsername,
   isReservedUsername,
 } from '@/lib/username';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 interface UsernameClaimFormProps {
   currentUsername?: string;
@@ -132,7 +133,7 @@ export function UsernameClaimForm({
     startTransition(async () => {
       const res = await setUsernameAction(formData);
       if (res.error) {
-        setErrorMessage(res.error);
+        setErrorMessage(sanitizeUserFacingError(res.error, 'Failed to update username. Please try again.'));
         if (res.suggestions && res.suggestions.length > 0) {
           setSuggestions(res.suggestions);
         }

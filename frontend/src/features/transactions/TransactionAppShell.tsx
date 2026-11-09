@@ -275,7 +275,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     <div hidden={isAppLocked} aria-hidden={isAppLocked} inert={isAppLocked} className="min-h-screen">
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-12">
       {/* Top Application Header */}
-      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 py-3 sm:py-3.5">
+      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 xl:px-12 py-3 sm:py-3.5">
         <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <Link href="/" onClick={() => setActiveView('home')} aria-label="Go to dashboard" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
@@ -351,29 +351,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/download"
-              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] rounded-xs transition-colors"
-              title="Download Native Android App"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <span>Android App</span>
-            </Link>
             {user ? (
               <div className="hidden sm:flex items-center gap-3">
                 <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
@@ -401,7 +378,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
         {/* Success / Save Confirmation Toast */}
         {saveSuccessBanner && (
           <div

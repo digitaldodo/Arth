@@ -162,6 +162,8 @@ export function sanitizeRedirectPath(
   return fallback;
 }
 
+import { sanitizeUserFacingError } from './error-utils';
+
 /**
  * Converts technical OAuth or Supabase Auth error codes into human-readable, actionable guidance.
  */
@@ -186,7 +188,7 @@ export function formatAuthError(
     if (desc.includes('Token has expired') || desc.includes('otp_expired')) {
       return 'The confirmation link has expired. Please request a new confirmation email.';
     }
-    return desc;
+    return sanitizeUserFacingError(desc);
   }
 
   if (!errorParam) {
@@ -207,6 +209,6 @@ export function formatAuthError(
     case 'expired_session':
       return 'Your password recovery or authentication session has expired. Please sign in again.';
     default:
-      return decodeURIComponent(errorParam);
+      return sanitizeUserFacingError(decodeURIComponent(errorParam));
   }
 }
