@@ -26,8 +26,28 @@ export async function GET() {
 
     const release = await releaseResponse.json();
     const apkAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'Arth.apk');
-    if (!apkAsset?.id) {
+    const metadataAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'release.json');
+    if (!apkAsset?.id || !metadataAsset?.id) {
       return NextResponse.json({ error: 'The current Android package is not available.' }, { status: 503 });
+    }
+
+    const metadataResponse = await fetch(
+      `https://api.github.com/repos/${repo}/releases/assets/${metadataAsset.id}`,
+      { headers: { ...headers, Accept: 'application/octet-stream' }, cache: 'no-store' }
+    );
+    if (!metadataResponse.ok) {
+      return NextResponse.json({ error: 'The Android release could not be verified.' }, { status: 503 });
+    }
+    const metadata = await metadataResponse.json();
+    const certificate = metadata?.signingCertificateSha256;
+    if (
+      metadata?.published !== true ||
+      metadata?.applicationId !== 'com.digitaldodo.arth' ||
+      !Number.isSafeInteger(metadata?.versionCode) ||
+      metadata.versionCode <= 1005 ||
+      !/^([a-f0-9]{2}:){31}[a-f0-9]{2}$/i.test(certificate || '')
+    ) {
+      return NextResponse.json({ error: 'The current Android release is not verified for distribution.' }, { status: 503 });
     }
 
     const assetResponse = await fetch(
