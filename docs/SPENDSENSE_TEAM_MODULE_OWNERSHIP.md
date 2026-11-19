@@ -29,7 +29,7 @@ For implementation, the owner should: validate request/response schemas; keep pr
 ## Conflicts recorded
 
 - The novelty assessment ranks Safe-to-Spend as the overall project novelty, but the user's assigned contribution is transaction categorization. This repository follows the user's ownership boundary; the Safe-to-Spend module is a scaffold only.
-- The thesis evaluation discourages SMS scraping and favors consent-driven Account Aggregator ingestion. The user's later instruction makes SMS functionality mandatory. For direct APK distribution, SpendSense implements user-selected SMS sharing/import and review. It does not claim automatic inbox access. See `ANDROID_PRIVACY_AND_PLAY_POLICY.md` and the SMS section in the novelty document.
+- The thesis evaluation discourages SMS scraping and favors consent-driven Account Aggregator ingestion. The user's later instruction makes SMS functionality mandatory. For direct APK distribution, SpendSense implements opt-in detection from visible notifications posted by the default Messages app, after Android Notification access is granted, plus user-selected SMS sharing/import and review. It cannot scan inbox history, and notification previews may be hidden or redacted. See `ANDROID_PRIVACY_AND_PLAY_POLICY.md` and the SMS section in the novelty document.
 - The strategy and thesis documents propose broader product and alternative technology directions. The existing Supabase/TypeScript/Android application remains authoritative; no stack rewrite or teammate algorithm is introduced.
 
 ## Tests and coordination

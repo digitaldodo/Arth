@@ -46,7 +46,7 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     assert.ok(content.includes('Native Android Application'), 'More hub must feature Native Android Application card');
   });
 
-  test('direct APK stays share-only while preserving the existing SMS-capable flavor', () => {
+  test('direct APK supports user-approved notification import while preserving the SMS-capable flavor', () => {
     const buildGradlePath = path.join(process.cwd(), '..', 'android', 'app', 'build.gradle');
     const buildGradle = fs.readFileSync(buildGradlePath, 'utf-8');
 
@@ -62,6 +62,8 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     assert.ok(mainManifest.includes('android.permission.RECEIVE_SMS'), 'existing SMS-capable variant must remain intact');
     assert.ok(localManifest.includes('android.permission.READ_SMS') && localManifest.includes('tools:node="remove"'), 'direct APK must remove restricted inbox access in its merged manifest');
     assert.ok(localManifest.includes('android.permission.RECEIVE_SMS') && localManifest.includes('tools:node="remove"'), 'direct APK must remove incoming SMS access in its merged manifest');
+    assert.ok(mainManifest.includes('SmsNotificationListenerService'), 'Android must register the user-approved notification listener');
+    assert.ok(mainManifest.includes('android.permission.BIND_NOTIFICATION_LISTENER_SERVICE'), 'notification listener must use Android system binding protection');
     assert.ok(mainManifest.includes('android.intent.action.SEND'), 'APK must accept explicitly shared messages');
     assert.ok(mainManifest.includes('text/plain'), 'message sharing must use plain-text content');
   });

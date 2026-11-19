@@ -70,6 +70,16 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <service
+            android:name=".core.sms.SmsNotificationListenerService"
+            android:label="@string/appName"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".core.sms.SmsReceiver"
             android:permission="android.permission.BROADCAST_SMS"

@@ -82,9 +82,9 @@ GitHub Releases is the selected initial host because this repository already bui
 
 ## SMS/message import compatibility
 
-The APK supports importing a message selected by the user: choose Share in the Messages app, select SpendSense, then review the parsed candidate. Parsing occurs on-device; the raw message text is not stored; a candidate is not added to the ledger until the user confirms its details and date. OTPs and messages the classifier cannot identify are rejected.
+The APK supports opt-in transaction detection from visible notifications posted by the user's current default Messages app. The user must grant Android Notification access and enable detection in SpendSense. The app filters other notification packages, parses text on-device, discards raw message text, and places recognized fields in the review queue. OTPs and unrecognized messages are rejected. When notification previews are hidden or unavailable, the user can share a selected message to SpendSense for review.
 
-This direct APK does not read inbox/history or automatically receive messages. `READ_SMS` and `RECEIVE_SMS` are hard-restricted permissions. The website download plus system installer flow cannot set the PackageInstaller installer allowlist, and an allowlist would permit but not itself grant a restricted permission. The app does not become a default SMS client, use a custom installer, or weaken device security to obtain access. A consented Account Aggregator flow or explicit message/file selection remains the supported route.
+This direct APK does not read inbox/history or receive SMS broadcasts. `READ_SMS` and `RECEIVE_SMS` are hard-restricted permissions. The website download plus system installer flow cannot set the PackageInstaller installer allowlist, and an allowlist would permit but not itself grant a restricted permission. Notification access is a user-approved, separate Android setting and works only with visible notifications from the default Messages app. The app does not become a default SMS client or use a custom installer. Manual message sharing and statement imports remain available as fallbacks.
 
 More detail and primary Android references are in [`ANDROID_PRIVACY_AND_PLAY_POLICY.md`](../ANDROID_PRIVACY_AND_PLAY_POLICY.md).
 

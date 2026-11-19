@@ -2,7 +2,9 @@ package com.digitaldodo.arth.feature.sms
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.digitaldodo.arth.BuildConfig
+import com.digitaldodo.arth.core.sms.SmsNotificationListenerService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +59,8 @@ fun SmsSettingsScreen(
     val context = LocalContext.current
     val automaticDetectionSupported = BuildConfig.SMS_DETECTION_SUPPORTED
     var showDisclosure by remember { mutableStateOf(false) }
+    var showNotificationDisclosure by remember { mutableStateOf(false) }
+    var enableAfterAccessGrant by remember { mutableStateOf(false) }
     var hasSmsPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED &&
@@ -66,6 +73,23 @@ fun SmsSettingsScreen(
         hasSmsPermission = permissions[Manifest.permission.READ_SMS] == true &&
             permissions[Manifest.permission.RECEIVE_SMS] == true
         if (hasSmsPermission) viewModel.setTrackingEnabled(true)
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* In-app review remains available if system notifications are declined. */ }
+    val notificationAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val granted = SmsNotificationListenerService.hasNotificationAccess(context)
+        viewModel.refreshNotificationAccessState()
+        if (granted && enableAfterAccessGrant) {
+            viewModel.setNotificationMonitoringEnabled(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        enableAfterAccessGrant = false
     }
 
     Scaffold(
@@ -84,6 +108,57 @@ fun SmsSettingsScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Card {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Automatic SMS transaction detection", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "SpendSense can classify visible alerts from your default Messages app after you grant Android's Notification access. It processes only that app's notifications on-device, stores recognized transaction fields, and discards the message text. It does not read inbox history.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "Android may hide message previews or redact sensitive notification text. Detection then cannot read that message. Share it to SpendSense manually instead.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val smsAppLabel = SmsNotificationListenerService.defaultSmsAppLabel(context)
+                        Text(
+                            smsAppLabel?.let { "Default Messages app: $it" }
+                                ?: "No default Messages app is currently available.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!state.hasNotificationAccess) {
+                            Button(onClick = { showNotificationDisclosure = true }) {
+                                Text("Review and enable notification access")
+                            }
+                        } else {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Detect transaction alerts")
+                                    Text("Notification access is granted")
+                                }
+                                Switch(
+                                    checked = state.isNotificationMonitoringEnabled,
+                                    onCheckedChange = { enabled ->
+                                        if (!enabled) viewModel.setNotificationMonitoringEnabled(false)
+                                        else {
+                                            viewModel.setNotificationMonitoringEnabled(true)
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                            TextButton(onClick = {
+                                notificationAccessLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            }) { Text("Manage notification access") }
+                        }
+                    }
+                }
+            }
             if (automaticDetectionSupported) {
                 item {
                     Card {
@@ -138,12 +213,12 @@ fun SmsSettingsScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            "Open your Messages app, select a bank or UPI transaction message, choose Share, then select SpendSense. The message is parsed on this device. Only a recognized transaction candidate is kept, and you review it before it enters your ledger.",
+                            "Use this if message previews are hidden, notification access is unavailable, or you want to import an older message. Open Messages, select a bank or UPI transaction message, choose Share, then select SpendSense. Only a recognized transaction candidate is kept, and you review it before it enters your ledger.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            "SpendSense does not read your inbox or listen for incoming SMS in this direct-download app. Android restricts those permissions for ordinary sideload installs. No SMS permission is requested.",
+                            "This share flow does not request SMS permissions or read inbox history. Notification detection is separate and requires your explicit approval in Android Settings.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -168,6 +243,28 @@ fun SmsSettingsScreen(
                 }
             }
         }
+    }
+
+    if (showNotificationDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showNotificationDisclosure = false },
+            title = { Text("Allow notification access?") },
+            text = {
+                Text(
+                    "Android's notification access can expose notifications from apps on your device. SpendSense will process only alerts posted by your current default Messages app while transaction detection is enabled. It parses eligible text on-device, discards the original text, and keeps each candidate for your review. You can revoke access at any time in Android Settings."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNotificationDisclosure = false
+                    enableAfterAccessGrant = true
+                    notificationAccessLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }) { Text("Open Android Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationDisclosure = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showDisclosure) {

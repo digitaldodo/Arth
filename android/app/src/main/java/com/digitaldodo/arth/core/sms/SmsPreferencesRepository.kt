@@ -14,6 +14,14 @@ class SmsPreferencesRepository(context: Context) {
         get() = prefs.getBoolean(KEY_TRACKING_PAUSED, false)
         set(value) = prefs.edit().putBoolean(KEY_TRACKING_PAUSED, value).apply()
 
+    var isNotificationMonitoringEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_MONITORING_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_MONITORING_ENABLED, value).apply()
+
+    var isNotificationListenerConnected: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATION_LISTENER_CONNECTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATION_LISTENER_CONNECTED, value).apply()
+
     var isAutoAddEnabled: Boolean
         get() = prefs.getBoolean(KEY_AUTO_ADD_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_ADD_ENABLED, value).apply()
@@ -45,6 +53,8 @@ class SmsPreferencesRepository(context: Context) {
     companion object {
         private const val KEY_TRACKING_ENABLED = "sms_tracking_enabled"
         private const val KEY_TRACKING_PAUSED = "sms_tracking_paused"
+        private const val KEY_NOTIFICATION_MONITORING_ENABLED = "sms_notification_monitoring_enabled"
+        private const val KEY_NOTIFICATION_LISTENER_CONNECTED = "sms_notification_listener_connected"
         private const val KEY_AUTO_ADD_ENABLED = "sms_auto_add_enabled"
         private const val KEY_HISTORICAL_DAYS = "sms_historical_days"
         private const val KEY_LAST_SCAN_TS = "sms_last_scan_ts"

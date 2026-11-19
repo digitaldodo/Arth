@@ -149,11 +149,12 @@ jobs:
             signingCertificateSha256: process.env.CERTIFICATE_SHA256,
             highlights: [
               'Native SpendSense Android app with offline transaction capture and authenticated cloud sync.',
-              'Share a bank transaction message to SpendSense to create a private review candidate; message inbox access is not requested.',
-              'Every shared message remains unconfirmed until you review the transaction date and details.',
+              'Optional Android Notification access detects visible transaction alerts from your default Messages app; content is filtered and parsed on-device.',
+              'Share a selected bank message when previews are hidden or you want to import an older alert.',
+              'Automatic and shared-message candidates remain unconfirmed until you review them.',
               'Signed updates preserve app data when installed over SpendSense using the same application ID and signing key.',
             ],
-            disclaimer: 'This is the native Android application. The SpendSense website and installable PWA remain available separately. The APK does not request READ_SMS or RECEIVE_SMS. To import a transaction notification, share its text to SpendSense; automatic inbox scanning is unavailable. Android requires a user-confirmed install or update; install updates over the existing app to preserve local data.',
+            disclaimer: 'This is the native Android application. The SpendSense website and installable PWA remain available separately. The APK does not request READ_SMS or RECEIVE_SMS and does not scan inbox history. Optional detection requires user-granted Android Notification access and processes only visible notifications from the current default Messages app while enabled; Android may hide or redact message text. Sharing a message is the fallback. Android requires a user-confirmed install or update; install updates over the existing app to preserve local data.',
           };
           fs.writeFileSync('release.json', JSON.stringify(meta, null, 2) + '\n');
           NODE
@@ -179,7 +180,7 @@ jobs:
             **APK size:** ${{ env.APK_SIZE }}
             **SHA-256:** `${{ env.APK_SHA256 }}`
 
-            Share a bank transaction message to the app to import it for review. The APK does not request inbox SMS permissions. Install and updates require Android's confirmation. Keep the existing app installed when updating to preserve local data.
+            Optional Android Notification access detects visible transaction alerts from the default Messages app; share a message when its preview is hidden or to import an older alert. The APK does not request inbox SMS permissions. Install and updates require Android's confirmation. Keep the existing app installed when updating to preserve local data.
           files: |
             ${{ runner.temp }}/spendsense-release/SpendSense.apk
             ${{ runner.temp }}/spendsense-release/SpendSense.apk.sha256

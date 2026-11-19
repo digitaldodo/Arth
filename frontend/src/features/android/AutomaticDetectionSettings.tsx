@@ -19,7 +19,7 @@ export function AutomaticDetectionSettings() {
           <div>
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">Import a bank message</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-              On Android, share a selected transaction message from your Messages app to SpendSense. It is parsed on-device and kept for your review before anything is added to your ledger. Inbox access and automatic notification reading are not supported by this direct-download release.
+              In the Android app, you can optionally enable notification access to detect visible transaction alerts from your default Messages app. SpendSense filters other apps, parses alerts on-device, and keeps candidates for your review. Share a selected message when previews are hidden or you need an older alert. The web app cannot access device notifications.
             </p>
           </div>
         </div>

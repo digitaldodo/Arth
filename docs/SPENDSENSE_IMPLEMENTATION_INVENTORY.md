@@ -12,7 +12,7 @@ This inventory records the scope implemented for the user's contribution and the
 | Tax document intake and review | `frontend/src/features/tax/` | Local PDF/text extraction, optional local OCR, spreadsheet intake, document classification, field evidence, review/verification, and deletion. Uploaded originals are not stored by this UI. |
 | Verified financial facts handoff | `frontend/src/features/tax/tax-document-review.ts`, `packages/financial-modules/src/shared/contracts.ts` | Provenance-aware reviewed fields and shared contracts. Tax calculations and deduction eligibility remain unimplemented. |
 | Module integration architecture | `packages/financial-modules/`, `docs/SPENDSENSE_TEAM_MODULE_OWNERSHIP.md` | Typed inputs/outputs, provider interfaces, disabled flags, and unavailable results. No teammate formulas, models, or fabricated results. |
-| Android message import | `android/app/src/main/AndroidManifest.xml`, `android/app/src/local/AndroidManifest.xml`, `android/app/src/main/java/com/digitaldodo/arth/feature/sms/` | Website APK uses the local flavor: user-selected share import, on-device parsing, candidate review, and explicit date review. The merged manifest requests no inbox SMS permission; the pre-existing SMS-capable flavor remains preserved separately. |
+| Android message import | `android/app/src/main/AndroidManifest.xml`, `android/app/src/local/AndroidManifest.xml`, `android/app/src/main/java/com/digitaldodo/arth/core/sms/`, `android/app/src/main/java/com/digitaldodo/arth/feature/sms/` | Website APK uses the local flavor: opt-in visible-notification detection from the default Messages app, on-device parsing, candidate review, and user-selected sharing fallback. Its merged manifest requests no inbox SMS permission; the pre-existing SMS-capable flavor remains preserved separately. |
 
 ## Team-owned scaffolds
 
@@ -34,13 +34,13 @@ All flags are disabled by default. Scaffold services return `unavailable` until 
 
 ## Android SMS support boundary
 
-Direct APK distribution supports sharing a selected message into SpendSense and reviewing the parsed candidate. It does not grant `READ_SMS` or `RECEIVE_SMS`; it cannot scan an inbox or automatically observe incoming messages. The APK must be installed through Android's normal user-confirmed installer, which cannot apply PackageInstaller's restricted-permission allowlist on behalf of this website. A supported alternative would require a distribution/installer path that legitimately grants the restricted permission, or a product flow based on user-selected sharing/Account Aggregator consent. No rooted-device workaround is supported. A physical-device install check remains pending because no device was available during this implementation.
+Direct APK distribution uses Android's user-granted Notification access to detect visible alerts from the default Messages app. It does not grant `READ_SMS` or `RECEIVE_SMS`, read inbox history, or receive SMS broadcasts. App code filters out other notification packages; raw notification text is discarded after on-device parsing, and each candidate requires review. Detection cannot work when previews are hidden, the default Messages app is not posting visible text, Android redacts content, or notification access is revoked. Sharing a message remains the fallback. No rooted-device workaround is supported. Physical-device behavior remains pending because no device was available.
 
 ## Not claimed as complete
 
 - The Android binary has not been physically installed or tested in this workspace.
 - The categorization research target of greater than 85% macro F1 has not been measured.
 - No production FastText artifact is trained or shipped.
-- Automatic SMS inbox access is not available in the direct-download APK.
+- Automatic inbox/history access is not available in the direct-download APK; visible notification detection is opt-in and best effort.
 - Tax estimation and deduction rules are team-owned and are not implemented by the document intake feature.
 - Account Aggregator connectivity is a scaffold, not a live provider integration.

@@ -12,6 +12,7 @@ import com.digitaldodo.arth.core.model.SmsSuggestion
 import com.digitaldodo.arth.core.model.DuplicateStatus
 import com.digitaldodo.arth.core.sms.ScanResult
 import com.digitaldodo.arth.core.sms.SmsInboxScanner
+import com.digitaldodo.arth.core.sms.SmsNotificationListenerService
 import com.digitaldodo.arth.core.sms.FinancialMessageClassifier
 import com.digitaldodo.arth.core.sms.SmsPreferencesRepository
 import com.digitaldodo.arth.data.repository.CategoryRepository
@@ -30,6 +31,9 @@ data class SmsReviewUiState(
     val scanSummary: String? = null,
     val isTrackingEnabled: Boolean = false,
     val isTrackingPaused: Boolean = false,
+    val isNotificationMonitoringEnabled: Boolean = false,
+    val hasNotificationAccess: Boolean = false,
+    val isNotificationListenerConnected: Boolean = false,
     val isAutoAddEnabled: Boolean = false,
     val historicalDays: Int = 30,
     val pendingCount: Int = 0,
@@ -55,6 +59,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         SmsReviewUiState(
             isTrackingEnabled = prefs.isTrackingEnabled,
             isTrackingPaused = prefs.isTrackingPaused,
+            isNotificationMonitoringEnabled = prefs.isNotificationMonitoringEnabled,
+            hasNotificationAccess = SmsNotificationListenerService.hasNotificationAccess(application),
+            isNotificationListenerConnected = prefs.isNotificationListenerConnected,
             isAutoAddEnabled = prefs.isAutoAddEnabled,
             historicalDays = prefs.historicalScanDays,
             totalProcessedCount = prefs.totalMessagesProcessed,
@@ -85,6 +92,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                         dismissedCount = dismissed,
                         isTrackingEnabled = prefs.isTrackingEnabled,
                         isTrackingPaused = prefs.isTrackingPaused,
+                        isNotificationMonitoringEnabled = prefs.isNotificationMonitoringEnabled,
+                        hasNotificationAccess = SmsNotificationListenerService.hasNotificationAccess(getApplication()),
+                        isNotificationListenerConnected = prefs.isNotificationListenerConnected,
                         isAutoAddEnabled = prefs.isAutoAddEnabled,
                         historicalDays = prefs.historicalScanDays,
                         totalProcessedCount = prefs.totalMessagesProcessed,
@@ -104,6 +114,21 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     fun setTrackingPaused(paused: Boolean) {
         prefs.isTrackingPaused = paused
         _uiState.update { it.copy(isTrackingPaused = paused) }
+    }
+
+    fun setNotificationMonitoringEnabled(enabled: Boolean) {
+        prefs.isNotificationMonitoringEnabled = enabled
+        _uiState.update { it.copy(isNotificationMonitoringEnabled = enabled) }
+    }
+
+    fun refreshNotificationAccessState() {
+        val context = getApplication<Application>()
+        _uiState.update {
+            it.copy(
+                hasNotificationAccess = SmsNotificationListenerService.hasNotificationAccess(context),
+                isNotificationListenerConnected = prefs.isNotificationListenerConnected
+            )
+        }
     }
 
     fun setAutoAddEnabled(enabled: Boolean) {
