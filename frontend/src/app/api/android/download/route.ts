@@ -40,12 +40,14 @@ export async function GET() {
     }
     const metadata = await metadataResponse.json();
     const certificate = metadata?.signingCertificateSha256;
+    const certificateHex = typeof certificate === 'string' ? certificate.replace(/:/g, '') : '';
     if (
       metadata?.published !== true ||
       metadata?.applicationId !== 'com.digitaldodo.arth' ||
       !Number.isSafeInteger(metadata?.versionCode) ||
       metadata.versionCode <= 1005 ||
-      !/^([a-f0-9]{2}:){31}[a-f0-9]{2}$/i.test(certificate || '')
+      !/^[a-f0-9]{64}$/i.test(certificateHex) ||
+      !(/^([a-f0-9]{2}:){31}[a-f0-9]{2}$/i.test(certificate || '') || /^[a-f0-9]{64}$/i.test(certificate || ''))
     ) {
       return NextResponse.json({ error: 'The current Android release is not verified for distribution.' }, { status: 503 });
     }

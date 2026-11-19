@@ -92,7 +92,9 @@ export async function GET() {
     ]);
     const metadata = JSON.parse(metadataText) as Partial<AndroidReleaseInfo>;
     const sha256 = checksumText.trim().split(/\s+/)[0];
-    const signingCertificateSha256 = metadata.signingCertificateSha256 || '';
+    const certificateValue = metadata.signingCertificateSha256 || '';
+    const certificateHex = certificateValue.replace(/:/g, '').toUpperCase();
+    const signingCertificateSha256 = certificateHex.match(/.{2}/g)?.join(':') || '';
     if (
       metadata.published !== true ||
       metadata.applicationId !== 'com.digitaldodo.arth' ||
@@ -100,7 +102,8 @@ export async function GET() {
       !Number.isSafeInteger(metadata.versionCode) ||
       (metadata.versionCode || 0) <= 1005 ||
       !/^[a-f0-9]{64}$/i.test(sha256) ||
-      !/^([a-f0-9]{2}:){31}[a-f0-9]{2}$/i.test(signingCertificateSha256)
+      !/^[a-f0-9]{64}$/i.test(certificateHex) ||
+      !(/^([a-f0-9]{2}:){31}[a-f0-9]{2}$/i.test(certificateValue) || /^[a-f0-9]{64}$/i.test(certificateValue))
     ) {
       return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
     }
