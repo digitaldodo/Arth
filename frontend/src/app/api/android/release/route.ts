@@ -113,7 +113,7 @@ export async function GET() {
         ...unavailableRelease,
         ...metadata,
         published: true,
-        releaseDate: release.published_at?.slice(0, 10) || metadata.releaseDate || '',
+        releaseDate: metadata.releaseDate || release.published_at?.slice(0, 10) || '',
         apkSize: `${(apkAsset.size / (1024 * 1024)).toFixed(1)} MB`,
         downloadUrl: '/api/android/download',
         githubReleaseUrl: release.html_url,
