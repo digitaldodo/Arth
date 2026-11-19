@@ -4,11 +4,13 @@
 
 The website-distributed SpendSense APK supports **user-selected SMS import**. From the device's Messages app, the user chooses Share and selects SpendSense. The app parses the shared text on-device, keeps only a recognized transaction candidate (amount, direction, bank/merchant, reference, timestamp and confidence), discards the raw message text, and requires the user to review before creating a ledger transaction. Potential duplicates are rejected from the candidate path.
 
-The direct APK does **not** declare `READ_SMS` or `RECEIVE_SMS`, does not read the inbox, does not receive incoming-SMS broadcasts, and does not scan message history. Its Settings copy says so. The share target uses Android's normal `ACTION_SEND` / `text/plain` flow and asks for no SMS permission. This is functional message import, not automatic SMS detection.
+The website release uses the `local` flavor. Its merged APK manifest does **not** declare `READ_SMS` or `RECEIVE_SMS`, does not read the inbox, does not receive incoming-SMS broadcasts, and does not scan message history. Its Settings copy says so. The share target uses Android's normal `ACTION_SEND` / `text/plain` flow and asks for no SMS permission. This is functional message import, not automatic SMS detection.
+
+The base manifest and existing `play` flavor retain the pre-existing SMS receiver and opt-in UI so that work is not deleted. That flavor is not used for the website APK and has not been approved or published for a Play release; it remains subject to installer allowlisting and current distribution policy.
 
 ## Why inbox access is not enabled
 
-Android marks both `READ_SMS` and `RECEIVE_SMS` hard-restricted. An app cannot hold a hard-restricted permission until the installer on record allowlists it. `PackageInstaller.SessionParams.setWhitelistedRestrictedPermissions()` can set that installer allowlist, but allowlisting only permits holding a restricted permission; it does not itself grant a runtime permission. The current delivery route is a website download followed by Android's user-confirmed package installer. SpendSense does not control that installer session and cannot request that it set the allowlist, so manifest declarations or a runtime prompt would not make automatic SMS work on this route. We removed those permission declarations and the SMS broadcast receiver from the installed APK instead of presenting a misleading permission screen.
+Android marks both `READ_SMS` and `RECEIVE_SMS` hard-restricted. An app cannot hold a hard-restricted permission until the installer on record allowlists it. `PackageInstaller.SessionParams.setWhitelistedRestrictedPermissions()` can set that installer allowlist, but allowlisting only permits holding a restricted permission; it does not itself grant a runtime permission. The current delivery route is a website download followed by Android's user-confirmed package installer. SpendSense does not control that installer session and cannot request that it set the allowlist, so manifest declarations or a runtime prompt would not make automatic SMS work on this route. The `local` flavor's manifest merger removes those declarations and the SMS broadcast receiver from the installed APK instead of presenting a misleading permission screen.
 
 An ordinary APK hosting service (Vercel, Cloudflare R2, Supabase Storage or GitHub Releases) only delivers bytes over HTTPS; it does not become the Android installer or set permission allowlists. The existing update action opens the release/download URL and leaves the APK installation to Android's system UI. It does not silently install updates.
 
@@ -26,9 +28,9 @@ No rooting, ADB privilege trick, hidden API, installer spoofing, or user securit
 
 ## Verification status
 
-- Source manifests for the release flavor: inspected; `READ_SMS`, `RECEIVE_SMS`, and `SMS_RECEIVED` receiver are absent. The manifest accepts only a user share intent.
+- Merged manifests: `localDebug` removes `READ_SMS`, `RECEIVE_SMS`, and `SMS_RECEIVED`; `playDebug` retains the pre-existing SMS declarations. The local direct release also accepts an explicit user share intent.
 - App code: share input is bounded, parsed in memory, deduplicated, and stored as a review candidate with `rawSnippet = null`. Confirming a candidate uses the existing transaction repository and sync outbox; no database migration or alternate transaction table was added.
-- Release APK/device: the previously published APK was verified for package, signer, signature, and absence of SMS permissions. The current SpendSense-branded/share-import build requires a new signed release before this exact implementation is in a published binary.
+- Release APK: CI verified package, signer, signature, and absence of SMS permissions for the local flavor. Device behavior remains unverified physically.
 - Physical device: no ADB device was available in the workstation session. The user also confirmed there is no physical test device. Share-sheet interoperability, OS installer behavior, and permission state therefore remain unverified on a physical device; do not report that test as passed.
 
 ## Maintainer checks

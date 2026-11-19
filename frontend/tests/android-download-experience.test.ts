@@ -46,16 +46,22 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     assert.ok(content.includes('Native Android Application'), 'More hub must feature Native Android Application card');
   });
 
-  test('Android build keeps SpendSense identity and accepts user-selected message sharing only', () => {
+  test('direct APK stays share-only while preserving the existing SMS-capable flavor', () => {
     const buildGradlePath = path.join(process.cwd(), '..', 'android', 'app', 'build.gradle');
     const buildGradle = fs.readFileSync(buildGradlePath, 'utf-8');
 
     assert.ok(buildGradle.includes('appName", "SpendSense"'), 'launcher name must be SpendSense');
+    assert.ok(buildGradle.includes('buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"'), 'direct local flavor must keep inbox detection disabled');
+    assert.ok(buildGradle.includes('buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"'), 'existing SMS-capable flavor must remain available');
 
     const mainManifestPath = path.join(process.cwd(), '..', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
     const mainManifest = fs.readFileSync(mainManifestPath, 'utf-8');
-    assert.ok(!mainManifest.includes('android.permission.READ_SMS'), 'direct APK must not declare restricted inbox access');
-    assert.ok(!mainManifest.includes('android.permission.RECEIVE_SMS'), 'direct APK must not declare restricted inbox access');
+    const localManifestPath = path.join(process.cwd(), '..', 'android', 'app', 'src', 'local', 'AndroidManifest.xml');
+    const localManifest = fs.readFileSync(localManifestPath, 'utf-8');
+    assert.ok(mainManifest.includes('android.permission.READ_SMS'), 'existing SMS-capable variant must remain intact');
+    assert.ok(mainManifest.includes('android.permission.RECEIVE_SMS'), 'existing SMS-capable variant must remain intact');
+    assert.ok(localManifest.includes('android.permission.READ_SMS') && localManifest.includes('tools:node="remove"'), 'direct APK must remove restricted inbox access in its merged manifest');
+    assert.ok(localManifest.includes('android.permission.RECEIVE_SMS') && localManifest.includes('tools:node="remove"'), 'direct APK must remove incoming SMS access in its merged manifest');
     assert.ok(mainManifest.includes('android.intent.action.SEND'), 'APK must accept explicitly shared messages');
     assert.ok(mainManifest.includes('text/plain'), 'message sharing must use plain-text content');
   });

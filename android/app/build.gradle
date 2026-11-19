@@ -64,7 +64,7 @@ android {
         }
         play {
             dimension "distribution"
-            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
             resValue "string", "appName", "SpendSense"
         }
     }

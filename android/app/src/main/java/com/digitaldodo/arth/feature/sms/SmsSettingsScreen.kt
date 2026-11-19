@@ -1,5 +1,10 @@
 package com.digitaldodo.arth.feature.sms
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,14 +26,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.digitaldodo.arth.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,11 +51,27 @@ fun SmsSettingsScreen(
     onBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val automaticDetectionSupported = BuildConfig.SMS_DETECTION_SUPPORTED
+    var showDisclosure by remember { mutableStateOf(false) }
+    var hasSmsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasSmsPermission = permissions[Manifest.permission.READ_SMS] == true &&
+            permissions[Manifest.permission.RECEIVE_SMS] == true
+        if (hasSmsPermission) viewModel.setTrackingEnabled(true)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Import a bank message") },
+                title = { Text(if (automaticDetectionSupported) "SMS transaction detection" else "Import a bank message") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -55,6 +84,50 @@ fun SmsSettingsScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (automaticDetectionSupported) {
+                item {
+                    Card {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("On-device inbox detection", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "When this distribution is installed through a channel that grants the restricted SMS permissions, supported transaction alerts can be classified on this device. Candidates stay private and require your review.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (!hasSmsPermission) {
+                                Button(onClick = { showDisclosure = true }) { Text("Review and enable SMS access") }
+                            } else {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Automatic detection")
+                                        Text("Pause or resume incoming message processing", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(
+                                        checked = state.isTrackingEnabled && !state.isTrackingPaused,
+                                        onCheckedChange = { enabled ->
+                                            viewModel.setTrackingEnabled(true)
+                                            viewModel.setTrackingPaused(!enabled)
+                                        }
+                                    )
+                                }
+                                Button(
+                                    onClick = { viewModel.scanHistoricalInbox(onFinished = {}) },
+                                    enabled = !state.isScanning && state.isTrackingEnabled
+                                ) {
+                                    Text(if (state.isScanning) "Scanning messages…" else "Scan recent messages")
+                                }
+                                if (!state.scanSummary.isNullOrBlank()) {
+                                    Text(state.scanSummary!!, style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text(
+                                    "${state.pendingCount} pending · ${state.confirmedCount} confirmed · ${state.dismissedCount} dismissed",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(18.dp)) {
@@ -95,5 +168,22 @@ fun SmsSettingsScreen(
                 }
             }
         }
+    }
+
+    if (showDisclosure) {
+        SmsDisclosureDialog(
+            onDismiss = { showDisclosure = false },
+            onAccept = {
+                showDisclosure = false
+                val requestedPermissions = mutableListOf(
+                    Manifest.permission.READ_SMS,
+                    Manifest.permission.RECEIVE_SMS
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    requestedPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                permissionLauncher.launch(requestedPermissions.toTypedArray())
+            }
+        )
     }
 }

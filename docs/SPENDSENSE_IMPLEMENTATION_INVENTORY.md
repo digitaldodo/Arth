@@ -12,7 +12,7 @@ This inventory records the scope implemented for the user's contribution and the
 | Tax document intake and review | `frontend/src/features/tax/` | Local PDF/text extraction, optional local OCR, spreadsheet intake, document classification, field evidence, review/verification, and deletion. Uploaded originals are not stored by this UI. |
 | Verified financial facts handoff | `frontend/src/features/tax/tax-document-review.ts`, `packages/financial-modules/src/shared/contracts.ts` | Provenance-aware reviewed fields and shared contracts. Tax calculations and deduction eligibility remain unimplemented. |
 | Module integration architecture | `packages/financial-modules/`, `docs/SPENDSENSE_TEAM_MODULE_OWNERSHIP.md` | Typed inputs/outputs, provider interfaces, disabled flags, and unavailable results. No teammate formulas, models, or fabricated results. |
-| Android message import | `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/java/com/digitaldodo/arth/feature/sms/` | User-selected share import, on-device parsing, candidate review, and explicit date review. The manifest requests no inbox SMS permission. |
+| Android message import | `android/app/src/main/AndroidManifest.xml`, `android/app/src/local/AndroidManifest.xml`, `android/app/src/main/java/com/digitaldodo/arth/feature/sms/` | Website APK uses the local flavor: user-selected share import, on-device parsing, candidate review, and explicit date review. The merged manifest requests no inbox SMS permission; the pre-existing SMS-capable flavor remains preserved separately. |
 
 ## Team-owned scaffolds
 
