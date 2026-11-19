@@ -1,76 +1,65 @@
 import { NextResponse } from 'next/server';
-import fs from 'node:fs';
-import path from 'node:path';
 
-/**
- * Direct APK download route.
- * Dynamically resolves the latest published APK asset from GitHub Releases via
- * authenticated asset API (redirecting to the time-limited signed Amazon S3 URL),
- * or falls back cleanly to the verified public local APK asset.
- * Never redirects unauthenticated visitors to private GitHub repository release pages.
- */
-export async function GET(request?: Request) {
+/** Resolve a private GitHub Release asset to its short-lived HTTPS download URL. */
+export async function GET() {
   const repo = process.env.GITHUB_REPOSITORY || 'digitaldodo/Arth';
   const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    return NextResponse.json({ error: 'The Android download service is temporarily unavailable.' }, { status: 503 });
+  }
 
-  // 1. If GitHub token is configured in server environment, resolve latest release asset S3 URL
-  if (token) {
-    try {
-      const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/android-latest`, {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'Arth-Web-Download/1.0',
-          Authorization: `Bearer ${token}`,
-        },
-        next: { revalidate: 300 },
-      });
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'User-Agent': 'Arth-Android-Release/1.0',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
 
-      if (res.ok) {
-        const data = await res.json();
-        const apkAsset = data.assets?.find(
-          (a: { name: string }) => a.name.endsWith('.apk') || a.name === 'Arth.apk'
-        );
-
-        if (apkAsset?.id) {
-          // Request asset download stream/redirect URL using octet-stream
-          const assetRes = await fetch(
-            `https://api.github.com/repos/${repo}/releases/assets/${apkAsset.id}`,
-            {
-              headers: {
-                Accept: 'application/octet-stream',
-                'User-Agent': 'Arth-Web-Download/1.0',
-                Authorization: `Bearer ${token}`,
-              },
-              redirect: 'manual',
-            }
-          );
-
-          const s3Location = assetRes.headers.get('location');
-          if (s3Location) {
-            return NextResponse.redirect(s3Location, 302);
-          }
-        }
-      }
-    } catch {
-      // Proceed to local fallback
+  try {
+    const releaseResponse = await fetch(
+      `https://api.github.com/repos/${repo}/releases/tags/android-latest`,
+      { headers, cache: 'no-store' }
+    );
+    if (!releaseResponse.ok) {
+      return NextResponse.json({ error: 'The current Android release is not available.' }, { status: 503 });
     }
+
+    const release = await releaseResponse.json();
+    const apkAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'Arth.apk');
+    if (!apkAsset?.id) {
+      return NextResponse.json({ error: 'The current Android package is not available.' }, { status: 503 });
+    }
+
+    const assetResponse = await fetch(
+      `https://api.github.com/repos/${repo}/releases/assets/${apkAsset.id}`,
+      {
+        headers: { ...headers, Accept: 'application/octet-stream' },
+        redirect: 'manual',
+        cache: 'no-store',
+      }
+    );
+    if (assetResponse.status === 200 && assetResponse.body) {
+      return new Response(assetResponse.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.android.package-archive',
+          'Content-Disposition': 'attachment; filename="Arth.apk"',
+          'Content-Length': String(apkAsset.size),
+          'Cache-Control': 'private, no-store, max-age=0',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
+    const signedDownloadUrl = assetResponse.headers.get('location');
+    if (assetResponse.status !== 302 || !signedDownloadUrl || !signedDownloadUrl.startsWith('https://')) {
+      return NextResponse.json({ error: 'The Android package could not be prepared for download.' }, { status: 503 });
+    }
+
+    return NextResponse.redirect(signedDownloadUrl, {
+      status: 302,
+      headers: { 'Cache-Control': 'private, no-store, max-age=0' },
+    });
+  } catch {
+    return NextResponse.json({ error: 'The Android download service is temporarily unavailable.' }, { status: 503 });
   }
-
-  // 2. Direct public static asset fallback from web server
-  const candidates = [
-    path.join(process.cwd(), 'public', 'android', 'Arth.apk'),
-    path.join(process.cwd(), 'frontend', 'public', 'android', 'Arth.apk'),
-  ];
-  const localApkPath = candidates.find((p) => fs.existsSync(p));
-
-  if (localApkPath) {
-    const origin = request?.url ? new URL(request.url).origin : 'http://localhost:3000';
-    const directUrl = new URL('/android/Arth.apk', origin);
-    return NextResponse.redirect(directUrl, 302);
-  }
-
-  return NextResponse.json(
-    { error: 'No published APK available at this time.' },
-    { status: 404 }
-  );
 }

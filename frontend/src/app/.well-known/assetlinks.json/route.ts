@@ -10,12 +10,10 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   const envFingerprints = process.env.ANDROID_RELEASE_CERT_SHA256;
-  const fingerprints: string[] = envFingerprints
-    ? envFingerprints
-        .split(',')
-        .map((f) => f.trim().toUpperCase())
-        .filter(Boolean)
-    : [];
+  const fingerprints: string[] = (envFingerprints || '23:85:B2:7F:E9:40:BF:5C:AE:2D:DF:C1:6D:61:59:94:BE:F8:53:8E:D8:FF:CB:06:F5:84:04:D9:0E:38:64:47')
+    .split(',')
+    .map((f) => f.trim().toUpperCase())
+    .filter(Boolean);
 
   const assetLinks = [
     {

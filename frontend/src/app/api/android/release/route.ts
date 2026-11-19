@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import fs from 'node:fs';
-import path from 'node:path';
 
 export interface AndroidReleaseInfo {
+  published: boolean;
+  applicationId: string;
   version: string;
   versionCode: number;
   buildNumber: number;
@@ -14,116 +14,102 @@ export interface AndroidReleaseInfo {
   downloadUrl: string;
   githubReleaseUrl: string;
   sha256: string;
+  signingCertificateSha256: string;
   highlights: string[];
   disclaimer: string;
 }
 
-function getFallbackMetadata(): AndroidReleaseInfo {
-  try {
-    const candidates = [
-      path.join(process.cwd(), 'public', 'android', 'release.json'),
-      path.join(process.cwd(), 'frontend', 'public', 'android', 'release.json'),
-    ];
-    const filePath = candidates.find((p) => fs.existsSync(p));
-    if (filePath) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(content) as AndroidReleaseInfo;
-    }
-  } catch {
-    // Fall back to default constant
-  }
+const unavailableRelease: AndroidReleaseInfo = {
+  published: false,
+  applicationId: 'com.digitaldodo.arth',
+  version: '',
+  versionCode: 0,
+  buildNumber: 0,
+  releaseDate: '',
+  minAndroidVersion: 'Android 8.0 (API 26)',
+  targetAndroidVersion: 'Android 15 (API 35)',
+  apkFileName: 'Arth.apk',
+  apkSize: '',
+  downloadUrl: '/api/android/download',
+  githubReleaseUrl: '',
+  sha256: '',
+  signingCertificateSha256: '',
+  highlights: [],
+  disclaimer: 'The current Android release details could not be loaded. Please try again shortly.',
+};
 
-  return {
-    version: '1.2.0',
-    versionCode: 1004,
-    buildNumber: 4,
-    releaseDate: '2026-11-03',
-    minAndroidVersion: 'Android 8.0 (API 26)',
-    targetAndroidVersion: 'Android 15 (API 35)',
-    apkFileName: 'Arth.apk',
-    apkSize: '13.5 MB',
-    downloadUrl: '/android/Arth.apk',
-    githubReleaseUrl: 'https://github.com/digitaldodo/Arth/releases/tag/android-latest',
-    sha256: 'b658dcb61a35e60bc88bfac6866d16f8de085522ea06977bb8f1e501dec4e284',
-    highlights: [
-      'Native Kotlin and Jetpack Compose interface adhering to the Arth Ledger Minimal design system',
-      'Offline-first transaction management with local Room database and Supabase synchronization',
-      'Biometric Fingerprint & Device Credential app lock with AndroidX BiometricPrompt',
-      'Direct distribution build with zero sensitive SMS permissions for user privacy and security',
-    ],
-    disclaimer:
-      'This direct APK release does not request or include SMS permissions. Financial transaction auto-detection from SMS is exclusive to the upcoming Google Play Store release.',
-  };
-}
+const noStoreHeaders = { 'Cache-Control': 'no-store, max-age=0' };
 
 export async function GET() {
-  const fallback = getFallbackMetadata();
-
-  try {
-    // Attempt fetching the dynamic release asset metadata from GitHub
-    const repo = process.env.GITHUB_REPOSITORY || 'digitaldodo/Arth';
-    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/android-latest`, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        'User-Agent': 'Arth-Web-Download/1.0',
-        ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
-      },
-      next: { revalidate: 300 }, // 5-minute cache
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const apkAsset = data.assets?.find(
-        (a: { name: string }) => a.name.endsWith('.apk') || a.name === 'Arth.apk'
-      );
-      const shaAsset = data.assets?.find(
-        (a: { name: string }) => a.name.endsWith('.sha256') || a.name === 'Arth.apk.sha256'
-      );
-
-      let sha256 = fallback.sha256;
-      if (shaAsset?.browser_download_url) {
-        try {
-          const shaRes = await fetch(shaAsset.browser_download_url, { next: { revalidate: 300 } });
-          if (shaRes.ok) {
-            const shaText = await shaRes.text();
-            const hash = shaText.trim().split(/\s+/)[0];
-            if (hash && hash.length === 64) {
-              sha256 = hash;
-            }
-          }
-        } catch {
-          // Keep fallback sha256
-        }
-      }
-
-      const releaseDate = data.published_at ? data.published_at.slice(0, 10) : fallback.releaseDate;
-      const sizeBytes = apkAsset?.size;
-      const apkSize = sizeBytes ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB` : fallback.apkSize;
-      const downloadUrl = '/api/android/download';
-
-      return NextResponse.json(
-        {
-          ...fallback,
-          releaseDate,
-          apkSize,
-          downloadUrl,
-          githubReleaseUrl: data.html_url || fallback.githubReleaseUrl,
-          sha256,
-        },
-        {
-          headers: {
-            'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-          },
-        }
-      );
-    }
-  } catch {
-    // Non-blocking fallback
+  const repo = process.env.GITHUB_REPOSITORY || 'digitaldodo/Arth';
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
   }
 
-  return NextResponse.json(fallback, {
-    headers: {
-      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    },
-  });
+  try {
+    const headers = {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'Arth-Android-Release/1.0',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    const releaseResponse = await fetch(
+      `https://api.github.com/repos/${repo}/releases/tags/android-latest`,
+      { headers, cache: 'no-store' }
+    );
+    if (!releaseResponse.ok) {
+      return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
+    }
+
+    const release = await releaseResponse.json();
+    const assets = Array.isArray(release.assets) ? release.assets : [];
+    const apkAsset = assets.find((asset: { name?: string }) => asset.name === 'Arth.apk');
+    const metadataAsset = assets.find((asset: { name?: string }) => asset.name === 'release.json');
+    const checksumAsset = assets.find((asset: { name?: string }) => asset.name === 'Arth.apk.sha256');
+    if (!apkAsset?.id || !metadataAsset?.id || !checksumAsset?.id) {
+      return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
+    }
+
+    const assetHeaders = { ...headers, Accept: 'application/octet-stream' };
+    const [metadataResponse, checksumResponse] = await Promise.all([
+      fetch(`https://api.github.com/repos/${repo}/releases/assets/${metadataAsset.id}`, {
+        headers: assetHeaders,
+        cache: 'no-store',
+      }),
+      fetch(`https://api.github.com/repos/${repo}/releases/assets/${checksumAsset.id}`, {
+        headers: assetHeaders,
+        cache: 'no-store',
+      }),
+    ]);
+    if (!metadataResponse.ok || !checksumResponse.ok) {
+      return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
+    }
+
+    const [metadataText, checksumText] = await Promise.all([
+      metadataResponse.text(),
+      checksumResponse.text(),
+    ]);
+    const metadata = JSON.parse(metadataText) as Partial<AndroidReleaseInfo>;
+    const sha256 = checksumText.trim().split(/\s+/)[0];
+    if (!metadata.version || !Number.isSafeInteger(metadata.versionCode) || !/^[a-f0-9]{64}$/i.test(sha256)) {
+      return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
+    }
+
+    return NextResponse.json(
+      {
+        ...unavailableRelease,
+        ...metadata,
+        published: true,
+        releaseDate: release.published_at?.slice(0, 10) || metadata.releaseDate || '',
+        apkSize: `${(apkAsset.size / (1024 * 1024)).toFixed(1)} MB`,
+        downloadUrl: '/api/android/download',
+        githubReleaseUrl: release.html_url,
+        sha256: sha256.toLowerCase(),
+      } satisfies AndroidReleaseInfo,
+      { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } }
+    );
+  } catch {
+    return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
+  }
 }

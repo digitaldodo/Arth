@@ -2,6 +2,7 @@ package com.digitaldodo.arth
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -34,6 +35,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.digitaldodo.arth.core.designsystem.ArthTheme
 import com.digitaldodo.arth.core.network.EnvironmentValidator
+import com.digitaldodo.arth.core.network.AndroidReleaseUpdate
+import com.digitaldodo.arth.core.network.AndroidReleaseUpdateChecker
 import com.digitaldodo.arth.core.security.AppLockManager
 import com.digitaldodo.arth.core.security.BiometricAuthManager
 import com.digitaldodo.arth.core.security.SecureStorage
@@ -95,6 +98,10 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             ArthTheme {
+                var availableUpdate by remember { mutableStateOf<AndroidReleaseUpdate?>(null) }
+                LaunchedEffect(Unit) {
+                    availableUpdate = AndroidReleaseUpdateChecker.checkForUpdate()
+                }
                 val isLocked by AppLockManager.isLocked.collectAsState()
 
                 if (isLocked && secureStorage.isLoggedIn()) {
@@ -118,6 +125,40 @@ class MainActivity : FragmentActivity() {
                         balancesViewModel = balancesViewModel,
                         smsViewModel = smsViewModel,
                         isLoggedInInitial = secureStorage.isLoggedIn()
+                    )
+                }
+
+                availableUpdate?.let { update ->
+                    AlertDialog(
+                        onDismissRequest = { availableUpdate = null },
+                        title = { Text("Arth ${update.versionName} is available") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Release notes")
+                                update.releaseNotes.forEach { note ->
+                                    Text("• $note", style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text(
+                                    "Android will ask you to confirm the update. Keep Arth installed to preserve local data.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                availableUpdate = null
+                                runCatching {
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl)))
+                                }.onFailure {
+                                    Toast.makeText(this@MainActivity, "Unable to open the Arth download page", Toast.LENGTH_LONG).show()
+                                }
+                            }) {
+                                Text("Download update")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { availableUpdate = null }) { Text("Later") }
+                        }
                     )
                 }
             }

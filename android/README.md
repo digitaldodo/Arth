@@ -62,7 +62,7 @@ Notification content is untrusted and app formats vary. Arth ignores unselected 
 
 The manifest requests `POST_NOTIFICATIONS` for Arth’s own review alerts on Android 13 and later, separately from Android’s special notification-listener access. The implementation intentionally does not request `READ_SMS`, `RECEIVE_SMS`, or inbox access. An SMS is detectable only when the SMS app displays its content in a visible notification and the user selected that app. Disabled notification delivery, Android redaction, notification/alert permission revocation, device/OEM background restrictions, work profiles, or provider-specific hidden content can prevent detection. The service asks Android to rebind after disconnect; Android controls service lifecycle and can still delay or suppress callbacks.
 
-Google Play restricts SMS/Call Log permissions to limited eligible roles/use cases. Notification access is a separate Android special access and still requires prominent disclosure and user consent. Review the current [Android NotificationListenerService reference](https://developer.android.com/reference/android/service/notification/NotificationListenerService) and [Google Play SMS/Call Log permission policy](https://support.google.com/googleplay/android-developer/answer/10208820) before distribution. The app manifest does not declare SMS permissions.
+The website-distributed production APK removes `READ_SMS`, `RECEIVE_SMS`, `SEND_SMS`, and the SMS receiver from the merged manifest. Its SMS feature flag is disabled. Notification access is a separate Android special access and remains user-selected. See the [direct distribution runbook](../docs/ANDROID_DIRECT_DISTRIBUTION.md) for install, update, signing, and SMS permission limits.
 
 ## Tests
 

@@ -92,18 +92,17 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 Native Android Application
               </div>
               <div className="text-xs font-mono text-[var(--text-secondary)]">
-                v{release.version} (Build {release.buildNumber || release.versionCode})
+                {release.published ? `v${release.version} · Build ${release.buildNumber}` : 'Release information unavailable'}
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-[-0.025em] text-[var(--text-primary)] leading-[1.2]">
-              Take Arth with you.
+              Download Arth for Android.
             </h1>
             <p className="text-[15px] sm:text-[16px] text-[var(--text-secondary)] leading-relaxed max-w-xl">
-              Manage your finances with the native Arth Android application. Built with Kotlin and
-              Jetpack Compose for speed, offline-first reliability, and biometric security.
+              Install the native Arth application on an Android phone. This APK is distributed separately from the Arth web app and installable PWA.
             </p>
 
             {/* Dedicated Android Exclusivity Notice */}
@@ -118,9 +117,10 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
           {/* Primary Action Button Bar */}
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <a
-              href="/api/android/download"
+              href={release.published ? '/api/android/download' : undefined}
               download={release.apkFileName || 'Arth.apk'}
-              className="inline-flex items-center justify-center gap-2.5 h-11 px-6 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[14px] font-semibold hover:bg-[var(--action-primary-hover)] transition-all shadow-xs active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer"
+              aria-disabled={!release.published}
+              className={`inline-flex items-center justify-center gap-2.5 h-11 px-6 rounded-[4px] text-[14px] font-semibold transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${release.published ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] cursor-pointer' : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] cursor-not-allowed'}`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -138,18 +138,11 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Download for Android</span>
-              <span className="text-[11px] font-mono font-normal opacity-75 border-l border-current/25 pl-2 ml-0.5">
-                {release.apkSize}
-              </span>
+              <span>{release.published ? 'Download Arth for Android' : 'APK temporarily unavailable'}</span>
+              {release.published && <span className="text-[11px] font-mono font-normal opacity-75 border-l border-current/25 pl-2 ml-0.5">{release.apkSize}</span>}
             </a>
 
-            <div className="inline-flex items-center justify-center gap-2 h-11 px-4 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-muted)] text-[13px] font-medium cursor-not-allowed select-none">
-              <span>Google Play</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-canvas)] border border-[var(--border-hairline)] text-[var(--text-muted)]">
-                Coming Soon
-              </span>
-            </div>
+            <Link href="/" className="inline-flex items-center justify-center h-11 px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Use Arth Web or PWA</Link>
           </div>
 
           {/* Metadata Specs Grid */}
@@ -159,7 +152,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 Package
               </div>
               <div className="text-xs font-semibold text-[var(--text-primary)] mt-1 truncate">
-                {release.apkFileName}
+                {release.published ? release.apkFileName : 'Not published'}
               </div>
             </div>
             <div className="p-3 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[4px]">
@@ -175,7 +168,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 Release Date
               </div>
               <div className="text-xs font-semibold text-[var(--text-primary)] mt-1 truncate">
-                {release.releaseDate}
+                {release.published ? release.releaseDate : '—'}
               </div>
             </div>
             <div className="p-3 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[4px]">
@@ -183,8 +176,8 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 Signature
               </div>
               <div className="text-xs font-semibold text-[var(--text-primary)] mt-1 flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Verified Release
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${release.published ? 'bg-emerald-500' : 'bg-[var(--text-muted)]'}`} />
+                {release.published ? 'Signed Release' : 'Unavailable'}
               </div>
             </div>
           </div>
@@ -195,11 +188,11 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
           <div className="flex items-center gap-2">
             <span className="text-sm">🛡️</span>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
-              Privacy &amp; Direct Installation Guarantee
+              Privacy and Permission Scope
             </h3>
           </div>
           <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-            {release.disclaimer}
+            {release.disclaimer} Install updates over the existing Arth app; do not uninstall it, because Android preserves local data during a valid signed update.
           </p>
         </div>
 
@@ -212,6 +205,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             <button
               type="button"
               onClick={handleCopyChecksum}
+              disabled={!release.published}
               className="inline-flex items-center gap-1.5 text-[11px] font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] transition-colors cursor-pointer"
             >
               {copied ? (
@@ -242,7 +236,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             </button>
           </div>
           <div className="p-2.5 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-[2px] font-mono text-[11px] sm:text-[12px] text-[var(--text-primary)] break-all select-all">
-            {release.sha256}
+            {release.published ? release.sha256 : 'Checksum is available when a release is published.'}
           </div>
         </div>
 
@@ -303,10 +297,9 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
 
               <div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[4px] space-y-1.5">
                 <div className="text-[10px] font-mono text-[var(--text-muted)]">STEP 04</div>
-                <h4 className="text-xs font-semibold text-[var(--text-primary)]">Launch &amp; Sign In</h4>
+                  <h4 className="text-xs font-semibold text-[var(--text-primary)]">Install or Update</h4>
                 <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-                  Tap <strong>Install</strong> to complete setup. Open Arth and authenticate with your
-                  existing account.
+                    Confirm the install or update in Android. Keep the existing app installed so Android can preserve its local data. Your account and cloud records remain available after signing in.
                 </p>
               </div>
             </div>
@@ -338,7 +331,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
         {/* Feature Highlights */}
         <div className="space-y-3 pt-4 border-t border-[var(--border-hairline)]">
           <h3 className="text-xs font-mono uppercase tracking-wider text-[var(--text-muted)]">
-            Release Highlights
+            What&apos;s New
           </h3>
           <div className="grid gap-2.5 sm:grid-cols-2">
             {release.highlights.map((highlight, idx) => (
@@ -356,6 +349,12 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             ))}
           </div>
         </div>
+
+        {release.published && <section className="space-y-2 border-t border-[var(--border-hairline)] pt-4">
+          <h3 className="text-xs font-mono uppercase tracking-wider text-[var(--text-muted)]">Signing certificate</h3>
+          <p className="break-all rounded-[2px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-2.5 font-mono text-[11px] text-[var(--text-secondary)]">SHA-256 · {release.signingCertificateSha256}</p>
+          <p className="text-xs leading-relaxed text-[var(--text-secondary)]">Android checks the signing identity when an update is installed. Compare the APK checksum with this HTTPS release page to detect file changes.</p>
+        </section>}
       </main>
 
       {/* Slim Minimal Footer */}
@@ -370,6 +369,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
           >
             GitHub Releases &rarr;
           </a>
+          <Link href="/privacy" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline transition-colors">Privacy</Link>
         </div>
         <span>IST (Asia/Kolkata)</span>
       </footer>

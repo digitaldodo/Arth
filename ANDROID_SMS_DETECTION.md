@@ -1,4 +1,8 @@
-# Arth Native Android App — SMS Transaction Detection Architecture
+# Arth Android Message Detection Architecture
+
+> **Direct website releases do not support SMS inbox detection.** The production `localRelease` APK removes `READ_SMS`, `RECEIVE_SMS`, and the SMS receiver from its merged manifest, and its feature flag is disabled. This document describes retained native code and possible future distribution work; it does not claim that SMS detection works in the current APK or that another app store has approved it.
+
+> Android classifies `READ_SMS` and `RECEIVE_SMS` as hard-restricted and permits them only when the installer of record allowlists them. A website cannot do this itself. Device package installers can differ in their sideload behavior, and this project has not verified SMS permission grants on physical devices. The direct APK removes the permissions and does not support SMS inbox detection. For current direct releases, use user-selected notification access where supported, consent-based Account Aggregator ingestion, or statement import. See [the direct distribution runbook](docs/ANDROID_DIRECT_DISTRIBUTION.md) for the compatibility report.
 
 Arth provides on-device financial transaction detection from incoming Indian banking, UPI, card, and wallet SMS alerts.
 
