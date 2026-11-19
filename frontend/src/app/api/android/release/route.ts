@@ -48,6 +48,11 @@ const unavailableRelease: AndroidReleaseInfo = {
 
 const noStoreHeaders = { 'Cache-Control': 'no-store, max-age=0' };
 
+function formatAssetSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return Math.ceil(bytes / 1024) + ' KB';
+  return ((bytes / (1024 * 1024)).toFixed(1)) + ' MB';
+}
+
 export async function GET() {
   const repo = process.env.GITHUB_REPOSITORY || 'digitaldodo/Arth';
   const token = process.env.GITHUB_TOKEN;
@@ -130,13 +135,13 @@ export async function GET() {
         downloadUrl: '/api/android/download',
         ...(smsApkAsset && /^[a-f0-9]{64}$/i.test(String(metadata.smsApkSha256 || '')) ? {
           smsApkFileName: 'SpendSense-SMS.apk',
-          smsApkSize: ((smsApkAsset.size / (1024 * 1024)).toFixed(1)) + ' MB',
+          smsApkSize: formatAssetSize(smsApkAsset.size),
           smsApkSha256: String(metadata.smsApkSha256).toLowerCase(),
           smsDownloadUrl: '/api/android/sms-download',
         } : {}),
         ...(installerAsset && /^[a-f0-9]{64}$/i.test(String(metadata.installerSha256 || '')) ? {
           installerFileName: 'SpendSense-Installer.apk',
-          installerSize: ((installerAsset.size / (1024 * 1024)).toFixed(1)) + ' MB',
+          installerSize: formatAssetSize(installerAsset.size),
           installerSha256: String(metadata.installerSha256).toLowerCase(),
           installerDownloadUrl: '/api/android/installer-download',
         } : {}),
