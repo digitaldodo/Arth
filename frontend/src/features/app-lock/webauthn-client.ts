@@ -25,8 +25,8 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     });
   } catch {
     throw new Error(typeof navigator !== 'undefined' && !navigator.onLine
-      ? 'You are offline. Connect to the internet to verify your device. Arth remains locked.'
-      : 'Could not contact the verification service. Arth remains locked.');
+      ? 'You are offline. Connect to the internet to verify your device. SpendSense remains locked.'
+      : 'Could not contact the verification service. SpendSense remains locked.');
   }
   const result = await response.json().catch(() => ({})) as T & { error?: string };
   if (!response.ok) throw new Error(result.error || 'Device verification could not be completed.');
@@ -38,17 +38,17 @@ function friendlyAuthenticatorError(error: unknown, purpose: 'setup' | 'unlock')
   if (name === 'NotAllowedError') {
     return new Error(purpose === 'setup'
       ? 'Device setup was cancelled or timed out. Try again when ready.'
-      : 'Device verification was cancelled or timed out. Arth remains locked.');
+      : 'Device verification was cancelled or timed out. SpendSense remains locked.');
   }
   if (name === 'NotSupportedError' || name === 'SecurityError') {
     return new Error('This browser cannot use the configured device authenticator.');
   }
   if (name === 'InvalidStateError') {
-    return new Error('This authenticator may already be set up for Arth.');
+    return new Error('This authenticator may already be set up for SpendSense.');
   }
   return new Error(purpose === 'setup'
     ? 'Device setup could not be completed. Try again.'
-    : 'Device verification failed. Arth remains locked.');
+    : 'Device verification failed. SpendSense remains locked.');
 }
 
 export async function canUsePlatformAuthenticator(): Promise<boolean> {

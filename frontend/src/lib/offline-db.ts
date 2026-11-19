@@ -14,7 +14,28 @@ import type {
 import { formatPaiseToINR } from './format';
 
 const DB_NAME = 'arth_offline_db';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
+
+export interface StatementImportBatch {
+  id: string;
+  user_id: string;
+  source: string;
+  created_at: string;
+  imported_ids: string[];
+  detected_count: number;
+  status: 'processing' | 'completed' | 'partial' | 'undone';
+  account_id?: string | null;
+  statement_start?: string | null;
+  statement_end?: string | null;
+  opening_balance_paise?: string | null;
+  closing_balance_paise?: string | null;
+  parser_id?: string;
+  source_format?: 'pdf' | 'csv' | 'xlsx' | 'xls';
+  source_sha256?: string | null;
+  duplicate_count?: number;
+  discrepancy_count?: number;
+  skipped_rows?: Array<{ transaction_date: string; amount_paise: string; state: string; reason: 'possible_duplicate' | 'ambiguous' | 'balance_mismatch' | 'deselected' | 'import_error' }>;
+}
 
 export interface CachedPwaUser {
   id: string;
@@ -147,11 +168,38 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('pwa_users')) db.createObjectStore('pwa_users', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pwa_context')) db.createObjectStore('pwa_context', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('statement_import_batches')) {
+        const batches = db.createObjectStore('statement_import_batches', { keyPath: 'id' });
+        batches.createIndex('user_id', 'user_id', { unique: false });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function saveStatementImportBatch(batch: StatementImportBatch): Promise<void> {
+  if (!batch.user_id) throw new Error('A signed-in user is required to save import history.');
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('statement_import_batches', 'readwrite');
+    tx.objectStore('statement_import_batches').put(batch);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('Could not save statement import history.'));
+  });
+}
+
+export async function getStatementImportBatches(userId: string): Promise<StatementImportBatch[]> {
+  if (!userId) return [];
+  try {
+    const db = await openDB();
+    return await new Promise((resolve) => {
+      const request = db.transaction('statement_import_batches', 'readonly').objectStore('statement_import_batches').index('user_id').getAll(userId);
+      request.onsuccess = () => resolve((request.result as StatementImportBatch[]).filter((item) => item.user_id === userId).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      request.onerror = () => resolve([]);
+    });
+  } catch { return []; }
 }
 
 export async function setCachedPwaUser(user: CachedPwaUser): Promise<void> {

@@ -49,6 +49,8 @@ export function AuthProvider({ user: initialUser, children }: AuthProviderProps)
     if (isLoggingOutRef.current) return;
     setUser(initialUser);
     if (initialUser) {
+      // This effect synchronizes provider state with the server-session prop when it changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('AUTHENTICATED');
     } else {
       setStatus('UNAUTHENTICATED');
@@ -186,4 +188,8 @@ export function useAuth(): AuthContextType {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+export function useOptionalAuth(): AuthContextType | null {
+  return useContext(AuthContext) ?? null;
 }

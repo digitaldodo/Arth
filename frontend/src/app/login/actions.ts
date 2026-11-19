@@ -10,7 +10,6 @@ import {
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 import {
-  RESERVED_USERNAMES,
   isValidUsername,
   isReservedUsername,
   generateRandomCandidateUsername,
@@ -285,14 +284,23 @@ export async function signUpWithEmailAction(
     const confirmUrl = getAuthConfirmUrl(origin);
     const supabase = await createClient();
 
-    // Verify username availability prior to creation
+    // Verify username availability prior to creation: fail closed on RPC error
     if (rawUsername) {
       const { data: isAvailable, error: checkError } = await supabase.rpc(
         'fn_check_username_available',
         { p_username: normalizedUsername }
       );
 
-      if (!checkError && isAvailable === false) {
+      if (checkError) {
+        return {
+          error: sanitizeUserFacingError(
+            checkError,
+            "We couldn't connect to SpendSense. Check your connection and try again."
+          ),
+        };
+      }
+
+      if (isAvailable !== true) {
         return {
           error: 'This username is already taken. Please choose another username.',
         };
@@ -302,11 +310,11 @@ export async function signUpWithEmailAction(
       let attempts = 0;
       while (attempts < 10) {
         attempts++;
-        const { data: isAvailable } = await supabase.rpc(
+        const { data: isAvailable, error: checkErr } = await supabase.rpc(
           'fn_check_username_available',
           { p_username: normalizedUsername }
         );
-        if (isAvailable !== false) {
+        if (!checkErr && isAvailable === true) {
           break;
         }
         normalizedUsername = generateRandomCandidateUsername();
@@ -333,6 +341,16 @@ export async function signUpWithEmailAction(
         return {
           error:
             'An account with this email address already exists. Please sign in or reset your password.',
+        };
+      }
+      if (
+        error.message.includes('already taken') ||
+        error.message.includes('23505') ||
+        error.message.includes('unique constraint') ||
+        error.message.includes('uq_profiles_lower_username')
+      ) {
+        return {
+          error: 'This username is already taken. Please choose another username.',
         };
       }
       return {
@@ -942,7 +960,7 @@ export async function setUsernameAction(
       }
 
       return {
-        error: rpcError.message || 'Failed to update username. Please try again.',
+        error: sanitizeUserFacingError(rpcError.message, 'Failed to update username. Please try again.'),
       };
     }
 
@@ -952,9 +970,7 @@ export async function setUsernameAction(
       redirectUrl: '/',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'Failed to update username';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'Failed to update username.') };
   }
 }
 
@@ -990,7 +1006,10 @@ export async function checkUsernameAvailabilityAction(
     );
 
     if (error) {
-      return { available: false, error: error.message };
+      return {
+        available: false,
+        error: sanitizeUserFacingError(error, "We couldn't connect to SpendSense. Check your connection and try again."),
+      };
     }
 
     if (!isAvailable) {
@@ -1011,8 +1030,11 @@ export async function checkUsernameAvailabilityAction(
     }
 
     return { available: true };
-  } catch {
-    return { available: false, error: 'Failed to verify availability' };
+  } catch (err: unknown) {
+    return {
+      available: false,
+      error: sanitizeUserFacingError(err, "We couldn't connect to SpendSense. Check your connection and try again."),
+    };
   }
 }
 
@@ -1115,9 +1137,7 @@ export async function deleteAccountAction(
       redirectUrl: '/login?message=account_deleted',
     };
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : 'An unexpected error occurred during account deletion';
-    return { error: message };
+    return { error: sanitizeUserFacingError(err, 'An unexpected error occurred during account deletion.') };
   }
 }
 
@@ -1171,7 +1191,7 @@ export async function verifyCurrentPasswordAction(
   } catch (err: unknown) {
     return {
       valid: false,
-      error: err instanceof Error ? err.message : 'Password verification failed.',
+      error: sanitizeUserFacingError(err, 'Password verification failed. Please try again.'),
     };
   }
 }

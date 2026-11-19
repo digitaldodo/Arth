@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       },
     });
     if (!verification.verified || !verification.authenticationInfo.userVerified) {
-      return jsonResponse({ error: 'Device verification failed. Arth remains locked.' }, 401);
+      return jsonResponse({ error: 'Device verification failed. SpendSense remains locked.' }, 401);
     }
 
     const { data: updatedCredential, error: updateError } = await context.admin.from('app_lock_credentials')
@@ -52,6 +52,6 @@ export async function POST(request: Request) {
     if (updateError || !updatedCredential) return jsonResponse({ error: 'Verification could not be completed. Try again.' }, 503);
     return jsonResponse({ verified: true });
   } catch {
-    return jsonResponse({ error: 'Device verification failed. Arth remains locked.' }, 401);
+    return jsonResponse({ error: 'Device verification failed. SpendSense remains locked.' }, 401);
   }
 }

@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Arth — Personal Finance Tracker',
-    short_name: 'Arth',
+    name: 'SpendSense — Personal Finance Tracker',
+    short_name: 'SpendSense',
     description:
       'Fast, disciplined personal finance tracker with exact integer-paise calculations.',
     start_url: '/offline?arth_runtime=installed-mobile-pwa',

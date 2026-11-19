@@ -282,6 +282,9 @@ describe('Backend Transactions & Categories API', () => {
         necessity: 'essential',
         description: 'Team lunch',
         notes: 'Card payment at diner',
+        account_id: '33333333-3333-4333-8333-333333333333',
+        import_batch_id: uuidv7(),
+        statement_reference: 'UTR-ABC123',
         user_id: 'malicious-injected-user-id', // MUST BE IGNORED
       },
     });
@@ -294,6 +297,8 @@ describe('Backend Transactions & Categories API', () => {
     assert.equal(body.transaction.amount_decimal, '250.50');
     assert.equal(body.transaction.formatted_inr, '₹250.50');
     assert.equal(body.transaction.category_name, 'Food & Dining');
+    assert.equal(body.transaction.account_id, '33333333-3333-4333-8333-333333333333');
+    assert.equal(body.transaction.statement_reference, 'UTR-ABC123');
 
     // Verify stored transaction is bound to userA, not the malicious client user_id
     const stored = service.transactions.find((t) => t.id === txnId);
@@ -305,6 +310,7 @@ describe('Backend Transactions & Categories API', () => {
     assert.ok(outbox);
     assert.equal(outbox.event_type, 'transaction.created');
     assert.equal(outbox.user_id, userA.userId);
+    assert.equal(outbox.payload.statement_reference, 'UTR-ABC123');
   });
 
   // 5. Idempotent replays and conflict handling
@@ -321,6 +327,9 @@ describe('Backend Transactions & Categories API', () => {
       payment_method: 'cash',
       necessity: 'optional',
       description: 'Metro card topup',
+      account_id: '44444444-4444-4444-8444-444444444444',
+      import_batch_id: uuidv7(),
+      statement_reference: 'REF-9001',
     };
 
     // First attempt -> 201 Created
@@ -349,6 +358,13 @@ describe('Backend Transactions & Categories API', () => {
     // Outbox count must NOT increase
     const outboxCountAfter = service.outboxEvents.filter((e) => e.entity_id === txnId).length;
     assert.equal(outboxCountAfter, 1);
+
+    const changedReference = await app.inject({
+      method: 'POST', url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: { ...payload, statement_reference: 'REF-9002' },
+    });
+    assert.equal(changedReference.statusCode, 409, 'Idempotency must include statement source identity');
   });
 
   test('reusing same ID with DIFFERENT payload returns 409 Conflict', async () => {

@@ -50,7 +50,7 @@ fun ArthLockScreen(
                 modifier = Modifier.padding(top = 24.dp)
             ) {
                 Text(
-                    text = "ARTH",
+                    text = "SPENDSENSE",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 4.sp
@@ -88,7 +88,7 @@ fun ArthLockScreen(
                 }
 
                 Text(
-                    text = "Unlock Arth",
+                    text = "Unlock SpendSense",
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -151,7 +151,7 @@ fun ArthLockScreen(
                 onClick = onSignOut
             ) {
                 Text(
-                    text = "Sign Out from Arth",
+                    text = "Sign Out from SpendSense",
                     color = ArthTheme.colors.textMuted,
                     style = MaterialTheme.typography.labelMedium
                 )

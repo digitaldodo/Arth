@@ -25,6 +25,8 @@ export interface IDashboardService {
   ): Promise<DashboardSummaryResponse>;
 }
 
+export type InMemoryTransactionLink = { user_id: string; source_transaction_id: string; target_transaction_id: string; relationship: string; status: string };
+
 export class SupabaseDashboardService implements IDashboardService {
   constructor(
     private readonly config: AppConfig,
@@ -248,7 +250,8 @@ export class SupabaseDashboardService implements IDashboardService {
 export class InMemoryDashboardService implements IDashboardService {
   constructor(
     private readonly transactionService?: InMemoryTransactionService,
-    private readonly categoryService?: InMemoryCategoryService
+    private readonly categoryService?: InMemoryCategoryService,
+    private readonly transactionLinks: InMemoryTransactionLink[] = [],
   ) {}
 
   async getSummary(
@@ -261,13 +264,17 @@ export class InMemoryDashboardService implements IDashboardService {
       this.categoryService?.categories || [];
 
     // Filter strictly to caller's non-deleted transactions within the inclusive date range (or all if unbounded)
-    const userTxns = allTransactions.filter(
+    const reconciledIds = new Set(this.transactionLinks
+      .filter((link) => link.user_id === userId && link.status === 'confirmed' && ['transfer_pair', 'card_settlement'].includes(link.relationship))
+      .flatMap((link) => [link.source_transaction_id, link.target_transaction_id]));
+    const activeUserTxns = allTransactions.filter(
       (t) =>
         t.user_id === userId &&
         t.deleted_at === null &&
         (!query.start_date || t.transaction_date >= query.start_date) &&
         (!query.end_date || t.transaction_date <= query.end_date)
     );
+    const userTxns = activeUserTxns.filter((transaction) => !reconciledIds.has(transaction.id));
 
     const totalActiveCount = allTransactions.filter(
       (t) => t.user_id === userId && t.deleted_at === null
@@ -339,7 +346,7 @@ export class InMemoryDashboardService implements IDashboardService {
       .sort((a, b) => b.amount_paise - a.amount_paise);
 
     // Bounded and deterministically ordered recent transactions (up to 10)
-    const recentTransactions: TransactionDTO[] = [...userTxns]
+    const recentTransactions: TransactionDTO[] = [...activeUserTxns]
       .sort((a, b) => {
         if (a.transaction_date !== b.transaction_date) {
           return b.transaction_date.localeCompare(a.transaction_date);

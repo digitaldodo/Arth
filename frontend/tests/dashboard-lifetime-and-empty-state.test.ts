@@ -72,15 +72,15 @@ describe('Dashboard Lifetime Date Range & Month-Rollover Empty-State Suite', () 
   });
 
   // 4. Onboarding vs Month-Rollover Empty State Invariants
-  test('Case A: Brand new account with 0 lifetime transactions shows Welcome to Arth onboarding card', () => {
+  test('Case A: Brand new account with 0 lifetime transactions shows Welcome to SpendSense onboarding card', () => {
     const pageCode = fs.readFileSync(dashboardPagePath, 'utf-8');
     assert.ok(
       pageCode.includes('summary.total_active_transaction_count === 0'),
       'Must check total_active_transaction_count === 0 for initial onboarding'
     );
     assert.ok(
-      pageCode.includes('Welcome to Arth'),
-      'Onboarding card must display Welcome to Arth'
+      pageCode.includes('Welcome to SpendSense'),
+      'Onboarding card must display Welcome to SpendSense'
     );
     assert.ok(
       pageCode.includes('Add your first transaction'),

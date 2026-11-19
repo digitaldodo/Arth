@@ -118,7 +118,7 @@ class SyncEngine {
 
   private assertOfflineWriteIsAllowed(): void {
     if (typeof navigator !== 'undefined' && navigator.onLine === false && !isStandalonePwaClient()) {
-      throw new Error('Offline changes are available in the installed Arth app. Reconnect to use Arth in a browser.');
+      throw new Error('Offline changes are available in the installed SpendSense app. Reconnect to use SpendSense in a browser.');
     }
   }
 
@@ -251,6 +251,9 @@ class SyncEngine {
       necessity: payload.necessity ?? null,
       description: payload.description || null,
       notes: payload.notes || null,
+      ...(payload.account_id ? { account_id: payload.account_id } : {}),
+      ...(payload.import_batch_id ? { import_batch_id: payload.import_batch_id } : {}),
+      ...(payload.statement_reference ? { statement_reference: payload.statement_reference } : {}),
       recorded_at,
       created_at: payload.created_at || recorded_at,
       updated_at: new Date().toISOString(),

@@ -39,8 +39,8 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
   describe('1. Google Sheets Synchronization UX Polish', () => {
     test('simplified description matches requirement', () => {
       assert.ok(
-        sheetsSource.includes('Automatically sync your Arth transactions to your personal Google Sheet.'),
-        'Must display simplified description "Automatically sync your Arth transactions to your personal Google Sheet."'
+        sheetsSource.includes('Automatically sync your SpendSense transactions to your personal Google Sheet.'),
+        'Must display simplified description "Automatically sync your SpendSense transactions to your personal Google Sheet."'
       );
       assert.ok(
         !sheetsSource.includes('Asynchronously replicate your financial transactions'),
@@ -55,7 +55,7 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
       );
       assert.ok(
         sheetsSource.includes(
-          'Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so Arth can add your transactions.'
+          'Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so SpendSense can add your transactions.'
         ),
         'Must provide clear Editor permission sharing instructions'
       );
@@ -153,7 +153,7 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
     test('Privacy explanation is rendered below connection controls', () => {
       assert.ok(
         sheetsSource.includes(
-          'Your spreadsheet remains private. Arth uses the sharing permission you grant to sync your transactions.'
+          'Your spreadsheet remains private. SpendSense uses the sharing permission you grant to sync your transactions.'
         ),
         'Must include concise privacy note below connection controls'
       );
@@ -163,7 +163,7 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
       const markup = renderToStaticMarkup(React.createElement(SheetsConnectionCard));
       assert.ok(typeof markup === 'string');
       assert.ok(markup.includes('Google Sheets Synchronization'));
-      assert.ok(markup.includes('Automatically sync your Arth transactions'));
+      assert.ok(markup.includes('Automatically sync your SpendSense transactions'));
     });
   });
 
@@ -182,9 +182,9 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
 
     test('Row 2 contains full-width concise description', () => {
       assert.ok(
-        pwaSource.includes('Use Arth offline and sync your changes when you&apos;re back online.') ||
-          pwaSource.includes("Use Arth offline and sync your changes when you're back online."),
-        'Must display concise description "Use Arth offline and sync your changes when you\'re back online."'
+        pwaSource.includes('Use SpendSense offline and sync your changes when you&apos;re back online.') ||
+          pwaSource.includes("Use SpendSense offline and sync your changes when you're back online."),
+        'Must display concise description "Use SpendSense offline and sync your changes when you\'re back online."'
       );
     });
 
@@ -208,8 +208,8 @@ describe('Google Sheets Connection & Offline Support UI/UX Improvements', () => 
       assert.ok(typeof markup === 'string');
       assert.ok(markup.includes('Offline Support'));
       assert.ok(
-        markup.includes("Use Arth offline and sync your changes when you're back online") ||
-          markup.includes('Use Arth offline and sync your changes when you&#x27;re back online')
+        markup.includes("Use SpendSense offline and sync your changes when you're back online") ||
+          markup.includes('Use SpendSense offline and sync your changes when you&#x27;re back online')
       );
     });
   });

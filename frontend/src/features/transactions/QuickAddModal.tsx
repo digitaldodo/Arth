@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { v7 as uuidv7 } from 'uuid';
 import {
   type CategoryDTO,
@@ -20,6 +20,8 @@ import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useBackHandler } from '@/features/navigation';
 import { UnsavedChangesDialog } from '@/components/ui/UnsavedChangesDialog';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
+import { findCategoryCorrection, merchantFingerprint, recordCategoryCorrection, suggestCategory } from '@/features/categorization';
+import { getMessage } from '@/lib/i18n/messages';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -74,6 +76,22 @@ export function QuickAddModal({
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState<boolean>(false);
   const [showMoreCategories, setShowMoreCategories] = useState<boolean>(false);
+  const [correctionSaved, setCorrectionSaved] = useState(false);
+  const [savedMerchantCategoryId, setSavedMerchantCategoryId] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    setSavedMerchantCategoryId(null);
+    if (userId && description.trim()) {
+      void findCategoryCorrection(userId, merchantFingerprint(description)).then((id) => {
+        if (active) setSavedMerchantCategoryId(id);
+      });
+    }
+    return () => { active = false; };
+  }, [description, userId]);
+  const categorySuggestion = useMemo(
+    () => suggestCategory(description, categories, type, savedMerchantCategoryId),
+    [description, categories, type, savedMerchantCategoryId],
+  );
 
   // Status & error states
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -253,6 +271,10 @@ export function QuickAddModal({
 
   const handleCategorySelect = (id: string) => {
     setCategoryId(id);
+    setCorrectionSaved(false);
+    if (categorySuggestion && categorySuggestion.category.id !== id && userId) {
+      void recordCategoryCorrection(userId, merchantFingerprint(description), id).then(setCorrectionSaved);
+    }
     try {
       localStorage.setItem(`arth_last_category_${type}`, id);
     } catch {
@@ -494,6 +516,37 @@ export function QuickAddModal({
                 <span className="text-[10px] text-[var(--text-muted)]">Loading...</span>
               )}
             </div>
+
+            {categorySuggestion && (
+              <div className="mb-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] p-3" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-[var(--text-primary)]">
+                      {getMessage('category.suggested', 'en-IN', { category: categorySuggestion.category.name })}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                      {categorySuggestion.method === 'user_correction'
+                        ? getMessage('category.yourCorrection')
+                        : getMessage('category.ruleAgreement', 'en-IN', { percent: Math.round(categorySuggestion.confidence * 100) })} · {getMessage('category.confirmBeforeSaving')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCategorySelect(categorySuggestion.category.id)}
+                    disabled={isSubmitting}
+                    className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] disabled:opacity-50"
+                  >
+                    {getMessage('category.useSuggestion')}
+                  </button>
+                </div>
+                <ul className="mt-2 space-y-0.5 text-[10px] text-[var(--text-secondary)]">
+                  {categorySuggestion.evidence.map((item, index) => (
+                    <li key={`${item.source}-${index}`}>{item.source}: {item.detail}</li>
+                  ))}
+                </ul>
+                {correctionSaved && <p className="mt-2 text-[10px] text-[var(--income-fg)]">{getMessage('category.correctionSaved')} {getMessage('category.notSharedTraining')}</p>}
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-1.5">
               {topCategories.map((cat) => {

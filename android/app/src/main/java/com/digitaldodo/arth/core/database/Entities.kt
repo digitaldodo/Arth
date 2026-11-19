@@ -218,7 +218,11 @@ data class PersonTransactionEntity(
 
 @Entity(
     tableName = "sms_suggestions",
-    indices = [Index(value = ["smsTimestamp"], orders = [Index.Order.DESC], name = "idx_sms_ts")]
+    indices = [
+        Index(value = ["smsTimestamp"], orders = [Index.Order.DESC], name = "idx_sms_ts"),
+        Index(value = ["status"], name = "idx_sms_status"),
+        Index(value = ["refNumber"], name = "idx_sms_ref")
+    ]
 )
 data class SmsSuggestionEntity(
     @PrimaryKey val id: String,
@@ -230,7 +234,14 @@ data class SmsSuggestionEntity(
     val refNumber: String?,
     val smsTimestamp: Long,
     val confidence: Int,
-    val status: String = SuggestionStatus.PENDING.name
+    val status: String = SuggestionStatus.PENDING.name,
+    val bank: String? = null,
+    val accountMask: String? = null,
+    val classification: String = "DEBIT",
+    val balancePaise: Long? = null,
+    val duplicateStatus: String = "UNIQUE",
+    val matchedTransactionId: String? = null,
+    val rawSnippet: String? = null
 ) {
     fun toDomain(): SmsSuggestion = SmsSuggestion(
         id = id,
@@ -242,7 +253,14 @@ data class SmsSuggestionEntity(
         refNumber = refNumber,
         smsTimestamp = smsTimestamp,
         confidence = confidence,
-        status = runCatching { SuggestionStatus.valueOf(status) }.getOrDefault(SuggestionStatus.PENDING)
+        status = runCatching { SuggestionStatus.valueOf(status) }.getOrDefault(SuggestionStatus.PENDING),
+        bank = bank,
+        accountMask = accountMask,
+        classification = classification,
+        balancePaise = balancePaise,
+        duplicateStatus = duplicateStatus,
+        matchedTransactionId = matchedTransactionId,
+        rawSnippet = rawSnippet
     )
 
     companion object {
@@ -256,7 +274,14 @@ data class SmsSuggestionEntity(
             refNumber = domain.refNumber,
             smsTimestamp = domain.smsTimestamp,
             confidence = domain.confidence,
-            status = domain.status.name
+            status = domain.status.name,
+            bank = domain.bank,
+            accountMask = domain.accountMask,
+            classification = domain.classification,
+            balancePaise = domain.balancePaise,
+            duplicateStatus = domain.duplicateStatus,
+            matchedTransactionId = domain.matchedTransactionId,
+            rawSnippet = domain.rawSnippet
         )
     }
 }

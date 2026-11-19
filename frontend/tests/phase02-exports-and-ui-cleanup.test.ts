@@ -174,7 +174,7 @@ describe('Phase 02: JSON Backup Export Structure & Precision', () => {
     const parsed: ArthBackupPayload = JSON.parse(jsonString);
 
     assert.equal(parsed.version, 1);
-    assert.equal(parsed.app, 'Arth');
+    assert.equal(parsed.app, 'SpendSense');
     assert.equal(parsed.user.id, 'usr-123');
     assert.equal(parsed.user.username, 'artha_user');
     assert.equal(parsed.categories.length, 1);

@@ -120,7 +120,7 @@ export async function verifyAndInitializeSheet(
     }
     if (metaRes.status === 403) {
       throw new Error(
-        'Permission denied. Please share your Google Sheet with the Arth service account email with "Editor" permissions.'
+        'Permission denied. Please share your Google Sheet with the SpendSense service account email with "Editor" permissions.'
       );
     }
     throw new Error(

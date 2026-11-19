@@ -27,14 +27,20 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Arth — Personal Finance Tracker",
+  title: "SpendSense — Personal Finance",
   description:
-    "Fast, disciplined personal finance tracker with exact integer-paise calculations, PostgreSQL authoritative storage, and baseline installability.",
-  applicationName: "Arth",
+    "A clear, private-first personal finance workspace for tracking Indian income and spending, reviewing transactions, and organizing financial documents.",
+  applicationName: "SpendSense",
+  openGraph: {
+    title: "SpendSense — Personal Finance",
+    description: "Track income and spending, review transaction suggestions, and organize financial documents.",
+    siteName: "SpendSense",
+    type: "website",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Arth",
+    title: "SpendSense",
   },
   icons: {
     icon: [

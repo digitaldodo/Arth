@@ -105,6 +105,23 @@ interface TransactionDao {
           AND transactionDate <= :endDate
     """)
     fun observeNecessityExpense(necessity: String, startDate: Long, endDate: Long): Flow<Long>
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE isDeleted = 0 
+          AND amountPaise = :amountPaise 
+          AND ABS(transactionDate - :date) <= :windowMillis 
+        LIMIT 5
+    """)
+    suspend fun findPotentialDuplicates(amountPaise: Long, date: Long, windowMillis: Long = 172800000L): List<TransactionEntity>
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE isDeleted = 0 
+          AND (notes LIKE '%' || :refNumber || '%' OR counterparty LIKE '%' || :refNumber || '%') 
+        LIMIT 1
+    """)
+    suspend fun findByReference(refNumber: String): TransactionEntity?
 }
 
 @Dao
@@ -178,17 +195,44 @@ interface SmsSuggestionDao {
     @Query("SELECT COUNT(*) FROM sms_suggestions WHERE status = 'PENDING'")
     fun observePendingCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM sms_suggestions WHERE status = 'CONFIRMED'")
+    fun observeConfirmedCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM sms_suggestions WHERE status = 'DISMISSED'")
+    fun observeDismissedCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM sms_suggestions")
+    fun observeTotalCount(): Flow<Int>
+
     @Query("SELECT * FROM sms_suggestions WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): SmsSuggestionEntity?
 
+    @Query("SELECT * FROM sms_suggestions WHERE refNumber = :refNumber LIMIT 1")
+    suspend fun findByRefNumber(refNumber: String): SmsSuggestionEntity?
+
+    @Query("SELECT * FROM sms_suggestions WHERE amountPaise = :amountPaise AND ABS(smsTimestamp - :timestamp) < :windowMillis LIMIT 1")
+    suspend fun findNearMatch(amountPaise: Long, timestamp: Long, windowMillis: Long = 60000L): SmsSuggestionEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(suggestion: SmsSuggestionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(suggestions: List<SmsSuggestionEntity>)
+
+    @Update
+    suspend fun update(suggestion: SmsSuggestionEntity)
 
     @Query("UPDATE sms_suggestions SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: String, status: String)
 
     @Query("DELETE FROM sms_suggestions WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM sms_suggestions WHERE status IN ('PENDING', 'DISMISSED')")
+    suspend fun deleteUnconfirmed()
+
+    @Query("DELETE FROM sms_suggestions")
+    suspend fun deleteAll()
 }
 
 @Dao

@@ -66,12 +66,12 @@ export function OfflinePwaEntry() {
     <main className="min-h-screen grid place-items-center px-6 py-12 bg-[var(--bg-canvas)] text-[var(--text-primary)]">
       <section className="w-full max-w-sm rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 text-center shadow-sm">
         <h1 className="text-xl font-semibold">
-          {state === 'checking' ? 'Opening Arth' : 'Sign In Required for Offline Access'}
+          {state === 'checking' ? 'Opening SpendSense' : 'Sign In Required for Offline Access'}
         </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
           {state === 'checking'
-            ? 'Checking this device for your saved Arth session…'
-            : 'Connect to the internet and sign in to Arth once to securely use your ledger offline on this device.'}
+            ? 'Checking this device for your saved SpendSense session…'
+            : 'Connect to the internet and sign in to SpendSense once to securely use your ledger offline on this device.'}
         </p>
         {state === 'not-prepared' && (
           <button

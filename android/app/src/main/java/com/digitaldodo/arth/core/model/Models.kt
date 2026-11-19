@@ -48,6 +48,32 @@ enum class SuggestionStatus {
     PENDING, CONFIRMED, DISMISSED
 }
 
+enum class FinancialClassification(val label: String) {
+    DEBIT("Debit"),
+    CREDIT("Credit"),
+    UPI_PAYMENT("UPI Payment"),
+    UPI_RECEIPT("UPI Received"),
+    CARD_TRANSACTION("Card Spend"),
+    ATM_WITHDRAWAL("ATM Withdrawal"),
+    NEFT("NEFT Transfer"),
+    IMPS("IMPS Transfer"),
+    RTGS("RTGS Transfer"),
+    REFUND("Refund"),
+    REVERSAL("Reversal"),
+    FAILED_TRANSACTION("Failed"),
+    SALARY("Salary"),
+    INTEREST("Interest"),
+    BALANCE_ALERT("Balance Alert"),
+    NON_FINANCIAL("Non-Financial"),
+    UNKNOWN("Unknown")
+}
+
+enum class DuplicateStatus {
+    UNIQUE,
+    POTENTIAL_DUPLICATE,
+    CONFIRMED_DUPLICATE
+}
+
 @Serializable
 data class Transaction(
     val id: String = UUID.randomUUID().toString(),
@@ -142,9 +168,17 @@ data class SmsSuggestion(
     val refNumber: String? = null,
     val smsTimestamp: Long = System.currentTimeMillis(),
     val confidence: Int = 80,
-    val status: SuggestionStatus = SuggestionStatus.PENDING
+    val status: SuggestionStatus = SuggestionStatus.PENDING,
+    val bank: String? = null,
+    val accountMask: String? = null,
+    val classification: String = FinancialClassification.DEBIT.name,
+    val balancePaise: Long? = null,
+    val duplicateStatus: String = DuplicateStatus.UNIQUE.name,
+    val matchedTransactionId: String? = null,
+    val rawSnippet: String? = null
 ) {
     val formattedAmount: String get() = Money.formatPaise(amountPaise)
+    val formattedBalance: String? get() = balancePaise?.let { Money.formatPaise(it) }
 }
 
 @Serializable

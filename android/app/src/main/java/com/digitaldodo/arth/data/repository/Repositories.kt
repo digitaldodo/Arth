@@ -94,7 +94,7 @@ class TransactionRepository(
 
     suspend fun refreshTransactions(): Result<Int> {
         val secureStorage = SecureStorage(context)
-        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to SpendSense first."))
 
         return try {
             val api = NetworkClient.createArthApi(secureStorage)
@@ -239,7 +239,7 @@ class CategoryRepository(
     suspend fun refreshCategories(): Result<Int> {
         val ctx = context ?: return Result.failure(IllegalStateException("No context available"))
         val secureStorage = SecureStorage(ctx)
-        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to SpendSense first."))
 
         return try {
             val api = NetworkClient.createArthApi(secureStorage)
@@ -293,7 +293,7 @@ class BalanceRepository(
 
     suspend fun refreshBalances(): Result<AccountBalances> {
         val secureStorage = SecureStorage(context)
-        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to Arth first."))
+        if (!secureStorage.isLoggedIn()) return Result.failure(IllegalStateException("Sign in to SpendSense first."))
 
         return try {
             val api = NetworkClient.createArthApi(secureStorage)
@@ -470,26 +470,50 @@ class SmsSuggestionRepository(
         return suggestionDao.observePendingCount()
     }
 
+    fun observeConfirmedCount(): Flow<Int> {
+        return suggestionDao.observeConfirmedCount()
+    }
+
+    fun observeDismissedCount(): Flow<Int> {
+        return suggestionDao.observeDismissedCount()
+    }
+
+    fun observeTotalCount(): Flow<Int> {
+        return suggestionDao.observeTotalCount()
+    }
+
     suspend fun confirmSuggestion(
         suggestion: SmsSuggestion,
         categoryId: String,
         categoryName: String,
-        necessity: NecessityTier?
+        necessity: NecessityTier?,
+        customAmountPaise: Long? = null,
+        customDate: Long? = null,
+        customMerchant: String? = null,
+        customPaymentMode: PaymentMode? = null,
+        customNotes: String? = null
     ) {
+        val finalAmount = customAmountPaise ?: suggestion.amountPaise
+        val finalDate = customDate ?: suggestion.smsTimestamp
+        val finalMerchant = customMerchant ?: suggestion.merchant
+        val finalMode = customPaymentMode ?: suggestion.paymentMode
+
         val tx = Transaction(
             id = UUID.randomUUID().toString(),
-            amountPaise = suggestion.amountPaise,
+            amountPaise = finalAmount,
             type = suggestion.type,
-            paymentMode = suggestion.paymentMode,
+            paymentMode = finalMode,
             necessity = if (suggestion.type == TransactionType.EXPENSE) (necessity ?: NecessityTier.ESSENTIAL) else null,
             categoryId = categoryId,
             categoryName = categoryName,
-            transactionDate = suggestion.smsTimestamp,
+            transactionDate = finalDate,
             notes = buildString {
+                if (!customNotes.isNullOrBlank()) append(customNotes).append(" ")
                 if (!suggestion.refNumber.isNullOrBlank()) append("Ref: ${suggestion.refNumber} ")
-                if (!suggestion.sender.isNullOrBlank()) append("(${suggestion.sender})")
+                if (!suggestion.bank.isNullOrBlank()) append("[${suggestion.bank}] ")
+                if (!suggestion.accountMask.isNullOrBlank()) append("A/c: ${suggestion.accountMask}")
             }.trim().takeIf { it.isNotBlank() },
-            counterparty = suggestion.merchant
+            counterparty = finalMerchant
         )
 
         transactionRepository.addTransaction(tx)
@@ -498,5 +522,25 @@ class SmsSuggestionRepository(
 
     suspend fun dismissSuggestion(suggestionId: String) {
         suggestionDao.updateStatus(suggestionId, SuggestionStatus.DISMISSED.name)
+    }
+
+    suspend fun markAsDuplicate(suggestionId: String) {
+        suggestionDao.updateStatus(suggestionId, SuggestionStatus.DISMISSED.name)
+    }
+
+    suspend fun deleteLocalSmsData() {
+        suggestionDao.deleteUnconfirmed()
+    }
+
+    suspend fun autoConfirmIfEligible(suggestion: SmsSuggestion, categoryDao: CategoryDao) {
+        if (suggestion.status != SuggestionStatus.PENDING || suggestion.confidence < 95) return
+        val defaultCategory = categoryDao.getById("cat-other-expense") ?: return
+        confirmSuggestion(
+            suggestion = suggestion,
+            categoryId = defaultCategory.id,
+            categoryName = defaultCategory.name,
+            necessity = NecessityTier.ESSENTIAL,
+            customNotes = "Auto-recorded from high-confidence SMS"
+        )
     }
 }

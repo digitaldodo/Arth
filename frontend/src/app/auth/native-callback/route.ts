@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -61,7 +60,7 @@ function renderRedirectHtml(targetUrl: string, isSuccess: boolean, statusText: s
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>${isSuccess ? 'Authentication Successful — Arth' : 'Authentication Notice — Arth'}</title>
+  <title>${isSuccess ? 'Authentication Successful — SpendSense' : 'Authentication Notice — SpendSense'}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="0; url=${safeTarget}">
   <style>
@@ -118,8 +117,8 @@ function renderRedirectHtml(targetUrl: string, isSuccess: boolean, statusText: s
 <body>
   <div class="card">
     <h1>${isSuccess ? 'Sign In Complete' : 'Sign In Notice'}</h1>
-    <p>${isSuccess ? 'Returning you to your Arth financial ledger...' : statusText}</p>
-    <a class="btn" href="${safeTarget}">Open Arth App</a>
+    <p>${isSuccess ? 'Returning you to your SpendSense financial ledger...' : statusText}</p>
+    <a class="btn" href="${safeTarget}">Open SpendSense App</a>
   </div>
   <script>
     try {

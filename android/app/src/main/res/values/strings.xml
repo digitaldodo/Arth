@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Fallback string values; dynamic values are injected via app/build.gradle resValue -->
-    <string name="app_name">Arth</string>
+    <string name="app_name">SpendSense</string>
 </resources>

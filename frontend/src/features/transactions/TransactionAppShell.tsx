@@ -19,6 +19,8 @@ import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
 import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
 import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
+import { StatementImport } from '@/features/imports/StatementImport';
+import { DocumentsTaxCentre } from '@/features/tax/DocumentsTaxCentre';
 import { useAppLock } from '@/features/app-lock/useAppLock';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { unlockAfterVerification } from '@/features/app-lock/verification';
@@ -28,10 +30,10 @@ import {
   type AccountBalancesDTO,
   type NecessityClass,
 } from '@arth/contracts';
-import { clearCachedPwaUserContext, getCachedBalances, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
+import { getCachedBalances, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { useBackHandler } from '@/features/navigation';
-import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useMobileStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 
@@ -46,7 +48,7 @@ interface TransactionAppShellProps {
   } | null;
 }
 
-export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'more';
+export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'documents' | 'more';
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   return (
@@ -60,7 +62,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const { signOut } = useAuth();
   const router = useRouter();
   const userId = user?.id ?? null;
-  const isPwa = useStandalonePwa();
   const isMobilePwa = useMobileStandalonePwa();
   const appLock = useAppLock(user?.id ?? 'anonymous', isMobilePwa);
   const isAppLocked = Boolean(user) && (!appLock.isReady || (isMobilePwa && appLock.isLocked));
@@ -111,6 +112,13 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       setActiveView('more');
       return true;
     },
+  });
+
+  useBackHandler({
+    id: 'subscreen-documents',
+    priority: 'subscreen',
+    enabled: activeView === 'documents',
+    onBack: () => { setActiveView('more'); return true; },
   });
 
   // Priority 2: Settings subview in More returns to More Hub
@@ -264,7 +272,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     });
     const result = await response.json().catch(() => ({})) as { error?: string; signedOut?: boolean };
     if (!response.ok || result.signedOut !== true) {
-      throw new Error(result.error || 'Sign out could not be completed. Arth remains locked.');
+      throw new Error(result.error || 'Sign out could not be completed. SpendSense remains locked.');
     }
     appLock.resetAppLock();
     router.replace('/login');
@@ -334,6 +342,17 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                   }`}
                 >
                   Categories
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('documents')}
+                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                    activeView === 'documents'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Documents
                 </button>
                 <button
                   type="button"
@@ -465,6 +484,11 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
               <CategoryManager userId={user.id} onCategoryChange={handleCategoryChanged} />
             </div>
 
+            <div className={activeView === 'documents' ? 'block' : 'hidden'}>
+              <DocumentsTaxCentre userId={user.id} />
+              <StatementImport userId={user.id} onImported={() => setRefreshTrigger((prev) => prev + 1)} />
+            </div>
+
                         <div className={activeView === 'more' ? 'block' : 'hidden'}>
               <div className="space-y-5">
                 {/* 1. APPEARANCE SUBVIEW */}
@@ -586,7 +610,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                               Account Starting Balances
                             </h3>
                             <p className="text-[11px] text-[var(--text-muted)]">
-                              Initial cash and bank balances when you began using Arth
+                              Initial cash and bank balances when you began using SpendSense
                             </p>
                           </div>
                         </div>
@@ -723,6 +747,21 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                     </div>
 
                     <div className="grid gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setActiveView('documents')}
+                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">📄</span>
+                          <div>
+                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">Documents &amp; Tax</h3>
+                            <p className="text-[11px] text-[var(--text-muted)]">Review and import a bank or card statement</p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
+                      </button>
+
                       {/* Settings Navigation Card */}
                       <button
                         type="button"
@@ -822,7 +861,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         type="submit"
                         className="w-full py-2.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"
                       >
-                        Sign Out of Arth
+                        Sign Out of SpendSense
                       </button>
                     </form>
                   </div>
@@ -832,7 +871,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Welcome to Arth Personal Finance
+              Welcome to SpendSense Personal Finance
             </h2>
             <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
               Please sign in to access your personal ledger, record income and expenses, and track people obligations.

@@ -13,6 +13,9 @@ export interface CreateTransactionRequest {
   necessity?: NecessityClass | null; // Required if type is 'expense'; strictly null/absent if 'income'
   description?: string | null;
   notes?: string | null;
+  account_id?: string | null;
+  import_batch_id?: string | null;
+  statement_reference?: string | null;
   recorded_at?: string; // Client local recording timestamp (ISO 8601) preserved across offline sync
   created_at?: string; // Client recording timestamp (ISO 8601) preserved across offline sync
 }
@@ -30,6 +33,9 @@ export interface TransactionDTO {
   necessity: NecessityClass | null;
   description: string | null;
   notes: string | null;
+  account_id?: string | null;
+  import_batch_id?: string | null;
+  statement_reference?: string | null;
   recorded_at: string; // Immutable local creation timestamp used for balance baseline snapshot boundary
   created_at: string; // Server upload/insertion timestamp
   updated_at: string;

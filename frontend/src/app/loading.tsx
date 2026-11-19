@@ -10,7 +10,7 @@ export default function Loading() {
   return (
     <div
       role="status"
-      aria-label="Loading Arth"
+      aria-label="Loading SpendSense"
       className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-12 transition-colors select-none"
     >
       {/* Top Application Header Skeleton */}

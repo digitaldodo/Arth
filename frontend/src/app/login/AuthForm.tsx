@@ -267,7 +267,7 @@ export function AuthForm({
 
   return (
     <div className="w-full space-y-5">
-      {/* 1. Arth Wordmark & Brand Identifier */}
+      {/* 1. SpendSense Wordmark & Brand Identifier */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 mb-1.5">
           <ArthLogo
@@ -281,7 +281,7 @@ export function AuthForm({
 
         {/* 2. Main Title */}
         <h1 className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
-          {mode === 'signin' && 'Sign in to Arth'}
+          {mode === 'signin' && 'Sign in to SpendSense'}
           {mode === 'signup' && 'Create an account'}
           {mode === 'forgot' && 'Reset password'}
           {mode === 'resend_confirm' && 'Confirm your account'}

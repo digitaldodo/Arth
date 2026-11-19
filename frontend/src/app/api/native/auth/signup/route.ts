@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAppOrigin, getAuthConfirmUrl } from '@/lib/auth-config';
+import { sanitizeUserFacingError } from '@/lib/error-utils';
 import {
   isValidUsername,
   isReservedUsername,
@@ -53,12 +54,20 @@ export async function POST(request: Request) {
     const confirmUrl = getAuthConfirmUrl(origin);
     const supabase = await createClient();
 
-    // Check availability
+    // Check availability: fail closed on RPC error
     if (rawUsername) {
-      const { data: isAvailable } = await supabase.rpc('fn_check_username_available', {
+      const { data: isAvailable, error: checkError } = await supabase.rpc('fn_check_username_available', {
         p_username: normalizedUsername,
       });
-      if (isAvailable === false) {
+
+      if (checkError) {
+        return NextResponse.json(
+          { error: "We couldn't connect to SpendSense. Check your connection and try again." },
+          { status: 503, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      if (isAvailable !== true) {
         return NextResponse.json(
           { error: 'This username is already taken. Please choose another username.' },
           { status: 400, headers: { 'Cache-Control': 'no-store' } }
@@ -78,8 +87,19 @@ export async function POST(request: Request) {
     });
 
     if (error) {
+      if (
+        error.message.includes('already taken') ||
+        error.message.includes('23505') ||
+        error.message.includes('unique constraint') ||
+        error.message.includes('uq_profiles_lower_username')
+      ) {
+        return NextResponse.json(
+          { error: 'This username is already taken. Please choose another username.' },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
       return NextResponse.json(
-        { error: error.message },
+        { error: sanitizeUserFacingError(error.message, 'Registration failed. Please try again.') },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }

@@ -1,10 +1,5 @@
 package com.digitaldodo.arth.feature.settings
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,8 +14,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import com.digitaldodo.arth.BuildConfig
 import com.digitaldodo.arth.core.database.ArthDatabase
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthCard
@@ -29,7 +22,6 @@ import com.digitaldodo.arth.core.designsystem.ArthTheme
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.core.sync.AccountSyncService
 import com.digitaldodo.arth.core.sync.SyncState
-import com.digitaldodo.arth.feature.sms.SmsDisclosureDialog
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -39,36 +31,13 @@ fun SettingsScreen(
     onNavigateToBalances: () -> Unit,
     onNavigateToPeople: () -> Unit,
     onNavigateToReports: () -> Unit,
-    onNavigateToSmsReview: () -> Unit,
+    onNavigateToSmsSettings: () -> Unit,
     onNavigateToSecurity: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val secureStorage = remember { SecureStorage(context) }
-    val isSmsSupported = BuildConfig.SMS_DETECTION_SUPPORTED
-    var showSmsDisclosure by remember { mutableStateOf(false) }
-    var showLocalBuildNotice by remember { mutableStateOf(false) }
-
-    var hasSmsPermission by remember {
-        mutableStateOf(
-            if (isSmsSupported) {
-                ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-            } else {
-                false
-            }
-        )
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (isSmsSupported) {
-            hasSmsPermission = permissions[Manifest.permission.RECEIVE_SMS] == true ||
-                permissions[Manifest.permission.READ_SMS] == true
-        }
-    }
-
     val db = remember { ArthDatabase.getInstance(context) }
     val pendingOutboxCount by db.syncOutboxDao().observePendingCount().collectAsState(initial = 0)
     val syncService = remember { AccountSyncService.getInstance(context) }
@@ -119,7 +88,7 @@ fun SettingsScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = secureStorage.getUserEmail() ?: "Arth Account",
+                                text = secureStorage.getUserEmail() ?: "SpendSense Account",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -129,7 +98,7 @@ fun SettingsScreen(
                                 val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
                                 "Synced ${sdf.format(Date(lastSync))}"
                             } else {
-                                "Connected to Arth Cloud"
+                                "Connected to SpendSense Cloud"
                             }
                             Text(
                                 text = syncText,
@@ -187,15 +156,7 @@ fun SettingsScreen(
             }
 
             item {
-                ArthCard(onClick = {
-                    if (!isSmsSupported) {
-                        showLocalBuildNotice = true
-                    } else if (!hasSmsPermission) {
-                        showSmsDisclosure = true
-                    } else {
-                        onNavigateToSmsReview()
-                    }
-                }) {
+                ArthCard(onClick = onNavigateToSmsSettings) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -206,21 +167,17 @@ fun SettingsScreen(
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "SMS Transaction Detection",
+                                    text = "Import a bank message",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = when {
-                                        !isSmsSupported -> "Disabled in local build • Available in Play release"
-                                        hasSmsPermission -> "Active • Tap to view pending queue"
-                                        else -> "Tap to enable on-device detection"
+                                        else -> "Share a selected message from Messages for on-device review"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = when {
-                                        !isSmsSupported -> ArthTheme.colors.textMuted
-                                        hasSmsPermission -> ArthTheme.colors.emerald
-                                        else -> ArthTheme.colors.amber
+                                        else -> ArthTheme.colors.textSecondary
                                     }
                                 )
                             }
@@ -292,7 +249,7 @@ fun SettingsScreen(
             item {
                 Spacer(Modifier.height(12.dp))
                 ArthOutlinedButton(
-                    text = "Sign Out of Arth",
+                    text = "Sign Out of SpendSense",
                     borderColor = ArthTheme.colors.border,
                     onClick = {
                         secureStorage.clearSession()
@@ -303,43 +260,6 @@ fun SettingsScreen(
             }
         }
 
-        if (showSmsDisclosure) {
-            SmsDisclosureDialog(
-                onDismiss = { showSmsDisclosure = false },
-                onAccept = {
-                    showSmsDisclosure = false
-                    val permissions = mutableListOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    permissionLauncher.launch(permissions.toTypedArray())
-                }
-            )
-        }
-
-        if (showLocalBuildNotice) {
-            AlertDialog(
-                onDismissRequest = { showLocalBuildNotice = false },
-                title = {
-                    Text(
-                        text = "Local Build Configuration",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                text = {
-                    Text(
-                        text = "Automatic SMS transaction detection is disabled in this local build to prevent Google Play Protect from blocking direct APK sideloading.\n\n" +
-                               "The official Google Play distribution build includes complete on-device SMS parsing with explicit privacy disclosures.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { showLocalBuildNotice = false }) {
-                        Text("Understood")
-                    }
-                }
-            )
-        }
     }
 }
 

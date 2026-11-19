@@ -60,6 +60,7 @@ import com.digitaldodo.arth.feature.security.ArthLockScreen
 import com.digitaldodo.arth.feature.security.SecuritySettingsScreen
 import com.digitaldodo.arth.feature.settings.SettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
+import com.digitaldodo.arth.feature.sms.SmsSettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsViewModel
 import kotlinx.coroutines.launch
 
@@ -88,6 +89,7 @@ class MainActivity : FragmentActivity() {
 
         EnvironmentValidator.validate()
         handleAuthIntent(intent)
+        handleSharedMessageIntent(intent)
 
         val secureStorage = SecureStorage(this)
         if (secureStorage.isLoggedIn()) {
@@ -131,7 +133,7 @@ class MainActivity : FragmentActivity() {
                 availableUpdate?.let { update ->
                     AlertDialog(
                         onDismissRequest = { availableUpdate = null },
-                        title = { Text("Arth ${update.versionName} is available") },
+                        title = { Text("SpendSense ${update.versionName} is available") },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Release notes")
@@ -139,7 +141,7 @@ class MainActivity : FragmentActivity() {
                                     Text("• $note", style = MaterialTheme.typography.bodySmall)
                                 }
                                 Text(
-                                    "Android will ask you to confirm the update. Keep Arth installed to preserve local data.",
+                                    "Android will ask you to confirm the update. Keep SpendSense installed to preserve local data.",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -150,7 +152,7 @@ class MainActivity : FragmentActivity() {
                                 runCatching {
                                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl)))
                                 }.onFailure {
-                                    Toast.makeText(this@MainActivity, "Unable to open the Arth download page", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this@MainActivity, "Unable to open the SpendSense download page", Toast.LENGTH_LONG).show()
                                 }
                             }) {
                                 Text("Download update")
@@ -169,6 +171,24 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthIntent(intent)
+        handleSharedMessageIntent(intent)
+    }
+
+    private fun handleSharedMessageIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        val sharedText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.take(10_000) ?: return
+        smsViewModel.importSharedMessage(sharedText) { imported ->
+            runOnUiThread {
+                val message = if (imported) {
+                    "Transaction candidate added. Review it before saving."
+                } else {
+                    "This message could not be identified as a transaction. Nothing was added."
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }
+        intent.action = null
+        intent.removeExtra(Intent.EXTRA_TEXT)
     }
 
     private fun handleAuthIntent(intent: Intent?) {
@@ -209,7 +229,7 @@ class MainActivity : FragmentActivity() {
     private fun promptBiometricUnlock() {
         BiometricAuthManager.authenticate(
             activity = this,
-            title = "Unlock Arth",
+            title = "Unlock SpendSense",
             subtitle = "Authenticate to access your financial information",
             allowDeviceCredential = true,
             onSuccess = {
@@ -322,7 +342,7 @@ fun MainTabsScaffold(
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "security_settings")
+    val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "sms_settings", "security_settings")
     val isPersonDetail = currentRoute.startsWith("person_detail")
 
     // Priority 1: Back from person detail returns to people
@@ -359,7 +379,7 @@ fun MainTabsScaffold(
             activity?.finish()
         } else {
             lastBackPressedTime = now
-            Toast.makeText(context, "Press back again to exit Arth", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Press back again to exit SpendSense", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -551,9 +571,17 @@ fun MainTabsScaffold(
                         onNavigateToBalances = { tabNavController.navigate("balances") },
                         onNavigateToPeople = { tabNavController.navigate("people") },
                         onNavigateToReports = { tabNavController.navigate("reports") },
-                        onNavigateToSmsReview = { tabNavController.navigate("sms_review") },
+                        onNavigateToSmsSettings = { tabNavController.navigate("sms_settings") },
                         onNavigateToSecurity = { tabNavController.navigate("security_settings") },
                         onSignOut = onSignOut
+                    )
+                }
+
+                composable("sms_settings") {
+                    SmsSettingsScreen(
+                        viewModel = smsViewModel,
+                        onNavigateToReview = { tabNavController.navigate("sms_review") },
+                        onBack = { tabNavController.popBackStack() }
                     )
                 }
 

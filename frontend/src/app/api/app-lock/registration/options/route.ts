@@ -21,11 +21,11 @@ export async function POST(request: Request) {
     const { data: accountCredentials } = await context.admin.from('app_lock_credentials')
       .select('credential_id, transports').eq('user_id', context.userId);
     const options = await generateRegistrationOptions({
-      rpName: 'Arth',
+      rpName: 'SpendSense',
       rpID,
       userID: new TextEncoder().encode(context.userId),
-      userName: 'Arth account',
-      userDisplayName: 'Arth',
+      userName: 'SpendSense account',
+      userDisplayName: 'SpendSense',
       attestationType: 'none',
       timeout: 120_000,
       excludeCredentials: (accountCredentials ?? []).map((credential) => ({

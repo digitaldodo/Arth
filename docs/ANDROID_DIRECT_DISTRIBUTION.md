@@ -1,95 +1,93 @@
-# Arth Android Direct Distribution
+# SpendSense Android direct distribution
 
-This runbook covers the signed Android APK delivered from the Arth website. The website and installable PWA remain available as separate products. The direct APK is built from the `localRelease` flavor and intentionally contains no SMS inbox permissions.
+This runbook covers the native Android APK available from the SpendSense website. The web application and installable PWA remain separate and continue to use the existing backend, authentication, and records.
 
-## Release identity
+## Stable release identity
 
 | Setting | Value |
 | --- | --- |
+| Customer-facing name | SpendSense |
 | Android application ID | `com.digitaldodo.arth` |
-| Namespace | `com.digitaldodo.arth` |
-| Minimum Android | 8.0 / API 26 |
-| Target Android | 15 / API 35 |
+| Android namespace | `com.digitaldodo.arth` |
+| Minimum Android | Android 8.0 / API 26 |
+| Target Android | Android 15 / API 35 |
 | Direct distribution flavor | `localRelease` |
-| APK filename | `Arth.apk` |
-| Release host | Private GitHub Releases, reached from the website through a server-side HTTPS redirect |
+| Stable APK name | `SpendSense.apk` |
+| Website page | `/download` |
+| Stable GitHub Release tag | `android-latest` |
+| Source repository | `digitaldodo/Arth` (private) |
 
-The stable application ID and release signing key must remain unchanged. Android then treats a downloaded APK as an in-place update and keeps app-private Room data, authentication tokens, and preferences. Arth only starts the Android package installer after the user chooses **Download update**; Android presents the install confirmation and no update is installed silently.
+Keep the application ID and release signing identity unchanged for every future release. The release workflow refuses to generate a replacement signing key. Updating in place with Android's system installer preserves the installed package's private database, auth session, and preferences; users must not uninstall first. The download and update UI does not perform a silent install.
 
-## Existing direct release transition
+## Signing key storage, backup, and recovery
 
-The previously published APK is `com.digitaldodo.arth.local` and has signing certificate SHA-256 `36:CD:16:E7:F8:47:60:94:A4:CE:F0:68:B4:A3:F6:90:F2:27:E2:B8:C0:AA:29:3E:86:3C:75:39:A6:05:AA:6C`. It was produced by an older workflow that generated a one-run signing key when the release secret was missing. That private key is not available for future releases. Android cannot update that installation with the new production identity `com.digitaldodo.arth`.
+The existing release keystore is outside the repository at `%LOCALAPPDATA%\Arth\signing\release.jks`. CI receives it through these GitHub Actions secrets:
 
-The first production APK installs alongside the old app and leaves its local data untouched. Existing users should keep the old app installed until its pending data has synced to their Arth account and they have confirmed that data in the new app. Do not uninstall the old package as part of this release. The new package ID and new signing key are permanent from this production release forward. Subsequent releases must use both unchanged.
-
-## Signing key storage and recovery
-
-The production JKS is stored outside this repository at `%LOCALAPPDATA%\Arth\signing\release.jks`. The keystore and key passwords are generated randomly, stored in GitHub Actions secrets, and kept locally as a Windows DPAPI-encrypted value in `%LOCALAPPDATA%\Arth\signing\password.dpapi`. That encrypted password file can only be decrypted by the same Windows user on the same machine. Copy the keystore and an independently held password backup to encrypted offline storage before making the first production release.
-
-Repository Actions secrets required by the release workflow:
-
-| Secret | Contents |
+| Secret | Purpose |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | Base64 encoding of the production `release.jks` |
-| `ANDROID_KEYSTORE_PASSWORD` | JKS store password |
-| `ANDROID_KEY_ALIAS` | `arth` |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded release keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias (`arth`) |
 | `ANDROID_KEY_PASSWORD` | Private key password |
 
-To restore a backup on Windows, place it in a protected directory, set `ANDROID_KEYSTORE_PATH`, decrypt the password backup with the same Windows user, and provide the four values to Gradle or update the GitHub Actions secrets. To check the identity without exposing the private key, run `keytool -list -v -keystore release.jks -alias arth` and compare the SHA-256 certificate fingerprint with the website's release metadata. Never commit the JKS, password, base64 encoding, or DPAPI file. If the JKS is lost, Android will not accept future APKs as updates; retain the current app and publish a new package only with a documented migration.
+Before releasing, maintain two independent encrypted offline backups: one of the keystore and one of the credentials, stored separately from the development workstation and repository. Restrict recovery access to the maintainers who must sign production updates. Test a restore by checking the keystore certificate with `keytool -list -v`; compare its SHA-256 fingerprint to the current website release metadata. Do not paste passwords or base64 material into source files, issues, or logs.
 
-The workflow refuses to make an unsigned release or silently generate a replacement key. It verifies the signature and certificate, package name, version metadata, and absence of SMS permissions before publishing.
+Recovery steps:
 
-## Build a release locally
+1. Restore the JKS into a protected directory outside the checkout.
+2. Restore its passwords through the approved secret manager and rotate GitHub Actions secrets if access may have been exposed.
+3. Confirm the certificate fingerprint matches the most recent published release.
+4. Run the signing and package verification commands below before publishing.
 
-Install JDK 17 or newer and Android SDK Platform 35. Supply the key path and secrets through the process environment or a local ignored properties file; never place passwords in source control.
+If the signing key is lost, Android will reject updates signed by a replacement. Do not silently replace it; plan a separately documented migration that explains the reinstall and local-data consequences.
+
+Never commit the keystore, passwords, base64 value, local credential backup, or APK binary. `.gitignore` excludes local signing materials and build outputs.
+
+## Build and verify
+
+The CI workflow is `.github/workflows/android-release.yml`. It checks the persistent signing secrets, runs the Android unit suite, builds `localRelease`, verifies APK signature/package/version and rejects `READ_SMS`, `RECEIVE_SMS`, and `SEND_SMS`, then computes a SHA-256 checksum. It uploads `SpendSense.apk`, `SpendSense.apk.sha256`, and `release.json` to both the stable release and an immutable versioned release.
+
+Local build, when Android SDK 35 and the protected signing credentials are available:
 
 ```powershell
 $env:ANDROID_KEYSTORE_PATH = 'C:\Users\<user>\AppData\Local\Arth\signing\release.jks'
-$env:ANDROID_KEYSTORE_PASSWORD = '<from protected backup>'
+$env:ANDROID_KEYSTORE_PASSWORD = '<from protected credential backup>'
 $env:ANDROID_KEY_ALIAS = 'arth'
-$env:ANDROID_KEY_PASSWORD = '<from protected backup>'
-cd android
+$env:ANDROID_KEY_PASSWORD = '<from protected credential backup>'
+Set-Location android
 .\gradlew.bat :app:testLocalDebugUnitTest :app:assembleLocalRelease
 ```
 
-The APK is produced at `android/app/build/outputs/apk/local/release/app-local-release.apk`. Check its identity and integrity before distributing:
+Inspect the resulting APK before publication:
 
 ```powershell
-$apk = 'app-local-release.apk'
+$apk = 'app\build\outputs\apk\local\release\app-local-release.apk'
 apksigner verify --verbose --print-certs $apk
 aapt dump badging $apk
 aapt dump permissions $apk
 Get-FileHash $apk -Algorithm SHA256
 ```
 
-Confirm the package is `com.digitaldodo.arth`, the expected version code is present, and neither `READ_SMS`, `RECEIVE_SMS`, nor `SEND_SMS` appears in the manifest. Do not copy the APK into the Git repository.
+Check that the package remains `com.digitaldodo.arth`, the version code increases, the signer fingerprint matches the previous release, and no SMS inbox permissions appear. Do not check the APK into Git.
 
-## Automated publishing
+The workflow defaults to version `1.4.0` and generates a monotonically increasing version code above the last published code. A release must use a semantic `version_name` and a version code greater than the current stable release when overriding those defaults.
 
-The GitHub Actions workflow runs for Android release changes merged to `main` and can also be started manually. It increments the Android version code above the last published value, builds and signs `localRelease`, verifies the APK, and attaches `Arth.apk`, `Arth.apk.sha256`, and `release.json` to both the stable `android-latest` release and an immutable versioned release. A failed build or verification does not replace the latest release.
+## Website download and update flow
 
-Version name uses semantic versioning (for example `1.3.0+build.19`). Version code must increase with every release. If overriding it manually, choose a number greater than the currently published value.
+The private GitHub repository is not directly downloadable by public visitors. The `/download` page requests release details from `/api/android/release`; the server uses a read-only `GITHUB_TOKEN` and `GITHUB_REPOSITORY=digitaldodo/Arth` to verify the stable assets and return public metadata. `/api/android/download` resolves the APK asset over HTTPS and never sends the token to the browser. Vercel Production must retain the user's configured, repo-scoped read-only token.
 
-## Website delivery and hosting choice
+The release page shows version, file size, release date, release notes, minimum Android version, checksum, signing certificate fingerprint, install steps, privacy link, and an explicit separation between the native app and web/PWA. The Android update checker compares release metadata, then sends the user to download the APK. Android's own installer requires user confirmation.
 
-The Arth repository is private, so a direct browser link to its GitHub release cannot serve public visitors. The website API uses a read-only GitHub token server-side to find the private release asset, then redirects the user's browser to GitHub's short-lived HTTPS asset URL. The token is never sent to the browser. Configure `GITHUB_TOKEN` in the Vercel production, preview, and development environments with read-only access to release assets in `digitaldodo/Arth`; set `GITHUB_REPOSITORY=digitaldodo/Arth` if using a different repository name. The production website must have this token before removing its previously bundled APK fallback.
+GitHub Releases is the selected initial host because this repository already builds immutable version archives and checksums. If download scale or rate limits become material, reassess Cloudflare R2, Vercel Blob, or Supabase Storage with actual usage estimates and migration testing.
 
-GitHub Releases is selected for the initial low-volume release because it already provides immutable version history, checksums, download counts, and the release automation in this repository. Keeping the repository private requires the authenticated website redirect described above. Vercel Blob offers simpler public URLs but adds per-download transfer charges and storage credentials. Cloudflare R2 has an attractive no-egress storage model but needs a separate bucket, custom public domain, and publishing credentials. Supabase Storage fits the existing backend but couples public app downloads to the financial data platform and its storage/egress configuration. Revisit R2 if direct downloads grow enough that GitHub release delivery or rate limits become a concern.
+## SMS/message import compatibility
 
-## Website release page
+The APK supports importing a message selected by the user: choose Share in the Messages app, select SpendSense, then review the parsed candidate. Parsing occurs on-device; the raw message text is not stored; a candidate is not added to the ledger until the user confirms its details and date. OTPs and messages the classifier cannot identify are rejected.
 
-The page at `/download` displays the current release version, release date, APK size, minimum Android level, release notes, checksum, signing certificate fingerprint, user-confirmed installation instructions, and a privacy link. It states clearly that this is the Android app and that the web app/PWA remain separate. Release information is served from the signed release metadata, not a hard-coded old version.
+This direct APK does not read inbox/history or automatically receive messages. `READ_SMS` and `RECEIVE_SMS` are hard-restricted permissions. The website download plus system installer flow cannot set the PackageInstaller installer allowlist, and an allowlist would permit but not itself grant a restricted permission. The app does not become a default SMS client, use a custom installer, or weaken device security to obtain access. A consented Account Aggregator flow or explicit message/file selection remains the supported route.
 
-## SMS permission compatibility
+More detail and primary Android references are in [`ANDROID_PRIVACY_AND_PLAY_POLICY.md`](../ANDROID_PRIVACY_AND_PLAY_POLICY.md).
 
-The direct `localRelease` manifest removes `READ_SMS` and `RECEIVE_SMS`, including declarations inherited from the shared manifest. Its SMS feature flag is false, and the SMS receiver is removed from the merged manifest. The release workflow inspects the final APK and fails if an SMS permission appears.
+## Physical-device verification status
 
-Android documents [`READ_SMS`](https://developer.android.com/reference/android/Manifest.permission#READ_SMS) and [`RECEIVE_SMS`](https://developer.android.com/reference/android/Manifest.permission#RECEIVE_SMS) as hard-restricted: the app cannot hold them unless its installer allowlists them. [`PackageInstaller.SessionParams.setWhitelistedRestrictedPermissions()`](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(java.util.Set%3Cjava.lang.String%3E)) is an installer-side capability. Allowlisting only permits the app to hold the permission; it does not grant the runtime permission. A website cannot set this allowlist. In this flow, the browser downloads the APK and hands installation to the device's Android package installer. Android versions and OEM installers can differ in whether that installer allowlists restricted permissions for user-initiated sideloads. The project has no physical-device evidence for that behavior, so it cannot claim the path will grant SMS access. The production direct APK removes the permissions and does not support SMS inbox detection. Notification access remains separate, user-enabled access and is not described as SMS compatibility.
-
-An Android distribution store can act as installer of record and may allowlist restricted permissions for an eligible application under that store's rules. A managed Android administrator/installer can also configure installation-time permissions for managed devices. Those channels require their own platform eligibility, policy, and device verification; neither is configured for this website release. The secure supported fallback is consent-based Account Aggregator ingestion or statement import. Do not root devices or tell users that a manifest declaration alone enables SMS.
-
-Legitimate consumer alternatives are to distribute through an eligible app store that accepts the required permission declaration, use consent-based Account Aggregator integration, or import bank statements. Do not ask users to root their devices or claim SMS detection works because the permission is present in a manifest.
-
-## Physical device verification
-
-Connect a device running Android 8.0 or newer with USB debugging enabled. Install the production APK with `adb install`, launch Arth, test sign-in, ledger read/write, offline data, and then install a higher-version APK using `adb install -r`. Confirm the app's local records and authentication remain. In Android settings or with `adb shell dumpsys package com.digitaldodo.arth`, confirm there are no SMS permissions. Record model, Android version, APK version, install/update result, and observed data retention in the release record. An emulator or successful APK build is not a substitute for physical-device verification.
+No physical Android device was available for this implementation, so no physical install, share-sheet, sign-in, update-over-install, or local-data preservation test is reported as passed. Before calling device acceptance complete, install the signed APK on a supported Android phone, test share-to-review and explicit confirmation, verify login and existing ledger data, then install a higher-version APK over it and verify the same local records remain. Record device model, Android version, APK version, signer fingerprint, and observed outcomes. A build or emulator run does not substitute for a physical-device test.

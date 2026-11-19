@@ -3,7 +3,7 @@ package com.digitaldodo.arth.core.designsystem
 import androidx.compose.ui.graphics.Color
 
 // =============================================================================
-// Arth — Ledger Minimal Design Tokens
+// SpendSense — Ledger Minimal Design Tokens
 // =============================================================================
 
 // Light Mode (Warm Archival Paper baseline)

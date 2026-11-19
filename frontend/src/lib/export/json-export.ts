@@ -23,7 +23,7 @@ export interface ArthBackupPayload {
 }
 
 /**
- * Builds the canonical Arth JSON backup document.
+ * Builds the canonical SpendSense JSON backup document.
  */
 export function generateBackupJSON(
   transactions: TransactionDTO[],
@@ -32,7 +32,7 @@ export function generateBackupJSON(
 ): string {
   const payload: ArthBackupPayload = {
     version: 1,
-    app: 'Arth',
+    app: 'SpendSense',
     exported_at: new Date().toISOString(),
     user: {
       id: user.id,

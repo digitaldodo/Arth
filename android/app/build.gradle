@@ -14,7 +14,7 @@ def javaString = { String value -> '"' + value.replace('\\', '\\\\').replace('"'
 def rawVersionCode = gradleValue('VERSION_CODE', gradleValue('versionCode', ''))
 def rawVersionName = gradleValue('VERSION_NAME', gradleValue('versionName', ''))
 def buildNumber = (gradleValue('BUILD_NUMBER', gradleValue('GITHUB_RUN_NUMBER', '6'))).toInteger()
-def baseVersionName = rawVersionName ?: '1.3.0'
+def baseVersionName = rawVersionName ?: '1.4.0'
 def finalVersionCode = rawVersionCode ? rawVersionCode.toInteger() : (1000 + buildNumber)
 def finalVersionName = rawVersionName ? (rawVersionName.contains('+build.') ? rawVersionName : "${rawVersionName}+build.${buildNumber}") : "${baseVersionName}+build.${buildNumber}"
 
@@ -51,7 +51,7 @@ android {
         buildConfigField "String", "WEB_URL", javaString(gradleValue('ARTH_WEB_URL', defaultWebUrl))
         buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", javaString(gradleValue('GOOGLE_WEB_CLIENT_ID', defaultGoogleClientId))
 
-        resValue "string", "appName", "Arth"
+        resValue "string", "appName", "SpendSense"
     }
 
     flavorDimensions = ["distribution"]
@@ -60,12 +60,12 @@ android {
             dimension "distribution"
             versionNameSuffix ""
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
-            resValue "string", "appName", "Arth"
+            resValue "string", "appName", "SpendSense"
         }
         play {
             dimension "distribution"
-            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
-            resValue "string", "appName", "Arth"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
+            resValue "string", "appName", "SpendSense"
         }
     }
 

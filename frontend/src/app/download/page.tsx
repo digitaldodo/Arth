@@ -3,9 +3,9 @@ import { DownloadClient } from './DownloadClient';
 import type { AndroidReleaseInfo } from '@/app/api/android/release/route';
 
 export const metadata: Metadata = {
-  title: 'Download Arth for Android',
-  description: 'Download the official signed Arth Android application and verify its release checksum.',
-  applicationName: 'Arth',
+  title: 'Download SpendSense for Android',
+  description: 'Download the official signed SpendSense Android application and verify its release checksum.',
+  applicationName: 'SpendSense',
 };
 
 function getInitialRelease(): AndroidReleaseInfo {
@@ -18,7 +18,7 @@ function getInitialRelease(): AndroidReleaseInfo {
     releaseDate: '',
     minAndroidVersion: 'Android 8.0 (API 26)',
     targetAndroidVersion: 'Android 15 (API 35)',
-    apkFileName: 'Arth.apk',
+    apkFileName: 'SpendSense.apk',
     apkSize: '',
     downloadUrl: '/api/android/download',
     githubReleaseUrl: '',

@@ -85,7 +85,7 @@ export default async function UpdatePasswordPage() {
 
       {/* Footer Notes */}
       <footer className="w-full max-w-[420px] mx-auto px-4 py-5 text-center text-[11px] font-mono text-[var(--text-muted)]">
-        Arth &middot; Ledger Minimal
+        SpendSense &middot; Ledger Minimal
       </footer>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { deleteAccountAction } from '@/app/login/actions';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 
@@ -15,6 +16,7 @@ export function DeleteAccountModal({
   onClose,
   userEmail,
 }: DeleteAccountModalProps) {
+  const router = useRouter();
   const [confirmation, setConfirmation] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +46,9 @@ export function DeleteAccountModal({
       }
 
       if (res.redirectUrl) {
-        window.location.href = res.redirectUrl;
+        router.push(res.redirectUrl);
       } else {
-        window.location.href = '/login?message=account_deleted';
+        router.push('/login?message=account_deleted');
       }
     });
   };

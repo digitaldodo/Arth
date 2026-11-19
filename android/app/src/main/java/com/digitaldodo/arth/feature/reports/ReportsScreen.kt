@@ -189,7 +189,7 @@ private fun sharePdf(context: android.content.Context, file: File) {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Share Arth Statement"))
+        context.startActivity(Intent.createChooser(intent, "Share SpendSense Statement"))
     } catch (_: Exception) {
         // Fallback share
     }

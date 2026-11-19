@@ -99,17 +99,17 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
 
           <div className="space-y-2">
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-[-0.025em] text-[var(--text-primary)] leading-[1.2]">
-              Download Arth for Android.
+              Download SpendSense for Android.
             </h1>
             <p className="text-[15px] sm:text-[16px] text-[var(--text-secondary)] leading-relaxed max-w-xl">
-              Install the native Arth application on an Android phone. This APK is distributed separately from the Arth web app and installable PWA.
+              Install the native SpendSense application on an Android phone. This APK is distributed separately from the SpendSense web app and installable PWA.
             </p>
 
             {/* Dedicated Android Exclusivity Notice */}
             <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-start gap-3 text-xs text-[var(--text-secondary)]">
               <span className="w-2 h-2 rounded-full bg-[var(--income-fg)] shrink-0 mt-1" />
               <p className="leading-relaxed">
-                <strong className="text-[var(--text-primary)] font-semibold">Intended for Android Phones:</strong> This native package (.apk) is built specifically for devices running Android 8.0 (Oreo, API 26) or higher. iOS (iPhone/iPad) and desktop users should use the official Arth web application or install the PWA.
+                <strong className="text-[var(--text-primary)] font-semibold">Intended for Android Phones:</strong> This native package (.apk) is built specifically for devices running Android 8.0 (Oreo, API 26) or higher. iOS (iPhone/iPad) and desktop users should use the official SpendSense web application or install the PWA.
               </p>
             </div>
           </div>
@@ -118,7 +118,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <a
               href={release.published ? '/api/android/download' : undefined}
-              download={release.apkFileName || 'Arth.apk'}
+              download={release.apkFileName || 'SpendSense.apk'}
               aria-disabled={!release.published}
               className={`inline-flex items-center justify-center gap-2.5 h-11 px-6 rounded-[4px] text-[14px] font-semibold transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${release.published ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] cursor-pointer' : 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] cursor-not-allowed'}`}
             >
@@ -138,11 +138,11 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>{release.published ? 'Download Arth for Android' : 'APK temporarily unavailable'}</span>
+              <span>{release.published ? 'Download SpendSense for Android' : 'APK temporarily unavailable'}</span>
               {release.published && <span className="text-[11px] font-mono font-normal opacity-75 border-l border-current/25 pl-2 ml-0.5">{release.apkSize}</span>}
             </a>
 
-            <Link href="/" className="inline-flex items-center justify-center h-11 px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Use Arth Web or PWA</Link>
+            <Link href="/" className="inline-flex items-center justify-center h-11 px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Use SpendSense Web or PWA</Link>
           </div>
 
           {/* Metadata Specs Grid */}
@@ -192,7 +192,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             </h3>
           </div>
           <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-            {release.disclaimer} Install updates over the existing Arth app; do not uninstall it, because Android preserves local data during a valid signed update.
+            {release.disclaimer} Install updates over the existing SpendSense app; do not uninstall it, because Android preserves local data during a valid signed update.
           </p>
         </div>
 
@@ -274,7 +274,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 <h4 className="text-xs font-semibold text-[var(--text-primary)]">Download APK</h4>
                 <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                   Tap <strong>Download for Android</strong> above to save the verified{' '}
-                  <code className="text-[11px] font-mono">Arth.apk</code> file to your device.
+                  <code className="text-[11px] font-mono">SpendSense.apk</code> file to your device.
                 </p>
               </div>
 
@@ -360,7 +360,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
       {/* Slim Minimal Footer */}
       <footer className="w-full max-w-4xl mx-auto px-6 py-5 border-t border-[var(--border-hairline)] flex flex-wrap items-center justify-between gap-4 text-[11px] font-mono text-[var(--text-muted)]">
         <div className="flex items-center gap-4">
-          <span>Arth &middot; Ledger Minimal</span>
+          <span>SpendSense &middot; Ledger Minimal</span>
           <a
             href={release.githubReleaseUrl}
             target="_blank"

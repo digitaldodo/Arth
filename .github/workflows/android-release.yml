@@ -1,4 +1,4 @@
-name: Arth Android Release
+name: SpendSense Android Release
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: Semantic version (for example 1.3.1)
+        description: Semantic version (for example 1.4.0)
         required: false
         default: ''
       version_code:
@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: arth-android-release
+  group: spendsense-android-release
   cancel-in-progress: false
 
 jobs:
@@ -67,9 +67,9 @@ jobs:
               exit 1
             fi
           done
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/arth-release.jks"
-          keytool -list -keystore "$RUNNER_TEMP/arth-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
-          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/arth-release.jks" >> "$GITHUB_ENV"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/spendsense-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/spendsense-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/spendsense-release.jks" >> "$GITHUB_ENV"
 
       - name: Resolve release version
         id: version
@@ -77,7 +77,7 @@ jobs:
           INPUT_VERSION_NAME: ${{ inputs.version_name }}
           INPUT_VERSION_CODE: ${{ inputs.version_code }}
         run: |
-          VERSION_NAME="${INPUT_VERSION_NAME:-1.3.0}"
+          VERSION_NAME="${INPUT_VERSION_NAME:-1.4.0}"
           VERSION_CODE="${INPUT_VERSION_CODE:-$((1006 + GITHUB_RUN_NUMBER))}"
           if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || [ "$VERSION_CODE" -le 1005 ]; then
             echo "::error::versionCode must be an integer greater than the previously published code 1005."
@@ -115,18 +115,18 @@ jobs:
           BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           APK="android/app/build/outputs/apk/local/release/app-local-release.apk"
           test -f "$APK"
-          cp "$APK" "$RUNNER_TEMP/Arth.apk"
-          "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$RUNNER_TEMP/Arth.apk"
-          "$BUILD_TOOLS_DIR/aapt" dump badging "$RUNNER_TEMP/Arth.apk" | grep -F "package: name='com.digitaldodo.arth' versionCode='$VERSION_CODE' versionName='$FULL_VERSION'"
-          PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/Arth.apk")"
+          cp "$APK" "$RUNNER_TEMP/SpendSense.apk"
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$RUNNER_TEMP/SpendSense.apk"
+          "$BUILD_TOOLS_DIR/aapt" dump badging "$RUNNER_TEMP/SpendSense.apk" | grep -F "package: name='com.digitaldodo.arth' versionCode='$VERSION_CODE' versionName='$FULL_VERSION'"
+          PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/SpendSense.apk")"
           if grep -E -i 'android\.permission\.(READ_SMS|RECEIVE_SMS|SEND_SMS)' <<< "$PERMISSIONS"; then
-            echo '::error::The public direct distribution APK declares an SMS permission.'
+            echo '::error::The direct distribution APK declares an SMS permission.'
             exit 1
           fi
-          CERTIFICATE_SHA256="$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$RUNNER_TEMP/Arth.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
+          CERTIFICATE_SHA256="$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$RUNNER_TEMP/SpendSense.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
           test -n "$CERTIFICATE_SHA256"
-          APK_SHA256="$(sha256sum "$RUNNER_TEMP/Arth.apk" | cut -d ' ' -f 1)"
-          APK_BYTES="$(wc -c < "$RUNNER_TEMP/Arth.apk" | tr -d ' ')"
+          APK_SHA256="$(sha256sum "$RUNNER_TEMP/SpendSense.apk" | cut -d ' ' -f 1)"
+          APK_BYTES="$(wc -c < "$RUNNER_TEMP/SpendSense.apk" | tr -d ' ')"
           APK_SIZE="$(awk "BEGIN {printf \"%.1f MB\", $APK_BYTES / (1024 * 1024)}")"
           RELEASE_DATE="$(date -u +%F)"
           export CERTIFICATE_SHA256 APK_SHA256 APK_SIZE RELEASE_DATE VERSION_CODE FULL_VERSION
@@ -141,49 +141,49 @@ jobs:
             releaseDate: process.env.RELEASE_DATE,
             minAndroidVersion: 'Android 8.0 (API 26)',
             targetAndroidVersion: 'Android 15 (API 35)',
-            apkFileName: 'Arth.apk',
+            apkFileName: 'SpendSense.apk',
             apkSize: process.env.APK_SIZE,
             downloadUrl: '/api/android/download',
             githubReleaseUrl: `https://github.com/${process.env.ANDROID_REPOSITORY}/releases/tag/android-latest`,
             sha256: process.env.APK_SHA256,
             signingCertificateSha256: process.env.CERTIFICATE_SHA256,
             highlights: [
-              'This production release uses a new permanent Android application ID. It installs beside the earlier direct package; keep the earlier Arth app until its local records have synced and been checked.',
-              'Native Arth Android app with offline transaction capture and authenticated cloud sync.',
-              'Direct download build requests no SMS permissions. Bank-message access is unavailable in this distribution.',
-              'Signed updates preserve app data when installed over Arth using the same application ID and signing key.',
+              'Native SpendSense Android app with offline transaction capture and authenticated cloud sync.',
+              'Share a bank transaction message to SpendSense to create a private review candidate; message inbox access is not requested.',
+              'Every shared message remains unconfirmed until you review the transaction date and details.',
+              'Signed updates preserve app data when installed over SpendSense using the same application ID and signing key.',
             ],
-            disclaimer: 'This is the native Android application. The Arth website and installable PWA remain available separately. The APK does not request READ_SMS or RECEIVE_SMS. Android requires a user-confirmed install or update; do not uninstall the app to update it. Keep any earlier Arth installation until you have verified its records in your account.',
+            disclaimer: 'This is the native Android application. The SpendSense website and installable PWA remain available separately. The APK does not request READ_SMS or RECEIVE_SMS. To import a transaction notification, share its text to SpendSense; automatic inbox scanning is unavailable. Android requires a user-confirmed install or update; install updates over the existing app to preserve local data.',
           };
           fs.writeFileSync('release.json', JSON.stringify(meta, null, 2) + '\n');
           NODE
-          printf '%s  Arth.apk\n' "$APK_SHA256" > Arth.apk.sha256
+          printf '%s  SpendSense.apk\n' "$APK_SHA256" > SpendSense.apk.sha256
           echo "APK_SIZE=$APK_SIZE" >> "$GITHUB_ENV"
           echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
           echo "CERTIFICATE_SHA256=$CERTIFICATE_SHA256" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/arth-release"
-          cp "$RUNNER_TEMP/Arth.apk" "$RUNNER_TEMP/arth-release/Arth.apk"
-          cp Arth.apk.sha256 release.json "$RUNNER_TEMP/arth-release/"
+          mkdir -p "$RUNNER_TEMP/spendsense-release"
+          cp "$RUNNER_TEMP/SpendSense.apk" "$RUNNER_TEMP/spendsense-release/SpendSense.apk"
+          cp SpendSense.apk.sha256 release.json "$RUNNER_TEMP/spendsense-release/"
           echo "apk_sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Publish stable download channel
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
-          name: Arth for Android ${{ env.FULL_VERSION }}
+          name: SpendSense for Android ${{ env.FULL_VERSION }}
           body: |
-            Official native Arth Android release ${{ env.FULL_VERSION }}.
+            Official native SpendSense Android release ${{ env.FULL_VERSION }}.
 
             **Version:** ${{ env.FULL_VERSION }} (code ${{ env.VERSION_CODE }})
             **Minimum Android:** 8.0 (API 26)
             **APK size:** ${{ env.APK_SIZE }}
             **SHA-256:** `${{ env.APK_SHA256 }}`
 
-            This direct download build does not request SMS permissions. Install and updates require Android's confirmation. Keep the existing app installed when updating to preserve its local data.
+            Share a bank transaction message to the app to import it for review. The APK does not request inbox SMS permissions. Install and updates require Android's confirmation. Keep the existing app installed when updating to preserve local data.
           files: |
-            ${{ runner.temp }}/arth-release/Arth.apk
-            ${{ runner.temp }}/arth-release/Arth.apk.sha256
-            ${{ runner.temp }}/arth-release/release.json
+            ${{ runner.temp }}/spendsense-release/SpendSense.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense.apk.sha256
+            ${{ runner.temp }}/spendsense-release/release.json
           draft: false
           prerelease: false
           make_latest: false
@@ -194,17 +194,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG_VERSION }}
-          name: Arth for Android ${{ env.FULL_VERSION }}
+          name: SpendSense for Android ${{ env.FULL_VERSION }}
           body: |
-            Official native Arth Android release ${{ env.FULL_VERSION }}.
+            Official native SpendSense Android release ${{ env.FULL_VERSION }}.
 
             Version code: ${{ env.VERSION_CODE }}
             Minimum Android: 8.0 (API 26)
             SHA-256: `${{ env.APK_SHA256 }}`
           files: |
-            ${{ runner.temp }}/arth-release/Arth.apk
-            ${{ runner.temp }}/arth-release/Arth.apk.sha256
-            ${{ runner.temp }}/arth-release/release.json
+            ${{ runner.temp }}/spendsense-release/SpendSense.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense.apk.sha256
+            ${{ runner.temp }}/spendsense-release/release.json
           draft: false
           prerelease: false
         env:

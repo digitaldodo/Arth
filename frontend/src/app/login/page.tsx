@@ -171,7 +171,7 @@ export default async function LoginPage({
 
       {/* Subtle Minimal Footer */}
       <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 text-center text-xs font-mono text-[var(--text-muted)]">
-        Arth &middot; Ledger Minimal &middot; Confidential &amp; Sovereign
+        SpendSense &middot; Ledger Minimal &middot; Confidential &amp; Sovereign
       </footer>
     </div>
   );

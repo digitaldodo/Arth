@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const { accessToken, error } = await getNativeUser(request);
     if (error) return error;
-    if (!accessToken) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid Arth sign-in required' }, { status: 401 });
+    if (!accessToken) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid SpendSense sign-in required' }, { status: 401 });
     const source = new URL(request.url).searchParams;
     const query = new URLSearchParams();
     for (const key of ['page', 'page_size', 'type', 'start_date', 'end_date']) {
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const { accessToken, userId, error } = await getNativeUser(request);
     if (error) return error;
-    if (!accessToken || !userId) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid Arth sign-in required' }, { status: 401 });
+    if (!accessToken || !userId) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid SpendSense sign-in required' }, { status: 401 });
 
     const body: unknown = await request.json();
     const transactionPayload = body && typeof body === 'object' && !Array.isArray(body)

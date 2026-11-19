@@ -1,5 +1,5 @@
 /**
- * Arth Username System Utilities & Validation
+ * SpendSense Username System Utilities & Validation
  * Centralized pure utilities, validation rules, collision-safe generation,
  * and suggestion algorithms for user handles.
  */

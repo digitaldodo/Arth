@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   try {
     const { accessToken, error } = await getNativeUser(request);
     if (error) return error;
-    if (!accessToken) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid Arth sign-in required' }, { status: 401 });
+    if (!accessToken) return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid SpendSense sign-in required' }, { status: 401 });
     const backendResponse = await fetch(`${getBackendBaseUrl()}/api/v1/categories`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       cache: 'no-store',

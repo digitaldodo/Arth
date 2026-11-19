@@ -31,24 +31,24 @@ object NativeAuth {
     }
 
     fun freshAccess(context: Context): String {
-        val token = access(context) ?: throw IllegalStateException("Sign in to Arth first.")
+        val token = access(context) ?: throw IllegalStateException("Sign in to SpendSense first.")
         return try {
             val user = request("${BuildConfig.SUPABASE_URL.trimEnd('/')}/auth/v1/user", BuildConfig.SUPABASE_ANON_KEY, token, null)
-            if (user.optString("id") != userId(context)) throw IllegalStateException("The active Arth account changed. Sign in again.")
+            if (user.optString("id") != userId(context)) throw IllegalStateException("The active SpendSense account changed. Sign in again.")
             token
         } catch (_: Exception) {
             val refreshed = request("${BuildConfig.SUPABASE_URL.trimEnd('/')}/auth/v1/token?grant_type=refresh_token", BuildConfig.SUPABASE_ANON_KEY, null,
                 JSONObject().put("refresh_token", refresh(context) ?: throw IllegalStateException("Session expired. Sign in again.")))
             val refreshedUserId = refreshed.optJSONObject("user")?.optString("id")?.takeIf { it.isNotBlank() } ?: userId(context)
-                ?: throw IllegalStateException("Sign in again to Arth.")
-            if (refreshedUserId != userId(context)) throw IllegalStateException("The active Arth account changed. Sign in again.")
+                ?: throw IllegalStateException("Sign in again to SpendSense.")
+            if (refreshedUserId != userId(context)) throw IllegalStateException("The active SpendSense account changed. Sign in again.")
             save(context, refreshed.getString("access_token"), refreshed.getString("refresh_token"), refreshedUserId)
             refreshed.getString("access_token")
         }
     }
 
     fun request(url: String, anonKey: String, bearer: String?, body: JSONObject?): JSONObject {
-        require(url.startsWith("https://", ignoreCase = true)) { "Arth companion requires HTTPS endpoints." }
+        require(url.startsWith("https://", ignoreCase = true)) { "SpendSense companion requires HTTPS endpoints." }
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = if (body == null) "GET" else "POST"
             connectTimeout = 12000; readTimeout = 12000
@@ -60,7 +60,7 @@ object NativeAuth {
             if (body != null) conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (conn.responseCode !in 200..299) throw IllegalStateException(JSONObject(text).optString("message", "Arth request failed (${conn.responseCode})."))
+            if (conn.responseCode !in 200..299) throw IllegalStateException(JSONObject(text).optString("message", "SpendSense request failed (${conn.responseCode})."))
             return if (text.isBlank()) JSONObject() else JSONObject(text)
         } finally { conn.disconnect() }
     }

@@ -283,7 +283,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
 
         {/* Row 2: Full-width concise description */}
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-          Use Arth offline and sync your changes when you&apos;re back online.
+          Use SpendSense offline and sync your changes when you&apos;re back online.
         </p>
 
         {/* Sync Status details */}
@@ -316,7 +316,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
 
         {/* Row 2: Full-width concise description */}
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-          Use Arth offline and sync your changes when you&apos;re back online. Install on your device for standalone access.
+          Use SpendSense offline and sync your changes when you&apos;re back online. Install on your device for standalone access.
         </p>
 
         {/* Action Button */}
@@ -367,7 +367,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
 
         {/* Row 2: Full-width concise description */}
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-          Use Arth offline and sync your changes when you&apos;re back online. Add to Home Screen in Safari.
+          Use SpendSense offline and sync your changes when you&apos;re back online. Add to Home Screen in Safari.
         </p>
 
         {/* Guidance instructions */}
@@ -415,7 +415,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
 
       {/* Row 2: Full-width concise description */}
       <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-        Use Arth offline and sync your changes when you&apos;re back online.
+        Use SpendSense offline and sync your changes when you&apos;re back online.
       </p>
 
       {/* Sync Status details */}

@@ -1,5 +1,5 @@
 /**
- * User-facing error sanitization and messaging utilities for Arth.
+ * User-facing error sanitization and messaging utilities for SpendSense.
  * Enforces the core invariant that internal database codes, SQL errors,
  * PostgREST schema errors, JWT exceptions, or network stack traces
  * are never exposed to the user interface.
@@ -24,7 +24,21 @@ export function sanitizeUserFacingError(
 
   const lower = message.toLowerCase();
 
-  // 1. Authentication, Sessions & Credentials
+  // 1. Username already registered / taken
+  if (
+    lower.includes('already taken') ||
+    lower.includes('username is already taken') ||
+    lower.includes('username already taken') ||
+    lower.includes('occupied by existing') ||
+    lower.includes('choose another username') ||
+    lower.includes('choose another') ||
+    ((lower.includes('uq_profiles_lower_username') || lower.includes('username')) &&
+     (lower.includes('unique') || lower.includes('duplicate key') || lower.includes('23505')))
+  ) {
+    return 'This username is already taken. Please choose another username.';
+  }
+
+  // 2. Authentication, Sessions & Credentials
   if (
     lower.includes('invalid login credentials') ||
     lower.includes('invalid_grant') ||
@@ -56,8 +70,14 @@ export function sanitizeUserFacingError(
     return 'Your authentication session expired or cookies were blocked. Please retry signing in.';
   }
 
-  if (lower.includes('expired_session') || lower.includes('session has expired') || lower.includes('jwt expired')) {
-    return 'Your authentication session has ended. Please sign in again.';
+  if (
+    lower.includes('expired_session') ||
+    lower.includes('session has expired') ||
+    lower.includes('session expired') ||
+    lower.includes('session has ended') ||
+    lower.includes('jwt expired')
+  ) {
+    return 'Your session has expired. Please sign in again.';
   }
 
   if (
@@ -76,7 +96,7 @@ export function sanitizeUserFacingError(
     return 'Passwords do not match. Please verify both fields.';
   }
 
-  // 2. Rate Limits
+  // 3. Rate Limits
   if (
     lower.includes('too many requests') ||
     lower.includes('rate limit') ||
@@ -86,19 +106,35 @@ export function sanitizeUserFacingError(
     return 'Too many attempts in a short period. Please wait a few moments before trying again.';
   }
 
-  // 3. Network & Connection
+  // 4. Temporary backend unavailability / Gateway failures
   if (
+    lower.includes('backend service is currently unavailable') ||
+    lower.includes('bad gateway') ||
+    lower.includes('service unavailable') ||
+    lower.includes('temporarily unavailable')
+  ) {
+    return 'SpendSense is temporarily unavailable. Your existing financial records have not been confirmed as loaded.';
+  }
+
+  // 5. Network & Connection Failures (Node undici, browser fetch, timeout, unreachable)
+  if (
+    lower.includes('fetch failed') ||
     lower.includes('failed to fetch') ||
     lower.includes('networkerror') ||
     lower.includes('econnrefused') ||
+    lower.includes('enotfound') ||
     lower.includes('etimedout') ||
     lower.includes('network request failed') ||
-    lower.includes('abort')
+    lower.includes('unable to connect') ||
+    lower.includes('could not connect') ||
+    lower.includes('abort') ||
+    lower.includes('undici') ||
+    lower.includes('typeerror: fetch failed')
   ) {
     return 'Unable to connect to the server. Please check your internet connection and try again.';
   }
 
-  // 4. Database, SQL, Postgres, PostgREST internals leakage prevention
+  // 6. Database, SQL, Postgres, PostgREST internals leakage prevention
   if (
     lower.includes('pgrst') ||
     lower.includes('postgres') ||

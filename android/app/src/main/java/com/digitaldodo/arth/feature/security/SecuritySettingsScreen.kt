@@ -179,7 +179,7 @@ fun SecuritySettingsScreen(
                     Text(
                         text = when (biometricStatus) {
                             BiometricStatus.READY ->
-                                "When enabled, Arth prompts for your fingerprint whenever you open the app or return after the configured timeout. Device PIN, pattern, or password will be used as a fallback."
+                                "When enabled, SpendSense prompts for your fingerprint whenever you open the app or return after the configured timeout. Device PIN, pattern, or password will be used as a fallback."
                             BiometricStatus.NOT_ENROLLED ->
                                 "No fingerprint is registered on this device. You can enroll a fingerprint in your device Settings, or use your device PIN/pattern as a fallback."
                             BiometricStatus.NO_HARDWARE ->
@@ -228,7 +228,7 @@ fun SecuritySettingsScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Require authentication when returning to Arth after moving it to the background.",
+                            text = "Require authentication when returning to SpendSense after moving it to the background.",
                             style = MaterialTheme.typography.bodySmall,
                             color = ArthTheme.colors.textSecondary
                         )
@@ -300,7 +300,7 @@ fun SecuritySettingsScreen(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "Arth uses standard AndroidX BiometricPrompt. Biometric templates and cryptographic keys never leave your device's hardware security module (Secure Element / TEE). Arth never reads, collects, or transmits your raw fingerprint or biometric data.",
+                        text = "SpendSense uses standard AndroidX BiometricPrompt. Biometric templates and cryptographic keys never leave your device's hardware security module (Secure Element / TEE). SpendSense never reads, collects, or transmits your raw fingerprint or biometric data.",
                         style = MaterialTheme.typography.bodySmall,
                         color = ArthTheme.colors.textSecondary
                     )

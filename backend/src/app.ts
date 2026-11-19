@@ -64,6 +64,5 @@ export async function buildApp(
     config,
     service: customBalanceService,
   });
-
   return app;
 }

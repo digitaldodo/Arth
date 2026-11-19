@@ -274,7 +274,7 @@ export function SheetsConnectionCard() {
               Google Sheets Synchronization
             </h3>
             <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-              Automatically sync your Arth transactions to your personal Google Sheet.
+              Automatically sync your SpendSense transactions to your personal Google Sheet.
             </p>
           </div>
         </div>
@@ -468,7 +468,7 @@ export function SheetsConnectionCard() {
                 Step 1: Share your Google Sheet
               </div>
               <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so Arth can add your transactions.
+                Create a spreadsheet in Google Sheets and share it with the email address below. Set the permission to Editor so SpendSense can add your transactions.
               </p>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
                 <div className="flex-1 min-w-0 bg-[var(--bg-canvas)] border border-[var(--border-hairline)] rounded-lg px-2.5 py-1.5 flex items-center overflow-hidden">
@@ -584,7 +584,7 @@ export function SheetsConnectionCard() {
           {/* Privacy Note */}
           <p className="text-[11px] text-[var(--text-muted)] flex items-start gap-1.5 pt-0.5 leading-relaxed">
             <span className="text-xs shrink-0" aria-hidden="true">🔒</span>
-            <span>Your spreadsheet remains private. Arth uses the sharing permission you grant to sync your transactions.</span>
+            <span>Your spreadsheet remains private. SpendSense uses the sharing permission you grant to sync your transactions.</span>
           </p>
         </form>
       )}

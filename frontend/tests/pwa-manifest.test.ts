@@ -34,8 +34,8 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
     const { default: manifest } = await import('../src/app/manifest.js');
     const m = manifest();
 
-    assert.equal(m.name, 'Arth — Personal Finance Tracker');
-    assert.equal(m.short_name, 'Arth');
+    assert.equal(m.name, 'SpendSense — Personal Finance Tracker');
+    assert.equal(m.short_name, 'SpendSense');
     assert.equal(m.start_url, '/offline?arth_runtime=installed-mobile-pwa');
     assert.equal(m.scope, '/');
     assert.equal(m.id, '/');

@@ -1,0 +1,13 @@
+export * from './shared/contracts.js';
+export * from './shared/feature-flags.js';
+export * as SafeToSpend from './modules/safe-to-spend/index.js';
+export * as PurchaseSimulator from './modules/purchase-simulator/index.js';
+export * as EmiAffordability from './modules/emi-affordability/index.js';
+export * as GoalPlanner from './modules/goal-planner/index.js';
+export * as FirePlanner from './modules/fire-planner/index.js';
+export * as SpendingForecast from './modules/spending-forecast/index.js';
+export * as RecurringPayments from './modules/recurring-payments/index.js';
+export * as PersonalizedCategories from './modules/personalized-categories/index.js';
+export * as TaxCalculation from './modules/tax-calculation/index.js';
+export * as AccountAggregator from './modules/account-aggregator/index.js';
+export * as BehavioralInsights from './modules/behavioral-insights/index.js';

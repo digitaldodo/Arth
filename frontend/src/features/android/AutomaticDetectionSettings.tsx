@@ -17,21 +17,21 @@ export function AutomaticDetectionSettings() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" />
           </svg>
           <div>
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Automatic transaction detection</h2>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Import a bank message</h2>
             <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-              Manage notification access, selected apps, privacy, and pending reviews in the Android companion. Notifications are parsed on-device; Arth asks you to confirm before saving.
+              On Android, share a selected transaction message from your Messages app to SpendSense. It is parsed on-device and kept for your review before anything is added to your ledger. Inbox access and automatic notification reading are not supported by this direct-download release.
             </p>
           </div>
         </div>
         {isAndroid ? (
           <a
-            href="arth://detection"
+            href="/download"
             className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-md border border-[var(--action-secondary-border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 active:scale-[0.99] sm:w-auto"
           >
-            Open Android detection settings <span aria-hidden="true" className="ml-2">→</span>
+            Get the Android app <span aria-hidden="true" className="ml-2">→</span>
           </a>
         ) : (
-          <p className="shrink-0 text-xs text-[var(--text-muted)]">Available in the Arth Android companion.</p>
+          <p className="shrink-0 text-xs text-[var(--text-muted)]">Requires the SpendSense Android app.</p>
         )}
       </div>
     </section>

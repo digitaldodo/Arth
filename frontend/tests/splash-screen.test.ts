@@ -94,13 +94,13 @@ describe('PWA Splash Screen & Initialization Experience', () => {
       );
     });
 
-    test('renders brand name Arth, tagline, and ArthSymbol on elevated contrasting surface', () => {
+    test('renders brand name SpendSense, tagline, and emblem on elevated contrasting surface', () => {
       const markup = renderToStaticMarkup(React.createElement(SplashScreen));
 
       // Brand wordmark
       assert.ok(
-        markup.includes('Arth</h1>') || markup.includes('>Arth<'),
-        'SplashScreen must display brand name Arth'
+        markup.includes('SpendSense</h1>') || markup.includes('>SpendSense<'),
+        'SplashScreen must display brand name SpendSense'
       );
 
       // Tagline
@@ -122,7 +122,7 @@ describe('PWA Splash Screen & Initialization Experience', () => {
       // SVG logo symbol is present
       assert.ok(
         markup.includes('<svg') && markup.includes('</svg>'),
-        'SplashScreen must render the vector Arth emblem'
+        'SplashScreen must render the vector SpendSense emblem'
       );
     });
 

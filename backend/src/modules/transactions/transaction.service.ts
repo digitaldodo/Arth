@@ -32,6 +32,9 @@ export interface StoredTransactionRecord {
   necessity: 'essential' | 'optional' | 'luxury' | null;
   description: string | null;
   notes: string | null;
+  account_id?: string | null;
+  import_batch_id?: string | null;
+  statement_reference?: string | null;
   recorded_at?: string;
   created_at: string;
   updated_at: string;
@@ -118,6 +121,9 @@ function mapToTransactionDTO(
     necessity: rec.necessity,
     description: rec.description,
     notes: rec.notes,
+    ...(rec.account_id ? { account_id: rec.account_id } : {}),
+    ...(rec.import_batch_id ? { import_batch_id: rec.import_batch_id } : {}),
+    ...(rec.statement_reference ? { statement_reference: rec.statement_reference } : {}),
     recorded_at: rec.recorded_at || rec.created_at,
     created_at: rec.created_at,
     updated_at: rec.updated_at,
@@ -160,7 +166,7 @@ export class SupabaseTransactionService implements ITransactionService {
     // 1. Check if transaction with this ID already exists
     const { data: existing, error: existingErr } = await client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .eq('id', input.id)
       .maybeSingle();
 
@@ -185,7 +191,10 @@ export class SupabaseTransactionService implements ITransactionService {
         existing.payment_method === input.payment_method &&
         (existing.necessity ?? null) === input.necessity &&
         (existing.description ?? null) === input.description &&
-        (existing.notes ?? null) === input.notes;
+        (existing.notes ?? null) === input.notes &&
+        (existing.account_id ?? null) === (input.account_id ?? null) &&
+        (existing.import_batch_id ?? null) === (input.import_batch_id ?? null) &&
+        (existing.statement_reference ?? null) === (input.statement_reference ?? null);
 
       if (isMatch) {
         const catName = (existing.categories as unknown as { name?: string } | null)?.name;
@@ -233,6 +242,9 @@ export class SupabaseTransactionService implements ITransactionService {
       necessity: input.necessity,
       description: input.description,
       notes: input.notes,
+      account_id: input.account_id || null,
+      import_batch_id: input.import_batch_id || null,
+      statement_reference: input.statement_reference || null,
       recorded_at: input.recorded_at,
     };
     if (input.created_at) {
@@ -242,7 +254,7 @@ export class SupabaseTransactionService implements ITransactionService {
     const { data: inserted, error: insertErr } = await client
       .from('transactions')
       .insert(insertPayload)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at')
       .single();
 
     if (insertErr || !inserted) {
@@ -257,7 +269,7 @@ export class SupabaseTransactionService implements ITransactionService {
         // Concurrent replay detected: another request inserted with this ID
         const { data: concurrentExisting } = await client
           .from('transactions')
-          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
           .eq('id', input.id)
           .maybeSingle();
 
@@ -276,7 +288,10 @@ export class SupabaseTransactionService implements ITransactionService {
             concurrentExisting.payment_method === input.payment_method &&
             (concurrentExisting.necessity ?? null) === input.necessity &&
             (concurrentExisting.description ?? null) === input.description &&
-            (concurrentExisting.notes ?? null) === input.notes;
+            (concurrentExisting.notes ?? null) === input.notes &&
+            (concurrentExisting.account_id ?? null) === (input.account_id ?? null) &&
+            (concurrentExisting.import_batch_id ?? null) === (input.import_batch_id ?? null) &&
+            (concurrentExisting.statement_reference ?? null) === (input.statement_reference ?? null);
 
           if (isMatch) {
             const catName = (concurrentExisting.categories as unknown as { name?: string } | null)?.name;
@@ -310,7 +325,7 @@ export class SupabaseTransactionService implements ITransactionService {
     let qb = client
       .from('transactions')
       .select(
-        'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)',
+        'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)',
         { count: 'exact' }
       )
       .is('deleted_at', null);
@@ -435,7 +450,7 @@ export class SupabaseTransactionService implements ITransactionService {
     // 1. Fetch existing transaction belonging to caller
     const { data: existing, error: fetchErr } = await client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .eq('id', id)
       .maybeSingle();
 
@@ -511,7 +526,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .from('transactions')
       .update(updateData)
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .single();
 
     if (updateErr || !updated) {
@@ -588,7 +603,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .from('transactions')
       .update({ deleted_at: null, updated_at: now })
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
       .single();
 
     if (updateErr || !restored) {
@@ -698,7 +713,10 @@ export class InMemoryTransactionService implements ITransactionService {
           existing.payment_method === input.payment_method &&
           (existing.necessity ?? null) === input.necessity &&
           (existing.description ?? null) === input.description &&
-          (existing.notes ?? null) === input.notes;
+          (existing.notes ?? null) === input.notes &&
+          (existing.account_id ?? null) === (input.account_id ?? null) &&
+          (existing.import_batch_id ?? null) === (input.import_batch_id ?? null) &&
+          (existing.statement_reference ?? null) === (input.statement_reference ?? null);
 
         if (isMatch) {
           const cat = this.categories.find((c) => c.id === existing.category_id);
@@ -737,7 +755,7 @@ export class InMemoryTransactionService implements ITransactionService {
       const now = new Date(nowMs).toISOString();
       const effectiveRecordedAt = input.recorded_at || input.created_at || now;
 
-      if (input.type === 'expense' && currentBalances) {
+      if (input.type === 'expense' && currentBalances && !input.account_id) {
         const isPostBaseline = !currentBalances.balances_configured_at || effectiveRecordedAt > currentBalances.balances_configured_at;
         if (isPostBaseline) {
           const avail = input.payment_method === 'cash' ? currentBalances.current_cash_paise : currentBalances.current_online_paise;
@@ -761,6 +779,9 @@ export class InMemoryTransactionService implements ITransactionService {
         necessity: input.necessity,
         description: input.description,
         notes: input.notes,
+        account_id: input.account_id || null,
+        import_batch_id: input.import_batch_id || null,
+        statement_reference: input.statement_reference || null,
         recorded_at: effectiveRecordedAt,
         created_at: input.created_at || now,
         updated_at: now,
@@ -949,7 +970,7 @@ export class InMemoryTransactionService implements ITransactionService {
       }
     }
 
-    if (finalType === 'expense' && this.balanceService) {
+    if (finalType === 'expense' && this.balanceService && existing.account_id == null) {
       const currentBalances = await this.balanceService.getBalances(userId);
       const isPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
       if (isPostBaseline) {
@@ -1002,7 +1023,7 @@ export class InMemoryTransactionService implements ITransactionService {
       throw new NotFoundError('Transaction not found or already deleted');
     }
 
-    if (existing.type === 'income' && this.balanceService) {
+    if (existing.type === 'income' && this.balanceService && existing.account_id == null) {
       const currentBalances = await this.balanceService.getBalances(userId);
       const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
       if (isExistingPostBaseline) {
@@ -1040,7 +1061,7 @@ export class InMemoryTransactionService implements ITransactionService {
       throw new NotFoundError('Transaction not found');
     }
 
-    if (existing.type === 'expense' && this.balanceService) {
+    if (existing.type === 'expense' && this.balanceService && existing.account_id == null) {
       const currentBalances = await this.balanceService.getBalances(userId);
       const isExistingPostBaseline = !currentBalances.balances_configured_at || (existing.recorded_at || existing.created_at) > currentBalances.balances_configured_at;
       if (isExistingPostBaseline) {

@@ -120,7 +120,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
         startDate: '2026-10-01',
         endDate: '2026-10-31',
       });
-      assert.equal(filename, 'arth-statement-ansh-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(filename, 'spendsense-statement-ansh-2026-10-01-to-2026-10-31.pdf');
     });
 
     test('normalizes uppercase, leading @ symbol, and special characters', () => {
@@ -129,7 +129,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
         startDate: '2026-10-01',
         endDate: '2026-10-31',
       });
-      assert.equal(filename, 'arth-statement-digital_dodo-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(filename, 'spendsense-statement-digital_dodo-2026-10-01-to-2026-10-31.pdf');
     });
 
     test('gracefully falls back when username is absent', () => {
@@ -138,7 +138,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
         startDate: '2026-10-01',
         endDate: '2026-10-31',
       });
-      assert.equal(filename, 'arth-statement-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(filename, 'spendsense-statement-2026-10-01-to-2026-10-31.pdf');
     });
 
     test('handles empty username and missing dates', () => {
@@ -147,7 +147,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
         startDate: undefined,
         endDate: undefined,
       });
-      assert.ok(filename.startsWith('arth-statement-all-to-'));
+      assert.ok(filename.startsWith('spendsense-statement-all-to-'));
       assert.ok(filename.endsWith('.pdf'));
     });
   });
@@ -166,7 +166,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.equal(ref1, ref2, 'Statement reference must be deterministic for identical parameters');
-      assert.ok(ref1.startsWith('ARTH-STMT-20261031-'));
+      assert.ok(ref1.startsWith('SPEND-STMT-20261031-'));
     });
 
     test('getTimestampIST returns date formatted in Asia/Kolkata timezone with IST suffix in DD/MM/YYYY format', () => {
@@ -250,7 +250,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.ok(result.doc, 'jsPDF instance must be returned');
-      assert.equal(result.filename, 'arth-statement-digitaldodo-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(result.filename, 'spendsense-statement-digitaldodo-2026-10-01-to-2026-10-31.pdf');
       assert.equal(result.doc.getNumberOfPages(), 1, 'Short statement must fit gracefully on a single page');
     });
 
@@ -291,7 +291,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.ok(result.doc.getNumberOfPages() >= 2, 'Large statement must paginate naturally');
-      assert.equal(result.filename, 'arth-statement-ansh-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(result.filename, 'spendsense-statement-ansh-2026-10-01-to-2026-10-31.pdf');
     });
 
     test('exports income-only statement with zero expense metrics and accurate Net Cash Flow', async () => {
@@ -343,7 +343,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.equal(result.doc.getNumberOfPages(), 1);
-      assert.equal(result.filename, 'arth-statement-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(result.filename, 'spendsense-statement-2026-10-01-to-2026-10-31.pdf');
     });
 
     test('handles missing profile fields gracefully without crashing or placeholder leaks', async () => {
@@ -356,7 +356,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.ok(result.doc);
-      assert.ok(result.filename.startsWith('arth-statement-all-to-'));
+      assert.ok(result.filename.startsWith('spendsense-statement-all-to-'));
       assert.equal(result.encryptedBytes, undefined, 'Unprotected export must not return encryptedBytes');
     });
 
@@ -375,7 +375,7 @@ describe('Personal Financial Statement PDF Redesign', () => {
       });
 
       assert.ok(result.doc);
-      assert.equal(result.filename, 'arth-statement-digitaldodo-2026-10-01-to-2026-10-31.pdf');
+      assert.equal(result.filename, 'spendsense-statement-digitaldodo-2026-10-01-to-2026-10-31.pdf');
 
       const rawStr = Buffer.from(result.doc.output('arraybuffer')).toString('binary');
       assert.ok(
@@ -383,8 +383,8 @@ describe('Personal Financial Statement PDF Redesign', () => {
         'PDF metadata must include Personal Transaction Statement title'
       );
       assert.ok(
-        rawStr.includes('/Creator (Arth Personal Finance)'),
-        'PDF metadata must include Arth Personal Finance creator'
+        rawStr.includes('/Creator (SpendSense Personal Finance)'),
+        'PDF metadata must include SpendSense Personal Finance creator'
       );
     });
 

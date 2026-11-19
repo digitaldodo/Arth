@@ -248,7 +248,7 @@ export function ChangePasswordModal({
                 onChange={(event) => setSettingWithoutExistingPassword(event.target.checked)}
                 className="mt-0.5"
               />
-              <span>I do not have an existing Arth password; set one for this account.</span>
+              <span>I do not have an existing SpendSense password; set one for this account.</span>
             </label>
           )}
 

@@ -18,7 +18,7 @@ export async function getNativeUser(request: Request) {
 }
 
 function unauthorized() {
-  return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid Arth sign-in required' }, {
+  return NextResponse.json({ statusCode: 401, error: 'Unauthorized', message: 'Valid SpendSense sign-in required' }, {
     status: 401,
     headers: { 'Cache-Control': 'no-store' },
   });

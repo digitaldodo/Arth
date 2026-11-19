@@ -28,7 +28,7 @@ const unavailableRelease: AndroidReleaseInfo = {
   releaseDate: '',
   minAndroidVersion: 'Android 8.0 (API 26)',
   targetAndroidVersion: 'Android 15 (API 35)',
-  apkFileName: 'Arth.apk',
+  apkFileName: 'SpendSense.apk',
   apkSize: '',
   downloadUrl: '/api/android/download',
   githubReleaseUrl: '',
@@ -51,7 +51,7 @@ export async function GET() {
     const headers = {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
-      'User-Agent': 'Arth-Android-Release/1.0',
+      'User-Agent': 'SpendSense-Android-Release/1.0',
       'X-GitHub-Api-Version': '2022-11-28',
     };
     const releaseResponse = await fetch(
@@ -64,9 +64,9 @@ export async function GET() {
 
     const release = await releaseResponse.json();
     const assets = Array.isArray(release.assets) ? release.assets : [];
-    const apkAsset = assets.find((asset: { name?: string }) => asset.name === 'Arth.apk');
+    const apkAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense.apk');
     const metadataAsset = assets.find((asset: { name?: string }) => asset.name === 'release.json');
-    const checksumAsset = assets.find((asset: { name?: string }) => asset.name === 'Arth.apk.sha256');
+    const checksumAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense.apk.sha256');
     if (!apkAsset?.id || !metadataAsset?.id || !checksumAsset?.id) {
       return NextResponse.json(unavailableRelease, { status: 503, headers: noStoreHeaders });
     }

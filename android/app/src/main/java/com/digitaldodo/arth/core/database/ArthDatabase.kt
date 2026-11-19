@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
         SmsSuggestionEntity::class,
         SyncOutboxEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class ArthDatabase : RoomDatabase() {
@@ -35,6 +35,20 @@ abstract class ArthDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: ArthDatabase? = null
 
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN bank TEXT")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN accountMask TEXT")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN classification TEXT NOT NULL DEFAULT 'DEBIT'")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN balancePaise INTEGER")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN duplicateStatus TEXT NOT NULL DEFAULT 'UNIQUE'")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN matchedTransactionId TEXT")
+                db.execSQL("ALTER TABLE sms_suggestions ADD COLUMN rawSnippet TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_status ON sms_suggestions(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_sms_ref ON sms_suggestions(refNumber)")
+            }
+        }
+
         fun getInstance(context: Context): ArthDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context.applicationContext).also { INSTANCE = it }
@@ -46,7 +60,8 @@ abstract class ArthDatabase : RoomDatabase() {
                 context,
                 ArthDatabase::class.java,
                 "arth_native.db"
-            ).addCallback(object : Callback() {
+            ).addMigrations(MIGRATION_2_3)
+            .addCallback(object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
                     CoroutineScope(Dispatchers.IO).launch {

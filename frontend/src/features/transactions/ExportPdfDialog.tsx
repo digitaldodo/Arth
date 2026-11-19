@@ -312,7 +312,7 @@ export function ExportPdfDialog({
     if (passwordOption === 'account') {
       const trimmed = accountPassword.trim();
       if (!trimmed) {
-        setExportError('Please enter your Arth account password.');
+        setExportError('Please enter your SpendSense account password.');
         return;
       }
 
@@ -726,7 +726,7 @@ export function ExportPdfDialog({
                           htmlFor="opt-account-pw"
                           className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
                         >
-                          Use my Arth account password
+                          Use my SpendSense account password
                         </label>
                         <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
                           Re-authenticate with your account password to secure this PDF.
@@ -735,7 +735,7 @@ export function ExportPdfDialog({
                         {/* Marker status is advisory; the server verifies the credential itself. */}
                         {!hasPassword && passwordOption === 'account' && (
                           <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-200 rounded text-[11px]">
-                            Enter your existing Arth password. If you do not have one, choose a separate PDF password below.
+                            Enter your existing SpendSense password. If you do not have one, choose a separate PDF password below.
                           </div>
                         )}
 
@@ -748,7 +748,7 @@ export function ExportPdfDialog({
                                 value={accountPassword}
                                 onChange={(e) => setAccountPassword(e.target.value)}
                                 disabled={isExporting}
-                                placeholder="Enter your current Arth password"
+                                placeholder="Enter your current SpendSense password"
                                 autoComplete="current-password"
                                 className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-md px-2.5 py-1.5 pr-8 text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-hidden"
                               />
@@ -765,7 +765,7 @@ export function ExportPdfDialog({
 
                             {/* Security Warning */}
                             <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded text-[11px] text-amber-900 dark:text-amber-200 leading-normal">
-                              ⚠️ <strong>Important Security Guidance:</strong> Anyone who knows your Arth account password may also be able to access your Arth account. Share this password carefully.
+                              ⚠️ <strong>Important Security Guidance:</strong> Anyone who knows your SpendSense account password may also be able to access your SpendSense account. Share this password carefully.
                             </div>
                           </div>
                         )}
@@ -799,7 +799,7 @@ export function ExportPdfDialog({
                           Use a separate PDF password (Recommended for sharing)
                         </label>
                         <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-                          Choose a dedicated password specifically for this document. Use this option to share with accountants, banks, or third parties without revealing your Arth account credentials.
+                          Choose a dedicated password specifically for this document. Use this option to share with accountants, banks, or third parties without revealing your SpendSense account credentials.
                         </p>
 
                         {/* Separate password inputs */}

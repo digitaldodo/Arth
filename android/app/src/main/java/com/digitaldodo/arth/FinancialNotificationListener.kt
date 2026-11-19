@@ -68,7 +68,7 @@ class FinancialNotificationListener : NotificationListenerService() {
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(if (hideDetails) "Possible transaction detected" else "Possible transaction · ${candidate?.amount?.let { "₹$it" } ?: "Review details"}")
-            .setContentText(if (hideDetails) "Open Arth to review the details" else listOfNotNull(candidate?.amount?.let { "₹$it" }, candidate?.merchant, candidate?.date).joinToString(" · ").ifBlank { "Open Arth to review the details" })
+            .setContentText(if (hideDetails) "Open SpendSense to review the details" else listOfNotNull(candidate?.amount?.let { "₹$it" }, candidate?.merchant, candidate?.date).joinToString(" · ").ifBlank { "Open SpendSense to review the details" })
             .setVisibility(if (hideDetails) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_EVENT)
             .setAutoCancel(true).setContentIntent(pending).build()

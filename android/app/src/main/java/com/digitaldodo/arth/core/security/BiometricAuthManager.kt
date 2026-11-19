@@ -85,7 +85,7 @@ object BiometricAuthManager {
      */
     fun authenticate(
         activity: FragmentActivity,
-        title: String = "Unlock Arth",
+        title: String = "Unlock SpendSense",
         subtitle: String = "Authenticate to access your financial information",
         allowDeviceCredential: Boolean = true,
         onSuccess: () -> Unit,

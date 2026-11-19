@@ -193,7 +193,7 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       );
     });
 
-    test('ExportPdfDialog provides both Arth account password and separate PDF password options', () => {
+    test('ExportPdfDialog provides both SpendSense account password and separate PDF password options', () => {
       const dialogPath = path.resolve(
         __dirname,
         '../src/features/transactions/ExportPdfDialog.tsx'
@@ -201,15 +201,15 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       const content = fs.readFileSync(dialogPath, 'utf8');
 
       assert.ok(
-        content.includes('Use my Arth account password'),
-        'Must provide Arth account password option'
+        content.includes('Use my SpendSense account password'),
+        'Must provide SpendSense account password option'
       );
       assert.ok(
         content.includes('Use a separate PDF password'),
         'Must provide separate PDF password option'
       );
       assert.ok(
-        content.includes('Anyone who knows your Arth account password may also be able to access your Arth account'),
+        content.includes('Anyone who knows your SpendSense account password may also be able to access your SpendSense account'),
         'Must display security warning for account password usage'
       );
       assert.ok(
@@ -226,7 +226,7 @@ describe('Arth UX Refinements & PDF Protection Test Suite', () => {
       const content = fs.readFileSync(dialogPath, 'utf8');
 
       assert.ok(
-        content.includes('Enter your existing Arth password. If you do not have one'),
+        content.includes('Enter your existing SpendSense password. If you do not have one'),
         'Must allow real verification even when status metadata is missing'
       );
     });

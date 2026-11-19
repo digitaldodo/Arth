@@ -76,14 +76,14 @@ export function SplashScreen({
             <ArthSymbol
               theme="white"
               className="w-12 h-12 sm:w-14 sm:h-14 drop-shadow-sm"
-              title="Arth"
+              title="SpendSense"
             />
           </div>
         </div>
 
         {/* Brand Name */}
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#F5F5F4] font-sans">
-          Arth
+          SpendSense
         </h1>
 
         {/* Brand Tagline */}
@@ -139,7 +139,7 @@ export function SplashScreen({
             ? `Error: ${errorMessage}`
             : isOffline
               ? 'App is offline'
-              : activeMessage || 'Loading Arth ledger'}
+              : activeMessage || 'Loading SpendSense ledger'}
         </span>
       </div>
     </div>

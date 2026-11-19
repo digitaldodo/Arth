@@ -214,7 +214,7 @@ export function UsernameClaimForm({
       </div>
 
       <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-        Choose a unique username to sign in to Arth with your username instead of email. Lowercase letters, numbers, and underscores only.
+        Choose a unique username to sign in to SpendSense with your username instead of email. Lowercase letters, numbers, and underscores only.
       </p>
 
       {errorMessage && (

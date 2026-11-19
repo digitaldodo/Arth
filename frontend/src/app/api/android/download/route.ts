@@ -11,7 +11,7 @@ export async function GET() {
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
-    'User-Agent': 'Arth-Android-Release/1.0',
+    'User-Agent': 'SpendSense-Android-Release/1.0',
     'X-GitHub-Api-Version': '2022-11-28',
   };
 
@@ -25,7 +25,7 @@ export async function GET() {
     }
 
     const release = await releaseResponse.json();
-    const apkAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'Arth.apk');
+    const apkAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'SpendSense.apk');
     const metadataAsset = release.assets?.find((asset: { name?: string; id?: number }) => asset.name === 'release.json');
     if (!apkAsset?.id || !metadataAsset?.id) {
       return NextResponse.json({ error: 'The current Android package is not available.' }, { status: 503 });
@@ -65,7 +65,7 @@ export async function GET() {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.android.package-archive',
-          'Content-Disposition': 'attachment; filename="Arth.apk"',
+          'Content-Disposition': 'attachment; filename="SpendSense.apk"',
           'Content-Length': String(apkAsset.size),
           'Cache-Control': 'private, no-store, max-age=0',
           'X-Content-Type-Options': 'nosniff',

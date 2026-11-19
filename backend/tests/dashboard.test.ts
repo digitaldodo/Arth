@@ -5,7 +5,7 @@ import { buildApp } from '../src/app.js';
 import { InMemoryTransactionService } from '../src/modules/transactions/transaction.service.js';
 import { InMemoryCategoryService } from '../src/modules/categories/category.service.js';
 import { InMemoryPeopleService } from '../src/modules/people/people.service.js';
-import { InMemoryDashboardService, SupabaseDashboardService } from '../src/modules/dashboard/dashboard.service.js';
+import { InMemoryDashboardService, SupabaseDashboardService, type InMemoryTransactionLink } from '../src/modules/dashboard/dashboard.service.js';
 import type { FastifyInstance } from 'fastify';
 import type { DashboardSummaryResponse } from '@arth/contracts';
 
@@ -15,6 +15,7 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
   let catService: InMemoryCategoryService;
   let peopleService: InMemoryPeopleService;
   let dashboardService: InMemoryDashboardService;
+  const transactionLinks: InMemoryTransactionLink[] = [];
 
   const userA = {
     userId: '11111111-1111-7111-8111-111111111111',
@@ -40,7 +41,7 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
     catService.seedDefaults(userA.userId);
     catService.seedDefaults(userB.userId);
 
-    dashboardService = new InMemoryDashboardService(txService, catService);
+    dashboardService = new InMemoryDashboardService(txService, catService, transactionLinks);
 
     const mockVerifier = async (token: string) => {
       if (token === 'user-a-token') return userA;
@@ -329,6 +330,25 @@ describe('Backend Dashboard Summary & Financial Aggregation API', () => {
     // Total expenses should still be ₹10,000 (not ₹12,500)
     assert.equal(body.expenses_paise, 1000000);
     assert.ok(!body.recent_transactions.some((t) => t.id === deletedTxId));
+  });
+
+  test('confirmed transfer pairs remain visible in the ledger but are excluded from income and spending totals', async () => {
+    const categories = await catService.listCategories(userA.userId, {});
+    const incomeCategory = categories.categories.find((category) => category.type === 'income')!;
+    const expenseCategory = categories.categories.find((category) => category.type === 'expense')!;
+    const debitId = uuidv7(), creditId = uuidv7();
+    for (const [id, type, category] of [[debitId, 'expense', expenseCategory], [creditId, 'income', incomeCategory]] as const) {
+      await txService.createTransaction(userA.userId, {
+        id, amount_paise: 500000n, type, category_id: category.id, transaction_date: '2026-08-01',
+        payment_method: 'online', necessity: type === 'expense' ? 'essential' : null,
+        description: 'NEFT self transfer', notes: null,
+      });
+    }
+    transactionLinks.push({ user_id: userA.userId, source_transaction_id: debitId, target_transaction_id: creditId, relationship: 'transfer_pair', status: 'confirmed' });
+    const result = await dashboardService.getSummary(userA.userId, { start_date: '2026-08-01', end_date: '2026-08-01' });
+    assert.equal(result.income_paise, 0);
+    assert.equal(result.expenses_paise, 0);
+    assert.equal(result.recent_transactions.length, 2);
   });
 
   // 10. EXPLICIT DATA-ISOLATION RULE: People obligations and settlements never affect dashboard totals

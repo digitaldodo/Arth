@@ -368,7 +368,7 @@ export class InMemoryBalanceService implements IBalanceService {
 
     if (this.transactionService) {
       for (const t of this.transactionService.transactions) {
-        if (t.user_id !== userId || t.deleted_at !== null) continue;
+        if (t.user_id !== userId || t.deleted_at !== null || t.account_id != null) continue;
         if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
         const paise = BigInt(t.amount_paise);
         if (t.payment_method === 'cash') {
@@ -635,7 +635,7 @@ export class InMemoryBalanceService implements IBalanceService {
 
       if (this.transactionService) {
         for (const t of this.transactionService.transactions) {
-          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (t.user_id !== userId || t.deleted_at !== null || t.account_id != null) continue;
           if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
           const paise = BigInt(t.amount_paise);
           if (t.payment_method === 'cash') {
@@ -727,7 +727,7 @@ export class InMemoryBalanceService implements IBalanceService {
 
       if (this.transactionService) {
         for (const t of this.transactionService.transactions) {
-          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (t.user_id !== userId || t.deleted_at !== null || t.account_id != null) continue;
           if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
           const paise = BigInt(t.amount_paise);
           if (t.payment_method === 'cash') {
@@ -791,7 +791,7 @@ export class InMemoryBalanceService implements IBalanceService {
 
       if (this.transactionService) {
         for (const t of this.transactionService.transactions) {
-          if (t.user_id !== userId || t.deleted_at !== null) continue;
+          if (t.user_id !== userId || t.deleted_at !== null || t.account_id != null) continue;
           if (starting.balances_configured_at && (t.recorded_at || t.created_at) <= starting.balances_configured_at) continue;
           const paise = BigInt(t.amount_paise);
           if (t.payment_method === 'cash') {

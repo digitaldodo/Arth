@@ -128,7 +128,7 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
       const content = fs.readFileSync(offlineDbPath, 'utf8');
 
       assert.ok(
-        /const DB_VERSION = [23456];/.test(content),
+        /const DB_VERSION = [234567];/.test(content),
         'offline-db must be at version 2 or higher'
       );
       assert.ok(

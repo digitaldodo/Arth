@@ -1,5 +1,5 @@
 /**
- * Core currency and date formatting utilities for Arth.
+ * Core currency and date formatting utilities for SpendSense.
  * Adheres strictly to ANTIGRAVITY.md (Rule 5: amounts in paise)
  * and ARTH_DESIGN_SYSTEM.md Section 3.2 (Indian lakh/crore notation).
  */

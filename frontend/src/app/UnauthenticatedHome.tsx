@@ -13,6 +13,8 @@ export function UnauthenticatedHome() {
   const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
+    // Device detection is client-only; defer it to avoid server/client hydration disagreement.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAndroid(isAndroidPhone());
   }, []);
 
@@ -97,9 +99,9 @@ export function UnauthenticatedHome() {
           <div className="md:hidden grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-hairline)]">
             <a
               href="/api/android/download"
-              download="Arth.apk"
+              download="SpendSense.apk"
               className="h-9 px-2 text-[11px] sm:text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-[4px] hover:bg-[var(--action-primary-hover)] transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
-              title="Download Arth Android APK directly"
+              title="Download SpendSense Android APK directly"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -367,7 +369,7 @@ export function UnauthenticatedHome() {
       {/* Slim Minimal Aligned Footer */}
       <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 border-t border-[var(--border-hairline)] flex flex-wrap items-center justify-between gap-4 text-[11px] font-mono text-[var(--text-muted)]">
         <div className="flex items-center gap-4">
-          <span>Arth &middot; Ledger Minimal</span>
+          <span>SpendSense &middot; Ledger Minimal</span>
           <Link
             href="/download"
             className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline transition-colors"

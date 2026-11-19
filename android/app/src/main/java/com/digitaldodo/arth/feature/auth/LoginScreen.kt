@@ -66,7 +66,7 @@ fun LoginScreen(
         ) {
             // Brand Logo & Header
             Text(
-                text = "Arth",
+                text = "SpendSense",
                 style = MaterialTheme.typography.displayMedium.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp

@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-describe('Redesigned Arth Website Navigation & Android Download Experience Test Suite', () => {
+describe('SpendSense Website Navigation & Android Download Experience Test Suite', () => {
   describe('1. Device-Specific Detection for Android Phones', () => {
     const originalNavigator = globalThis.navigator;
 
@@ -92,55 +92,30 @@ describe('Redesigned Arth Website Navigation & Android Download Experience Test 
 
   describe('2. Direct APK Download Route & File Verification', () => {
     test('GET /api/android/download returns 302 redirect to valid APK asset, never to private GitHub release page', async () => {
-      const response = await getDownloadRoute();
-      assert.strictEqual(response.status, 302);
-
-      const location = response.headers.get('location');
-      assert.ok(location, 'Must provide redirect Location');
-
-      // Must NOT redirect unauthenticated users to private GitHub html_url or releases/download tag page
-      assert.ok(
-        !location.includes('github.com/digitaldodo/Arth/releases/download'),
-        'Must not redirect to private GitHub releases URL'
-      );
-
-      // Must point to either release-assets.githubusercontent.com (signed S3) or /android/Arth.apk
-      const isValidTarget =
-        location.includes('release-assets.githubusercontent.com') ||
-        location.endsWith('/android/Arth.apk');
-      assert.ok(isValidTarget, `Location "${location}" must be a valid direct download endpoint`);
+      const previousToken = process.env.GITHUB_TOKEN;
+      delete process.env.GITHUB_TOKEN;
+      try {
+        assert.equal((await getDownloadRoute()).status, 503, 'must fail closed without the server-side release token');
+      } finally {
+        if (previousToken) process.env.GITHUB_TOKEN = previousToken;
+      }
     });
 
-    test('Static public APK asset exists and possesses valid size and SHA-256 checksum', () => {
-      const apkPath = path.join(projectRoot, 'public', 'android', 'Arth.apk');
-      assert.ok(fs.existsSync(apkPath), 'public/android/Arth.apk must exist');
-
-      const stats = fs.statSync(apkPath);
-      assert.ok(stats.size > 10 * 1024 * 1024, 'APK size must be greater than 10MB');
-
-      const fileBuffer = fs.readFileSync(apkPath);
-      const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-      assert.strictEqual(
-        hash,
-        'b658dcb61a35e60bc88bfac6866d16f8de085522ea06977bb8f1e501dec4e284',
-        'SHA-256 hash must match official signed APK build'
-      );
+    test('APK binary is absent from Git and served by the private release route', () => {
+      const apkPath = path.join(projectRoot, 'public', 'android', 'SpendSense.apk');
+      assert.ok(!fs.existsSync(apkPath), 'APK must be hosted outside the Git repository');
+      const route = fs.readFileSync(path.join(projectRoot, 'src', 'app', 'api', 'android', 'download', 'route.ts'), 'utf8');
+      assert.ok(route.includes("asset.name === 'SpendSense.apk'"));
     });
 
     test('GET /api/android/release exposes direct downloadUrl', async () => {
-      const response = await getReleaseRoute();
-      assert.strictEqual(response.status, 200);
-
-      const body = await response.json();
-      assert.ok(body.downloadUrl, 'Must contain downloadUrl');
-      assert.ok(
-        body.downloadUrl.includes('download') || body.downloadUrl.includes('Arth.apk'),
-        'downloadUrl must be an installable endpoint'
-      );
-      assert.strictEqual(
-        body.sha256,
-        'b658dcb61a35e60bc88bfac6866d16f8de085522ea06977bb8f1e501dec4e284'
-      );
+      const previousToken = process.env.GITHUB_TOKEN;
+      delete process.env.GITHUB_TOKEN;
+      try {
+        assert.equal((await getReleaseRoute()).status, 503, 'must fail closed when release credentials are absent');
+      } finally {
+        if (previousToken) process.env.GITHUB_TOKEN = previousToken;
+      }
     });
   });
 
@@ -237,7 +212,7 @@ describe('Redesigned Arth Website Navigation & Android Download Experience Test 
         'Download page header must include Log In'
       );
       assert.ok(
-        content.includes('href="/api/android/download"'),
+        content.includes("'/api/android/download'"),
         'Download button must target /api/android/download'
       );
     });

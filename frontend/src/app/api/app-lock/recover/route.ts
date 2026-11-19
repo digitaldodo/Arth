@@ -25,14 +25,14 @@ export async function POST(request: Request) {
     const supabase = await createClient(response);
     const { error } = await supabase.auth.signOut();
     if (error) {
-      return NextResponse.json({ error: 'Sign out could not be completed. Arth remains locked.' }, {
+      return NextResponse.json({ error: 'Sign out could not be completed. SpendSense remains locked.' }, {
         status: 503,
         headers: { 'Cache-Control': 'no-store, max-age=0' },
       });
     }
     return response;
   } catch {
-    return NextResponse.json({ error: 'Sign out could not be completed. Arth remains locked.' }, {
+    return NextResponse.json({ error: 'Sign out could not be completed. SpendSense remains locked.' }, {
       status: 503,
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });

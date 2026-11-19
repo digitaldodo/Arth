@@ -45,7 +45,7 @@ export function DataExportCard({ user }: DataExportCardProps) {
       });
       setProgressText(`Formatting ${transactions.length} transactions...`);
       const csv = generateTransactionsCSV(transactions, categories);
-      const filename = `Arth-Transactions-${getTodayDateString()}.csv`;
+      const filename = `SpendSense-Transactions-${getTodayDateString()}.csv`;
       downloadCSV(csv, filename);
       setSuccessMessage(
         `Successfully exported ${transactions.length} transaction(s) to ${filename}`
@@ -72,7 +72,7 @@ export function DataExportCard({ user }: DataExportCardProps) {
       });
       setProgressText(`Formatting JSON data structure...`);
       const json = generateBackupJSON(transactions, categories, user);
-      const filename = `Arth-Backup-${getTodayDateString()}.json`;
+      const filename = `SpendSense-Backup-${getTodayDateString()}.json`;
       downloadJSON(json, filename);
       setSuccessMessage(
         `Successfully generated complete data backup (${transactions.length} transactions, ${categories.length} categories) to ${filename}`

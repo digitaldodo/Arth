@@ -1,5 +1,5 @@
 /**
- * Arth Centralized Back Navigation Manager
+ * SpendSense Centralized Back Navigation Manager
  * 
  * Coordinates hierarchical Android PWA back gestures, browser history,
  * nested overlays, modals, settings drill-downs, and native exit boundary.

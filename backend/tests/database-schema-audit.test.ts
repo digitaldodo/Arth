@@ -8,7 +8,7 @@ describe('Database Schema & Migration Integrity Audit', () => {
     ? path.resolve(process.cwd(), '../supabase/migrations')
     : path.resolve(process.cwd(), 'supabase/migrations');
 
-  test('All 26 numbered migration files exist in sequential order', () => {
+  test('All numbered migration files exist in sequential order', () => {
     assert.ok(fs.existsSync(migrationsDir), 'supabase/migrations directory must exist');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
@@ -39,10 +39,84 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0024_account_balances_rpc_hardening.sql',
       '0025_balance_snapshot_and_non_negative_balances.sql',
       '0026_harden_unconfigured_balances_and_ownership.sql',
-      '0027_dashboard_lifetime_and_empty_state.sql'
+      '0027_dashboard_lifetime_and_empty_state.sql',
+      '0028_financial_documents_accounts_and_tax.sql',
+      '0029_statement_transaction_references.sql',
+      '0030_statement_import_snapshots_and_atomic_undo.sql',
+      '0031_account_reconciliation.sql',
+      '0032_statement_account_balances.sql',
+      '0033_statement_skipped_rows.sql',
+      '0034_username_uniqueness_and_identity_hardening.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
+  });
+
+  test('0028 financial records migration is additive, owner scoped, and requires private retention expiry', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0028_financial_documents_accounts_and_tax.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TABLE public.financial_accounts'), 'Must add financial accounts');
+    assert.ok(sql.includes('ALTER TABLE public.transactions\n  ADD COLUMN account_id UUID'), 'Must add account links without replacing transactions');
+    assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'New records must have RLS enabled');
+    assert.ok(sql.includes("'arth-private-documents'"), 'Retained documents must use the private bucket');
+    assert.ok(sql.includes("retention_mode = 'retain_until' AND storage_path IS NOT NULL AND retained_until IS NOT NULL"), 'Retained documents require path and expiry');
+    assert.ok(!/DROP\s+(TABLE|COLUMN)\b/i.test(sql), 'Migration must not contain destructive table or column drops');
+  });
+
+  test('0033 stores only an array of privacy-minimized statement skip reasons', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0033_statement_skipped_rows.sql'), 'utf-8');
+    assert.match(sql, /ALTER TABLE public\.statement_import_batches\s+ADD COLUMN skipped_rows JSONB NOT NULL DEFAULT '\[\]'::jsonb/i);
+    assert.match(sql, /CHECK \(jsonb_typeof\(skipped_rows\) = 'array'\)/i);
+    assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN)|TRUNCATE/i, 'Migration must not remove existing financial history');
+  });
+
+  test('0029 adds a bounded statement reference for transaction-level matching', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0029_statement_transaction_references.sql'), 'utf-8');
+    assert.ok(sql.includes('ADD COLUMN statement_reference TEXT'), 'Must store bank reference/UTR on the transaction');
+    assert.ok(sql.includes('char_length(statement_reference) <= 120'), 'Must bound user-provided references');
+    assert.ok(!/DROP\s+(TABLE|COLUMN)\b/i.test(sql), 'Migration must be additive');
+  });
+
+  test('0030 snapshots imported rows and atomically refuses unsafe batch undo', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0030_statement_import_snapshots_and_atomic_undo.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE TABLE public.statement_import_batch_items'), 'Must persist per-transaction undo evidence');
+    assert.ok(sql.includes('SECURITY DEFINER'), 'Snapshot trigger must write its immutable evidence without authenticated insert access');
+    assert.ok(sql.includes("v_batch.status NOT IN ('completed', 'partial')"), 'Undo must require a finished batch');
+    assert.ok(sql.includes('source_snapshot IS DISTINCT FROM'), 'Undo must reject modified transactions');
+    assert.ok(sql.includes('ORDER BY id FOR UPDATE'), 'Undo must lock imported rows before checking snapshots');
+    assert.ok(sql.includes('One or more imported transactions are linked to reconciliation records'), 'Undo must preserve linked records');
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.undo_statement_import_batch(UUID) TO authenticated'), 'Authenticated users must be able to invoke their own RLS-scoped undo');
+    assert.ok(!/DROP\s+(TABLE|COLUMN)\b/i.test(sql), 'Migration must be additive');
+  });
+
+  test('0031 validates explicitly confirmed transfer pairs and removes them from dashboard totals', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0031_account_reconciliation.sql'), 'utf-8');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.confirm_transaction_reconciliation'));
+    assert.ok(sql.indexOf('ADD COLUMN transaction_link_id UUID') < sql.indexOf('CREATE OR REPLACE FUNCTION public.confirm_transaction_reconciliation'), 'Relationship columns must exist before the RPC is defined');
+    assert.ok(sql.includes('ORDER BY id FOR UPDATE'));
+    assert.ok(sql.includes('v_first.amount_paise <> v_second.amount_paise'));
+    assert.ok(sql.includes('v_first.type = v_second.type'));
+    assert.ok(sql.includes("l.status = 'confirmed'"));
+    assert.ok(sql.includes("l.relationship IN ('transfer_pair', 'card_settlement')"));
+    assert.ok(sql.includes('REVOKE INSERT, UPDATE, DELETE ON public.transaction_links FROM authenticated'));
+    assert.ok(sql.includes('REVOKE INSERT, UPDATE, DELETE ON public.account_movements FROM authenticated'));
+    assert.ok(sql.includes('UUID version 7'));
+    assert.ok(sql.includes('fn_protect_confirmed_reconciliation_pair'));
+    assert.ok(sql.includes('INSERT INTO public.account_movements'));
+    assert.ok(sql.includes("WHERE user_id = v_user AND status = 'rejected'"), 'Retrying a previously rejected pair must reuse its historical link');
+    assert.ok(sql.includes('deleted_at = NULL'), 'Reconfirming a pair must reactivate its linked movement');
+    assert.ok(sql.includes('UPDATE public.account_movements SET deleted_at = now()'));
+  });
+
+  test('0032 keeps account-linked statement rows outside legacy balances and exposes exact account balances', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0032_statement_account_balances.sql'), 'utf-8');
+    assert.ok(sql.includes('AND account_id IS NULL'), 'Legacy cash and online balances must ignore account-linked entries');
+    assert.ok(/IF NEW\.account_id IS NOT NULL THEN[\s\S]{0,250}RETURN NEW;/.test(sql), 'Account-linked transactions must bypass legacy balance validation');
+    assert.ok(sql.includes('fn_financial_account_balances()'), 'Must expose per-account balances');
+    assert.ok(sql.includes('current_balance_paise TEXT'), 'Balances must cross JSON/API boundaries as exact decimal strings');
+    assert.ok(sql.includes('a.opening_balance_paise + coalesce(sum(t.amount_paise)'), 'Balance aggregation must use integer paise');
+    assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_financial_account_balances() FROM PUBLIC, anon;'));
+    assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_financial_account_balances() TO authenticated;'));
+    assert.ok(!/DROP\s+(TABLE|COLUMN)\b/i.test(sql), 'Migration must be additive');
   });
 
   

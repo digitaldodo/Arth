@@ -8,7 +8,7 @@ import {
 
 export interface ArthLogoProps extends React.SVGProps<SVGSVGElement> {
   /**
-   * 'full': Symbol + 'Arth' wordmark (aspect ratio ~3.36:1)
+   * 'full': Symbol + 'SpendSense' wordmark (aspect ratio ~3.36:1)
    * 'symbol': Standalone geometric 'A' emblem (aspect ratio ~1.30:1)
    */
   variant?: 'full' | 'symbol';
@@ -28,7 +28,7 @@ export interface ArthLogoProps extends React.SVGProps<SVGSVGElement> {
 export function ArthLogo({
   variant = 'full',
   theme = 'auto',
-  title = 'Arth',
+  title = 'SpendSense',
   className = '',
   ...props
 }: ArthLogoProps) {
@@ -54,7 +54,24 @@ export function ArthLogo({
       {...props}
     >
       {title && <title>{title}</title>}
-      <path d={pathD} fill={fill} />
+      {isFull ? (
+        <>
+          <path d={ARTH_SYMBOL_PATH} fill={fill} />
+          <text
+            x="1320"
+            y="625"
+            fill={fill}
+            fontFamily="Inter, Arial, sans-serif"
+            fontSize="290"
+            fontWeight="600"
+            letterSpacing="-16"
+          >
+            SpendSense
+          </text>
+        </>
+      ) : (
+        <path d={pathD} fill={fill} />
+      )}
     </svg>
   );
 }

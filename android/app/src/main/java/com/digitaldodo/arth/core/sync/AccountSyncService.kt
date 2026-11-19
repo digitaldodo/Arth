@@ -43,7 +43,7 @@ class AccountSyncService private constructor(private val context: Context) {
 
     suspend fun syncAll(): Result<Unit> = syncMutex.withLock {
         if (!secureStorage.isLoggedIn()) {
-            return Result.failure(IllegalStateException("User is not signed in to Arth"))
+            return Result.failure(IllegalStateException("User is not signed in to SpendSense"))
         }
 
         _syncState.value = SyncState.Syncing

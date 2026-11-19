@@ -146,7 +146,7 @@ fun BalancesScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "When you set a starting balance, Arth records a baseline timestamp. Only transactions recorded after that timestamp adjust your current balance. Past transactions remain in your historical records without altering baseline figures.",
+                        text = "When you set a starting balance, SpendSense records a baseline timestamp. Only transactions recorded after that timestamp adjust your current balance. Past transactions remain in your historical records without altering baseline figures.",
                         style = MaterialTheme.typography.bodySmall,
                         color = ArthTheme.colors.textSecondary
                     )

@@ -143,11 +143,11 @@ describe('Dashboard Custom Date Range & Offline Support UI Polish', () => {
 
       // Supporting text must state offline usage and sync
       assert.ok(
-        markup.includes("Use Arth offline and sync your changes when you're back online") ||
-          markup.includes('Use Arth offline and sync your changes when you&#x27;re back online') ||
-          markup.includes("Use Arth offline and synchronize your changes when you're back online") ||
-          markup.includes('Use Arth offline and synchronize your changes when you&#x27;re back online'),
-        'Must include supporting text about using Arth offline and synchronizing changes'
+        markup.includes("Use SpendSense offline and sync your changes when you're back online") ||
+          markup.includes('Use SpendSense offline and sync your changes when you&#x27;re back online') ||
+          markup.includes("Use SpendSense offline and synchronize your changes when you're back online") ||
+          markup.includes('Use SpendSense offline and synchronize your changes when you&#x27;re back online'),
+        'Must include supporting text about using SpendSense offline and synchronizing changes'
       );
 
       // Must not contain any APK options or download buttons

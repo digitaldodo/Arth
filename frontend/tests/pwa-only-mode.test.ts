@@ -24,7 +24,7 @@ describe('PWA-only offline and biometric behavior', () => {
     assert.match(ledger, /getCachedTransactions\(userId\)/);
   });
   it('does not queue offline writes from a normal desktop browser', () => {
-    assert.match(sync, /Offline changes are available in the installed Arth app/);
+    assert.match(sync, /Offline changes are available in the installed SpendSense app/);
     assert.match(sync, /isStandalonePwaClient\(\)/);
   });
   it('classifies desktop, mobile browser, and installed mobile PWA in one runtime utility', () => {

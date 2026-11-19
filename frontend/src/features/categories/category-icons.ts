@@ -1,5 +1,5 @@
 /**
- * Category Icon System for Arth
+ * Category Icon System for SpendSense
  * Provides intelligent default icons based on financial semantics and taxonomy names,
  * as well as a curated preset palette and helper functions for custom icon/emoji rendering.
  */

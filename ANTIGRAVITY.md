@@ -6,8 +6,8 @@
 
 | Key | Value |
 |---|---|
-| App name | **Arth** |
-| Purpose | Personal finance tracker — manual entry only |
+| App name | **SpendSense** (customer-facing; legacy technical identifiers remain Arth) |
+| Purpose | Indian personal finance and transaction intelligence; records remain user-controlled |
 | Owner | Single user (personal use) |
 | Currency | INR (Indian Rupee) |
 | Timezone | Asia/Kolkata (IST, UTC+5:30) |
@@ -82,11 +82,11 @@ Modules are located under `src/modules/<ModuleName>/`. Each module owns its comp
 | `FinancialGoals` | Planned | Phase 05 |
 | `RecurringTransactions` | Planned | Phase 05 |
 | `SubscriptionTracker` | Planned | Phase 05 |
-| `FinancialTools` (Safe to Spend & EMI Stress Test) | ✅ Active | Phase 06 |
+| `FinancialTools` (Safe to Spend & EMI Stress Test) | Team scaffold only; disabled until owner implementation | Phase 06 |
 | `FinancialHealth` | Planned | Phase 06 |
 | `AIAdvisor` | Planned | Phase 06 |
 
-**Never implement a Planned module ahead of its phase without explicit owner instruction.**
+**Team-owned intelligence modules must remain scaffolds until their assigned owner implements them. The owner's current brief authorizes scaffolding only.**
 
 ## Non-negotiable rules for all agents
 

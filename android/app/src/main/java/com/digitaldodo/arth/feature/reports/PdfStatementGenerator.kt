@@ -77,7 +77,7 @@ object PdfStatementGenerator {
         var y = 50f
 
         // Document Title
-        canvas.drawText("ARTH FINANCIAL STATEMENT", 40f, y, titlePaint)
+        canvas.drawText("SPENDSENSE FINANCIAL STATEMENT", 40f, y, titlePaint)
         y += 18f
         val nowStr = SimpleDateFormat("dd MMMM yyyy, HH:mm", Locale.getDefault()).format(Date())
         canvas.drawText("Period: $periodName • Generated on $nowStr", 40f, y, subPaint)

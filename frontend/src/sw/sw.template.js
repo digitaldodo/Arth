@@ -1,5 +1,5 @@
 /**
- * Arth service worker. The root scope is retained for existing installs, but only
+ * SpendSense service worker. The root scope is retained for existing installs, but only
  * a mobile standalone client can use the offline entry. Personalized HTML and APIs
  * are never cached.
  */
@@ -146,7 +146,7 @@ self.addEventListener('fetch', (event) => {
               headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
             });
           }
-          return offlineHtml('Arth is offline', 'The authenticated app shell is not cached on this device. Reconnect to open Arth; previously loaded financial records remain stored locally and will sync when online.');
+          return offlineHtml('SpendSense is offline', 'The authenticated app shell is not cached on this device. Reconnect to open SpendSense; previously loaded financial records remain stored locally and will sync when online.');
         }
         return offlineHtml('Connection required', 'This web session needs an internet connection. Check your connection and try again.');
       }

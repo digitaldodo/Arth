@@ -57,6 +57,9 @@ export interface ValidatedCreateTransactionInput {
   necessity: NecessityClass | null;
   description: string | null;
   notes: string | null;
+  account_id?: string | null;
+  import_batch_id?: string | null;
+  statement_reference?: string | null;
   recorded_at: string;
   created_at?: string;
 }
@@ -175,6 +178,19 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     notes = trimmed.length > 0 ? trimmed : null;
   }
 
+  const accountId = payload.account_id;
+  if (accountId !== undefined && accountId !== null && (typeof accountId !== 'string' || !UUID_REGEX.test(accountId))) {
+    throw new ValidationError('Account ID must be a valid UUID');
+  }
+  const importBatchId = payload.import_batch_id;
+  if (importBatchId !== undefined && importBatchId !== null && (typeof importBatchId !== 'string' || !UUID_V7_REGEX.test(importBatchId))) {
+    throw new ValidationError('Import batch ID must be a valid UUID v7');
+  }
+  const statementReference = payload.statement_reference;
+  if (statementReference !== undefined && statementReference !== null && (typeof statementReference !== 'string' || statementReference.trim().length > 120)) {
+    throw new ValidationError('Statement reference cannot exceed 120 characters');
+  }
+
   // 9. Validate Recording Timestamp (preserves original recording timestamp across offline sync)
   let recorded_at: string;
   if (payload.recorded_at !== undefined && payload.recorded_at !== null) {
@@ -209,6 +225,9 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     necessity,
     description,
     notes,
+    ...(accountId === undefined ? {} : { account_id: accountId === null ? null : accountId.toLowerCase() }),
+    ...(importBatchId === undefined ? {} : { import_batch_id: importBatchId === null ? null : importBatchId.toLowerCase() }),
+    ...(statementReference === undefined ? {} : { statement_reference: statementReference === null ? null : statementReference.trim() }),
     recorded_at,
     created_at,
   };
