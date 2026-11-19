@@ -25,7 +25,12 @@ def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv(
 def releaseSigningReady = releaseStorePassword && releaseKeyPassword && file(releaseStoreFilePath).exists()
 
 gradle.taskGraph.whenReady { taskGraph ->
-    if (taskGraph.allTasks.any { it.path in [':app:assembleLocalRelease', ':app:packageLocalRelease'] } && !releaseSigningReady) {
+    def protectedReleaseTasks = [
+        ':app:assembleLocalRelease', ':app:packageLocalRelease',
+        ':app:assembleDirectSmsRelease', ':app:packageDirectSmsRelease',
+        ':installer:assembleRelease', ':installer:packageRelease'
+    ]
+    if (taskGraph.allTasks.any { it.path in protectedReleaseTasks } && !releaseSigningReady) {
         throw new GradleException('A persistent release keystore and signing credentials are required. Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD. Unsigned or ephemeral release builds are disabled.')
     }
 }
@@ -60,11 +65,19 @@ android {
             dimension "distribution"
             versionNameSuffix ""
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
+            buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "false"
             resValue "string", "appName", "SpendSense"
         }
         play {
             dimension "distribution"
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
+            buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "false"
+            resValue "string", "appName", "SpendSense"
+        }
+        directSms {
+            dimension "distribution"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
+            buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "true"
             resValue "string", "appName", "SpendSense"
         }
     }

@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def installerVersionCode = (project.findProperty('VERSION_CODE') ?: System.getenv('VERSION_CODE') ?: '1').toString().toInteger()
+def installerBuildNumber = (project.findProperty('BUILD_NUMBER') ?: System.getenv('GITHUB_RUN_NUMBER') ?: '6').toString()
+def rawInstallerVersionName = (project.findProperty('VERSION_NAME') ?: System.getenv('VERSION_NAME') ?: '1.0.0').toString()
+def installerVersionName = rawInstallerVersionName.contains('+build.') ? rawInstallerVersionName : rawInstallerVersionName + '+build.' + installerBuildNumber
+def releaseStoreFilePath = System.getenv('ANDROID_KEYSTORE_PATH') ?: System.getenv('KEYSTORE_FILE') ?: 'release.keystore'
+def releaseStorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: System.getenv('KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('ANDROID_KEY_ALIAS') ?: System.getenv('KEY_ALIAS') ?: 'arth'
+def releaseKeyPassword = System.getenv('ANDROID_KEY_PASSWORD') ?: System.getenv('KEY_PASSWORD')
+def releaseSigningReady = releaseStorePassword && releaseKeyPassword && file(releaseStoreFilePath).exists()
+
+gradle.taskGraph.whenReady { taskGraph ->
+    if (taskGraph.allTasks.any { it.path in [':installer:assembleRelease', ':installer:packageRelease'] } && !releaseSigningReady) {
+        throw new GradleException('A persistent release keystore and signing credentials are required for the installer. Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD.')
+    }
+}
+
+android {
+    namespace 'com.digitaldodo.arth.installer'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.digitaldodo.arth.installer'
+        minSdk 26
+        targetSdk 35
+        versionCode installerVersionCode
+        versionName installerVersionName
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigningReady) {
+                storeFile file(releaseStoreFilePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (releaseSigningReady) signingConfig signingConfigs.release
+        }
+        debug { applicationIdSuffix '.debug' }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}

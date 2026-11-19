@@ -47,6 +47,7 @@ next-env.d.ts
 android/.gradle/
 android/build/
 android/app/build/
+android/installer/build/
 android/local.properties
 android/.cxx/
 android/.idea/

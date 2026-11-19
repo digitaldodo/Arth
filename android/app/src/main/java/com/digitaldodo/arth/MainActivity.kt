@@ -141,7 +141,11 @@ class MainActivity : FragmentActivity() {
                                     Text("• $note", style = MaterialTheme.typography.bodySmall)
                                 }
                                 Text(
-                                    "Android will ask you to confirm the update. Keep SpendSense installed to preserve local data.",
+                                    if (BuildConfig.SMS_INSTALLER_UPDATE_SUPPORTED) {
+                                        "Download and open the SpendSense Installer, then confirm the update in Android. Grant SMS access again only if Android asks. Keep SpendSense installed to preserve local data."
+                                    } else {
+                                        "Android will ask you to confirm the update. Keep SpendSense installed to preserve local data."
+                                    },
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -155,7 +159,7 @@ class MainActivity : FragmentActivity() {
                                     Toast.makeText(this@MainActivity, "Unable to open the SpendSense download page", Toast.LENGTH_LONG).show()
                                 }
                             }) {
-                                Text("Download update")
+                                Text(if (BuildConfig.SMS_INSTALLER_UPDATE_SUPPORTED) "Get update installer" else "Download update")
                             }
                         },
                         dismissButton = {

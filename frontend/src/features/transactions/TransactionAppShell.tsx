@@ -19,6 +19,7 @@ import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
 import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
 import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
+import { LanguagePreference } from '@/features/settings/LanguagePreference';
 import { StatementImport } from '@/features/imports/StatementImport';
 import { DocumentsTaxCentre } from '@/features/tax/DocumentsTaxCentre';
 import { useAppLock } from '@/features/app-lock/useAppLock';
@@ -599,6 +600,8 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         Preferences, visual appearance, credentials, and starting balances
                       </p>
                     </div>
+
+                    <LanguagePreference userId={userId ?? undefined} />
 
                     {/* Account Balances Card */}
                     <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-3">

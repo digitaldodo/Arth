@@ -94,9 +94,9 @@ jobs:
 
       - name: Run Android release checks
         working-directory: android
-        run: bash ./gradlew testLocalDebugUnitTest --no-daemon --stacktrace
+        run: bash ./gradlew testLocalDebugUnitTest testDirectSmsDebugUnitTest :installer:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build signed direct distribution APK
+      - name: Build signed Android release packages
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -104,7 +104,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
           VERSION_CODE: ${{ env.VERSION_CODE }}
-        run: bash ./gradlew :app:assembleLocalRelease --no-daemon --stacktrace
+        run: bash ./gradlew :app:assembleLocalRelease :app:assembleDirectSmsRelease :installer:assembleRelease --no-daemon --stacktrace
 
       - name: Verify package, signature, permissions, and metadata
         id: artifact
@@ -114,22 +114,42 @@ jobs:
           set -euo pipefail
           BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           APK="android/app/build/outputs/apk/local/release/app-local-release.apk"
-          test -f "$APK"
+          SMS_APK="android/app/build/outputs/apk/directSms/release/app-directSms-release.apk"
+          INSTALLER_APK="android/installer/build/outputs/apk/release/installer-release.apk"
+          test -f "$APK" && test -f "$SMS_APK" && test -f "$INSTALLER_APK"
           cp "$APK" "$RUNNER_TEMP/SpendSense.apk"
-          "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$RUNNER_TEMP/SpendSense.apk"
+          cp "$SMS_APK" "$RUNNER_TEMP/SpendSense-SMS.apk"
+          cp "$INSTALLER_APK" "$RUNNER_TEMP/SpendSense-Installer.apk"
+          for file in "$RUNNER_TEMP/SpendSense.apk" "$RUNNER_TEMP/SpendSense-SMS.apk" "$RUNNER_TEMP/SpendSense-Installer.apk"; do "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$file"; done
           "$BUILD_TOOLS_DIR/aapt" dump badging "$RUNNER_TEMP/SpendSense.apk" | grep -F "package: name='com.digitaldodo.arth' versionCode='$VERSION_CODE' versionName='$FULL_VERSION'"
-          PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/SpendSense.apk")"
-          if grep -E -i 'android\.permission\.(READ_SMS|RECEIVE_SMS|SEND_SMS)' <<< "$PERMISSIONS"; then
-            echo '::error::The direct distribution APK declares an SMS permission.'
-            exit 1
-          fi
+          "$BUILD_TOOLS_DIR/aapt" dump badging "$RUNNER_TEMP/SpendSense-SMS.apk" | grep -F "package: name='com.digitaldodo.arth' versionCode='$VERSION_CODE' versionName='$FULL_VERSION'"
+          "$BUILD_TOOLS_DIR/aapt" dump badging "$RUNNER_TEMP/SpendSense-Installer.apk" | grep -F "package: name='com.digitaldodo.arth.installer' versionCode='$VERSION_CODE' versionName='$FULL_VERSION'"
+          STANDARD_PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/SpendSense.apk")"
+          SMS_PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/SpendSense-SMS.apk")"
+          INSTALLER_PERMISSIONS="$("$BUILD_TOOLS_DIR/aapt" dump permissions "$RUNNER_TEMP/SpendSense-Installer.apk")"
+          if grep -E -i 'android\.permission\.(READ_SMS|RECEIVE_SMS|SEND_SMS)' <<< "$STANDARD_PERMISSIONS"; then echo '::error::The standard APK must not declare SMS permissions.'; exit 1; fi
+          grep -q 'android.permission.READ_SMS' <<< "$SMS_PERMISSIONS"
+          grep -q 'android.permission.RECEIVE_SMS' <<< "$SMS_PERMISSIONS"
+          if grep -q 'android.permission.SEND_SMS' <<< "$SMS_PERMISSIONS"; then echo '::error::The SMS-enabled APK must not request SEND_SMS.'; exit 1; fi
+          grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' <<< "$INSTALLER_PERMISSIONS"
+          if grep -E -i 'android\.permission\.(READ_SMS|RECEIVE_SMS|SEND_SMS)' <<< "$INSTALLER_PERMISSIONS"; then echo '::error::The installer must not request SMS permissions.'; exit 1; fi
           CERTIFICATE_SHA256="$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$RUNNER_TEMP/SpendSense.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
+          SMS_CERTIFICATE_SHA256="$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$RUNNER_TEMP/SpendSense-SMS.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
+          INSTALLER_CERTIFICATE_SHA256="$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$RUNNER_TEMP/SpendSense-Installer.apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
           test -n "$CERTIFICATE_SHA256"
+          test "$CERTIFICATE_SHA256" = "$SMS_CERTIFICATE_SHA256"
+          test "$CERTIFICATE_SHA256" = "$INSTALLER_CERTIFICATE_SHA256"
           APK_SHA256="$(sha256sum "$RUNNER_TEMP/SpendSense.apk" | cut -d ' ' -f 1)"
+          SMS_APK_SHA256="$(sha256sum "$RUNNER_TEMP/SpendSense-SMS.apk" | cut -d ' ' -f 1)"
+          INSTALLER_SHA256="$(sha256sum "$RUNNER_TEMP/SpendSense-Installer.apk" | cut -d ' ' -f 1)"
           APK_BYTES="$(wc -c < "$RUNNER_TEMP/SpendSense.apk" | tr -d ' ')"
           APK_SIZE="$(awk "BEGIN {printf \"%.1f MB\", $APK_BYTES / (1024 * 1024)}")"
+          SMS_APK_BYTES="$(wc -c < "$RUNNER_TEMP/SpendSense-SMS.apk" | tr -d ' ')"
+          INSTALLER_BYTES="$(wc -c < "$RUNNER_TEMP/SpendSense-Installer.apk" | tr -d ' ')"
+          SMS_APK_SIZE="$(awk "BEGIN {printf \"%.1f MB\", $SMS_APK_BYTES / (1024 * 1024)}")"
+          INSTALLER_SIZE="$(awk "BEGIN {printf \"%.1f MB\", $INSTALLER_BYTES / (1024 * 1024)}")"
           RELEASE_DATE="$(date -u +%F)"
-          export CERTIFICATE_SHA256 APK_SHA256 APK_SIZE RELEASE_DATE VERSION_CODE FULL_VERSION
+          export CERTIFICATE_SHA256 APK_SHA256 APK_SIZE SMS_APK_SHA256 SMS_APK_SIZE INSTALLER_SHA256 INSTALLER_SIZE RELEASE_DATE VERSION_CODE FULL_VERSION
           node - <<'NODE'
           const fs = require('fs');
           const meta = {
@@ -144,27 +164,44 @@ jobs:
             apkFileName: 'SpendSense.apk',
             apkSize: process.env.APK_SIZE,
             downloadUrl: '/api/android/download',
+            smsApkFileName: 'SpendSense-SMS.apk',
+            smsApkSize: process.env.SMS_APK_SIZE,
+            smsApkSha256: process.env.SMS_APK_SHA256,
+            smsDownloadUrl: '/api/android/sms-download',
+            installerFileName: 'SpendSense-Installer.apk',
+            installerSize: process.env.INSTALLER_SIZE,
+            installerSha256: process.env.INSTALLER_SHA256,
+            installerDownloadUrl: '/api/android/installer-download',
             githubReleaseUrl: `https://github.com/${process.env.ANDROID_REPOSITORY}/releases/tag/android-latest`,
             sha256: process.env.APK_SHA256,
             signingCertificateSha256: process.env.CERTIFICATE_SHA256,
             highlights: [
               'Native SpendSense Android app with offline transaction capture and authenticated cloud sync.',
-              'Optional Android Notification access detects visible transaction alerts from your default Messages app; content is filtered and parsed on-device.',
+              'The standard build supports optional notification-based transaction alerts from your current default Messages app.',
+              'An optional inbox-SMS build is available through the signed SpendSense Installer with explicit Android confirmation.',
               'Share a selected bank message when previews are hidden or you want to import an older alert.',
               'Automatic and shared-message candidates remain unconfirmed until you review them.',
               'Signed updates preserve app data when installed over SpendSense using the same application ID and signing key.',
             ],
-            disclaimer: 'This is the native Android application. The SpendSense website and installable PWA remain available separately. The APK does not request READ_SMS or RECEIVE_SMS and does not scan inbox history. Optional detection requires user-granted Android Notification access and processes only visible notifications from the current default Messages app while enabled; Android may hide or redact message text. Sharing a message is the fallback. Android requires a user-confirmed install or update; install updates over the existing app to preserve local data.',
+            disclaimer: 'The native Android app is separate from the SpendSense website and installable PWA. The standard APK does not request READ_SMS or RECEIVE_SMS. For inbox SMS import, use the separate signed SpendSense Installer; it verifies the SMS-enabled package and asks Android PackageInstaller to allowlist READ_SMS and RECEIVE_SMS. Android still requires a user-confirmed install/update and a separate runtime permission grant in SpendSense. The helper never requests SEND_SMS or silently installs updates. If you decline, use notification import or share a selected message. Keep the same app installed during updates to preserve local data.',
           };
           fs.writeFileSync('release.json', JSON.stringify(meta, null, 2) + '\n');
           NODE
           printf '%s  SpendSense.apk\n' "$APK_SHA256" > SpendSense.apk.sha256
+          printf '%s  SpendSense-SMS.apk\n' "$SMS_APK_SHA256" > SpendSense-SMS.apk.sha256
+          printf '%s  SpendSense-Installer.apk\n' "$INSTALLER_SHA256" > SpendSense-Installer.apk.sha256
           echo "APK_SIZE=$APK_SIZE" >> "$GITHUB_ENV"
           echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+          echo "SMS_APK_SIZE=$SMS_APK_SIZE" >> "$GITHUB_ENV"
+          echo "SMS_APK_SHA256=$SMS_APK_SHA256" >> "$GITHUB_ENV"
+          echo "INSTALLER_SIZE=$INSTALLER_SIZE" >> "$GITHUB_ENV"
+          echo "INSTALLER_SHA256=$INSTALLER_SHA256" >> "$GITHUB_ENV"
           echo "CERTIFICATE_SHA256=$CERTIFICATE_SHA256" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/spendsense-release"
           cp "$RUNNER_TEMP/SpendSense.apk" "$RUNNER_TEMP/spendsense-release/SpendSense.apk"
-          cp SpendSense.apk.sha256 release.json "$RUNNER_TEMP/spendsense-release/"
+          cp "$RUNNER_TEMP/SpendSense-SMS.apk" "$RUNNER_TEMP/spendsense-release/SpendSense-SMS.apk"
+          cp "$RUNNER_TEMP/SpendSense-Installer.apk" "$RUNNER_TEMP/spendsense-release/SpendSense-Installer.apk"
+          cp SpendSense.apk.sha256 SpendSense-SMS.apk.sha256 SpendSense-Installer.apk.sha256 release.json "$RUNNER_TEMP/spendsense-release/"
           echo "apk_sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Publish stable download channel
@@ -180,10 +217,14 @@ jobs:
             **APK size:** ${{ env.APK_SIZE }}
             **SHA-256:** `${{ env.APK_SHA256 }}`
 
-            Optional Android Notification access detects visible transaction alerts from the default Messages app; share a message when its preview is hidden or to import an older alert. The APK does not request inbox SMS permissions. Install and updates require Android's confirmation. Keep the existing app installed when updating to preserve local data.
+            The standard APK has no inbox SMS permissions. For inbox transaction SMS, download and open SpendSense-Installer.apk. It verifies the signed SMS-enabled build and submits it through Android PackageInstaller with READ_SMS and RECEIVE_SMS allowlisted. Android requires allowing installs from this source, confirming the install/update, and separately granting SMS runtime permissions in SpendSense. It never requests SEND_SMS or silently installs. Keep the existing app installed during updates to preserve local data.
           files: |
             ${{ runner.temp }}/spendsense-release/SpendSense.apk
             ${{ runner.temp }}/spendsense-release/SpendSense.apk.sha256
+            ${{ runner.temp }}/spendsense-release/SpendSense-SMS.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense-SMS.apk.sha256
+            ${{ runner.temp }}/spendsense-release/SpendSense-Installer.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense-Installer.apk.sha256
             ${{ runner.temp }}/spendsense-release/release.json
           draft: false
           prerelease: false
@@ -205,6 +246,10 @@ jobs:
           files: |
             ${{ runner.temp }}/spendsense-release/SpendSense.apk
             ${{ runner.temp }}/spendsense-release/SpendSense.apk.sha256
+            ${{ runner.temp }}/spendsense-release/SpendSense-SMS.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense-SMS.apk.sha256
+            ${{ runner.temp }}/spendsense-release/SpendSense-Installer.apk
+            ${{ runner.temp }}/spendsense-release/SpendSense-Installer.apk.sha256
             ${{ runner.temp }}/spendsense-release/release.json
           draft: false
           prerelease: false

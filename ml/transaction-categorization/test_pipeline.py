@@ -29,6 +29,25 @@ class PipelineTest(unittest.TestCase):
         scores = classification_metrics(["food_dining", "shopping"], ["food_dining", None], ["food_dining", "shopping"])
         self.assertEqual(scores["abstention_rate"], 0.5)
 
+    def test_confidence_calibration_reports_only_non_abstained_predictions(self):
+        scores = classification_metrics(
+            ["food_dining", "shopping", "shopping"],
+            ["food_dining", "food_dining", None],
+            ["food_dining", "shopping"],
+            [0.8, 0.6, None],
+        )
+        calibration = scores["confidence_calibration"]
+        self.assertEqual(calibration["evaluated_predictions"], 2)
+        self.assertEqual(calibration["excluded_abstentions"], 1)
+        self.assertAlmostEqual(calibration["expected_calibration_error"], 0.4)
+        self.assertEqual(calibration["method"], "fixed_width_top_label_ece")
+
+    def test_metrics_reject_confidence_length_mismatch_and_out_of_range_scores(self):
+        with self.assertRaises(ValueError):
+            classification_metrics(["food_dining"], ["food_dining"], ["food_dining"], [])
+        with self.assertRaises(ValueError):
+            classification_metrics(["food_dining"], ["food_dining"], ["food_dining"], [1.1])
+
 
 if __name__ == "__main__":
     unittest.main()

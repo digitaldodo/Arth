@@ -8,32 +8,32 @@ The website release uses the `local` flavor. Its merged APK manifest does **not*
 
 Detection depends on a visible message preview and Android binding the listener. If previews are disabled, the Messages app is not the default, the OS redacts the content, or a device policy blocks notification listeners, automatic detection cannot see that message. Android 15 also redacts OTP notification content from untrusted listeners; the classifier discards OTP text. The manual share flow remains available.
 
-The base manifest and existing `play` flavor retain the pre-existing SMS receiver and opt-in UI so that work is not deleted. That flavor is not used for the website APK and has not been approved or published for a Play release; it remains subject to installer allowlisting and current distribution policy.
+The base manifest and existing `play` flavor retain the pre-existing SMS receiver and opt-in UI. The website release includes two app builds: the standard `local` flavor removes inbox permissions, while `directSms` retains them for installation by the separate SpendSense Installer.
 
 ## Why inbox access is not enabled
 
 Android marks both `READ_SMS` and `RECEIVE_SMS` hard-restricted. An app cannot hold a hard-restricted permission until the installer on record allowlists it. `PackageInstaller.SessionParams.setWhitelistedRestrictedPermissions()` can set that installer allowlist, but allowlisting only permits holding a restricted permission; it does not itself grant a runtime permission. The website APK flow cannot set that allowlist, so the `local` flavor removes those declarations and its SMS broadcast receiver. Notification access is a separate user-controlled Android setting and supports visible notifications without inbox permissions.
 
-An ordinary APK hosting service (Vercel, Cloudflare R2, Supabase Storage or GitHub Releases) only delivers bytes over HTTPS; it does not become the Android installer or set permission allowlists. The existing update action opens the release/download URL and leaves the APK installation to Android's system UI. It does not silently install updates.
+An ordinary APK hosting service (Vercel, Cloudflare R2, Supabase Storage or GitHub Releases) only delivers bytes over HTTPS; it does not become the Android installer or set permission allowlists. The browser/system installer path does not set the allowlist. The optional SpendSense Installer creates a PackageInstaller session itself and sets an allowlist for only READ_SMS and RECEIVE_SMS on Android 10 and newer. It verifies the APK checksum, app ID, requested permissions and signing certificate before creating the session. It requires the user to enable installs from this source and to confirm Android's install/update dialog. Android still requires a separate runtime grant inside SpendSense. No updates are installed silently.
 
 ## Alternatives considered
 
 | Channel | SMS access result | Product decision |
 |---|---|---|
 | Website + browser/system APK installation | No installer-controlled hard-restricted-permission allowlist in this product flow | Use opt-in notification access for visible default Messages alerts; retain share/import and statement/PDF fallback |
-| Custom installer using PackageInstaller | API exposes installer allowlisting, but needs a controlled install session and still does not equal a permission grant; adds a high-trust installer surface and security burden | Not introduced; no custom installer app or bypass |
+| Custom installer using PackageInstaller | Supports an explicit, verified install session and allowlisting; Android still requires user-confirmed installation and a separate runtime permission grant | Implemented as an optional signed SpendSense Installer; standard APK remains notification-only |
 | Google Play | Current SMS/Call Log policy requires SMS permissions users to be the default SMS or Assistant handler, and the app would need to meet all applicable policy criteria | Not adopted; SpendSense is not an SMS client and will not become the default SMS handler just to obtain inbox access |
 | Account Aggregator / bank data provider | Consent-based financial data channel, subject to FIU/provider onboarding, consent and certification | Team-owned integration scaffold; not represented as a production connection |
 | Notification access / user-selected message share / bank statement import | Android notification access is system-approved; app filters to the default Messages app; share/file imports are user-selected | Supported opt-in detection with manual fallbacks for this direct APK |
 
-No rooting, ADB privilege trick, hidden API, installer spoofing, or user security weakening is proposed. If automatic SMS becomes a hard product requirement, it requires choosing a channel and product role that legitimately supports the required installer permissions and platform policies; a generic sideloaded APK cannot promise that capability. A default-SMS-handler implementation would be a separate, substantial product scope, not a permission workaround.
+No rooting, ADB privilege trick, hidden API, installer spoofing, default-SMS-role claim, or user security weakening is used. The optional inbox path works only when the helper is the installer performing the PackageInstaller session and the user separately grants runtime permission. A direct browser installation remains notification-only.
 
 ## Verification status
 
-- Merged manifests: `localDebug` removes `READ_SMS`, `RECEIVE_SMS`, and `SMS_RECEIVED`; `playDebug` retains the pre-existing SMS declarations. The local release registers a system-protected notification listener and an explicit user share intent.
+- Merged manifests and APKs must be checked in CI: `localRelease` removes `READ_SMS`, `RECEIVE_SMS`, and `SMS_RECEIVED`; `directSmsRelease` retains the existing declarations and receiver; the installer requests `REQUEST_INSTALL_PACKAGES` but no SMS permission.
 - App code: notification and share inputs are bounded, parsed in memory, deduplicated, and stored as review candidates with `rawSnippet = null`. Notification capture accepts only the current default SMS app package and only while the user-enabled switch is on. Confirming a candidate uses the existing transaction repository and sync outbox; no database migration or alternate transaction table was added.
-- Release APK: the previous local-flavor release passed package, signer, signature, and SMS-permission checks. The notification listener change requires a new release build and physical verification.
-- Physical device: no Android device is currently attached, and the user previously confirmed none was available. Notification access, visible-preview extraction, and update-over-install behavior therefore remain unverified on hardware.
+- Release artifacts: the current CI workflow is configured to verify all package names, signing identities and permission boundaries, and publish checksums for the standard APK, SMS-enabled APK and installer. This WIP change has not yet produced a new signed release artifact.
+- Physical device: no Android device is currently attached, and the user confirmed none was available. Installer allowlisting, user runtime permission, inbox processing and update-over-install remain unverified on hardware.
 
 ## Maintainer checks
 

@@ -35,7 +35,7 @@ def main():
     }
 
     regex_rows = [weak_predict(row["narration"]) for row in test_rows]
-    report["models"]["weak_label_rules"] = {**classification_metrics(expected, [x[0] for x in regex_rows], list(CATEGORIES)), "mean_latency_ms": sum(x[2] for x in regex_rows) / len(regex_rows) if regex_rows else 0.0}
+    report["models"]["weak_label_rules"] = {**classification_metrics(expected, [x[0] for x in regex_rows], list(CATEGORIES), [x[1] for x in regex_rows]), "mean_latency_ms": sum(x[2] for x in regex_rows) / len(regex_rows) if regex_rows else 0.0}
 
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
@@ -47,9 +47,10 @@ def main():
         started = time.perf_counter()
         test_vectors = vectorizer.transform([normalize(row["narration"]).text for row in test_rows])
         probabilities = classifier.predict_proba(test_vectors)
-        predicted = [classifier.classes_[index] if float(max(row)) >= 0.65 else None for row in probabilities for index in [int(row.argmax())]]
+        confidence = [float(max(row)) for row in probabilities]
+        predicted = [classifier.classes_[index] if confidence[row_index] >= 0.65 else None for row_index, index in enumerate(row.argmax() for row in probabilities)]
         elapsed_ms = (time.perf_counter() - started) * 1000
-        report["models"]["tfidf_logistic_regression"] = {**classification_metrics(expected, predicted, list(CATEGORIES)), "mean_latency_ms": elapsed_ms / len(test_rows) if test_rows else 0.0}
+        report["models"]["tfidf_logistic_regression"] = {**classification_metrics(expected, predicted, list(CATEGORIES), confidence), "mean_latency_ms": elapsed_ms / len(test_rows) if test_rows else 0.0}
     except ImportError:
         report["models"]["tfidf_logistic_regression"] = {"status": "not_run", "reason": "scikit-learn is not installed"}
 
@@ -68,14 +69,17 @@ def main():
         fasttext_predictions = [provider.predict(normalize(row["narration"]).text) for row in test_rows]
         elapsed_ms = (time.perf_counter() - start) * 1000
         model_labels = [item[0] if item[1] >= 0.72 else None for item in fasttext_predictions]
-        report["models"]["anchored_fasttext"] = {**classification_metrics(expected, model_labels, list(CATEGORIES)), "mean_latency_ms": elapsed_ms / len(test_rows) if test_rows else 0.0}
+        report["models"]["anchored_fasttext"] = {**classification_metrics(expected, model_labels, list(CATEGORIES), [item[1] for item in fasttext_predictions]), "mean_latency_ms": elapsed_ms / len(test_rows) if test_rows else 0.0}
         hybrid = []
-        for weak, model in zip([weak_predict(row["narration"]) for row in test_rows], fasttext_predictions):
+        hybrid_confidence = []
+        for weak, model in zip(regex_rows, fasttext_predictions):
             if weak[0] and weak[0] == model[0] and model[1] >= 0.72:
                 hybrid.append(weak[0])
+                hybrid_confidence.append(min(weak[1], model[1]))
             else:
                 hybrid.append(None)
-        report["models"]["agreement_hybrid"] = classification_metrics(expected, hybrid, list(CATEGORIES))
+                hybrid_confidence.append(None)
+        report["models"]["agreement_hybrid"] = classification_metrics(expected, hybrid, list(CATEGORIES), hybrid_confidence)
     else:
         report["models"]["anchored_fasttext"] = {"status": "not_run", "reason": "No trained model artifact supplied"}
         report["models"]["agreement_hybrid"] = {"status": "not_run", "reason": "Requires FastText artifact"}

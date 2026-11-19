@@ -145,6 +145,38 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             <Link href="/" className="inline-flex items-center justify-center h-11 px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Use SpendSense Web or PWA</Link>
           </div>
 
+          {release.published && release.installerDownloadUrl && (
+            <section className="rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 sm:p-5 space-y-3" aria-labelledby="sms-installer-title">
+              <div className="space-y-1">
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--text-muted)]">Optional · Inbox SMS import</p>
+                <h2 id="sms-installer-title" className="text-base font-semibold text-[var(--text-primary)]">Install with the SpendSense helper</h2>
+                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                  Android restricts inbox SMS permissions for ordinary APK installs. This separate, signed helper verifies the SMS-enabled build and sends it to Android&apos;s installer with only READ_SMS and RECEIVE_SMS allowlisted.
+                </p>
+              </div>
+              <a
+                href="/api/android/installer-download"
+                download={release.installerFileName || 'SpendSense-Installer.apk'}
+                className="inline-flex min-h-10 items-center justify-center rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+              >
+                Download SpendSense Installer <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">{release.installerSize}</span>
+              </a>
+              <ol className="grid gap-2 text-xs leading-relaxed text-[var(--text-secondary)] sm:grid-cols-2">
+                <li><strong className="text-[var(--text-primary)]">1.</strong> Open the helper and allow installs from this source in Android Settings.</li>
+                <li><strong className="text-[var(--text-primary)]">2.</strong> Tap Install in the helper and confirm the update in Android&apos;s system dialog.</li>
+                <li><strong className="text-[var(--text-primary)]">3.</strong> Open SpendSense and grant SMS access only if you want inbox transaction detection.</li>
+                <li><strong className="text-[var(--text-primary)]">4.</strong> Review every detected transaction before it is added to your ledger.</li>
+              </ol>
+              <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                The helper requests no SMS access itself, never requests SEND_SMS, and cannot install silently. Android may show an additional warning for apps installed outside its store. You can decline SMS access and use notification import or share a selected message instead. Keep SpendSense installed during updates to retain local data.
+              </p>
+              <details className="text-xs text-[var(--text-secondary)]">
+                <summary className="cursor-pointer font-medium text-[var(--text-primary)]">Installer checksum</summary>
+                <p className="mt-2 break-all font-mono">{release.installerSha256}</p>
+              </details>
+            </section>
+          )}
+
           {/* Metadata Specs Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
             <div className="p-3 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-[4px]">

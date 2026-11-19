@@ -12,6 +12,14 @@ export interface AndroidReleaseInfo {
   apkFileName: string;
   apkSize: string;
   downloadUrl: string;
+  smsApkFileName?: string;
+  smsApkSize?: string;
+  smsApkSha256?: string;
+  smsDownloadUrl?: string;
+  installerFileName?: string;
+  installerSize?: string;
+  installerSha256?: string;
+  installerDownloadUrl?: string;
   githubReleaseUrl: string;
   sha256: string;
   signingCertificateSha256: string;
@@ -65,6 +73,8 @@ export async function GET() {
     const release = await releaseResponse.json();
     const assets = Array.isArray(release.assets) ? release.assets : [];
     const apkAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense.apk');
+    const smsApkAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense-SMS.apk');
+    const installerAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense-Installer.apk');
     const metadataAsset = assets.find((asset: { name?: string }) => asset.name === 'release.json');
     const checksumAsset = assets.find((asset: { name?: string }) => asset.name === 'SpendSense.apk.sha256');
     if (!apkAsset?.id || !metadataAsset?.id || !checksumAsset?.id) {
@@ -113,9 +123,23 @@ export async function GET() {
         ...unavailableRelease,
         ...metadata,
         published: true,
+        smsDownloadUrl: smsApkAsset && /^[a-f0-9]{64}$/i.test(String(metadata.smsApkSha256 || '')) ? '/api/android/sms-download' : undefined,
+        installerDownloadUrl: installerAsset && /^[a-f0-9]{64}$/i.test(String(metadata.installerSha256 || '')) ? '/api/android/installer-download' : undefined,
         releaseDate: metadata.releaseDate || release.published_at?.slice(0, 10) || '',
         apkSize: `${(apkAsset.size / (1024 * 1024)).toFixed(1)} MB`,
         downloadUrl: '/api/android/download',
+        ...(smsApkAsset && /^[a-f0-9]{64}$/i.test(String(metadata.smsApkSha256 || '')) ? {
+          smsApkFileName: 'SpendSense-SMS.apk',
+          smsApkSize: ((smsApkAsset.size / (1024 * 1024)).toFixed(1)) + ' MB',
+          smsApkSha256: String(metadata.smsApkSha256).toLowerCase(),
+          smsDownloadUrl: '/api/android/sms-download',
+        } : {}),
+        ...(installerAsset && /^[a-f0-9]{64}$/i.test(String(metadata.installerSha256 || '')) ? {
+          installerFileName: 'SpendSense-Installer.apk',
+          installerSize: ((installerAsset.size / (1024 * 1024)).toFixed(1)) + ' MB',
+          installerSha256: String(metadata.installerSha256).toLowerCase(),
+          installerDownloadUrl: '/api/android/installer-download',
+        } : {}),
         githubReleaseUrl: release.html_url,
         sha256: sha256.toLowerCase(),
         signingCertificateSha256,

@@ -42,7 +42,11 @@ object AndroidReleaseUpdateChecker {
                 versionName = release.optString("version"),
                 versionCode = release.optInt("versionCode"),
                 releaseNotes = notes,
-                downloadUrl = "${BuildConfig.WEB_URL.trimEnd('/')}/api/android/download"
+                downloadUrl = BuildConfig.WEB_URL.trimEnd('/') + if (BuildConfig.SMS_INSTALLER_UPDATE_SUPPORTED) {
+                    "/api/android/installer-download"
+                } else {
+                    "/api/android/download"
+                }
             )
         } catch (_: Exception) {
             null

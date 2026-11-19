@@ -21,7 +21,8 @@ import { useBackHandler } from '@/features/navigation';
 import { UnsavedChangesDialog } from '@/components/ui/UnsavedChangesDialog';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { findCategoryCorrection, merchantFingerprint, recordCategoryCorrection, suggestCategory } from '@/features/categorization';
-import { getMessage } from '@/lib/i18n/messages';
+import { getMessage, localizeEvidence } from '@/lib/i18n/messages';
+import { useSpendSenseLocale } from '@/lib/i18n/locale';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export function QuickAddModal({
 }: QuickAddModalProps) {
   const isPwa = useStandalonePwa();
   const isEditMode = Boolean(editingTransaction);
+  const { locale } = useSpendSenseLocale(userId);
 
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -80,6 +82,7 @@ export function QuickAddModal({
   const [savedMerchantCategoryId, setSavedMerchantCategoryId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    setCorrectionSaved(false);
     setSavedMerchantCategoryId(null);
     if (userId && description.trim()) {
       void findCategoryCorrection(userId, merchantFingerprint(description)).then((id) => {
@@ -273,13 +276,23 @@ export function QuickAddModal({
     setCategoryId(id);
     setCorrectionSaved(false);
     if (categorySuggestion && categorySuggestion.category.id !== id && userId) {
-      void recordCategoryCorrection(userId, merchantFingerprint(description), id).then(setCorrectionSaved);
+      void recordCategoryCorrection(userId, merchantFingerprint(description), id).then((saved) => {
+        setCorrectionSaved(saved);
+        if (saved) setSavedMerchantCategoryId(id);
+      });
     }
     try {
       localStorage.setItem(`arth_last_category_${type}`, id);
     } catch {
       // LocalStorage unavailable in private mode
     }
+  };
+
+  const rememberMerchantCategory = async () => {
+    if (!userId || !categoryId || !description.trim()) return;
+    const saved = await recordCategoryCorrection(userId, merchantFingerprint(description), categoryId);
+    setCorrectionSaved(saved);
+    if (saved) setSavedMerchantCategoryId(categoryId);
   };
 
   const executeSave = async (keepOpenForNext: boolean) => {
@@ -511,9 +524,9 @@ export function QuickAddModal({
           {/* 3. Category Selector (Top 6 chips + More) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-[var(--text-secondary)]">Category</span>
+              <span className="text-xs font-medium text-[var(--text-secondary)]">{getMessage('category.label', locale)}</span>
               {categoriesLoading && (
-                <span className="text-[10px] text-[var(--text-muted)]">Loading...</span>
+                <span className="text-[10px] text-[var(--text-muted)]">{getMessage('category.loading', locale)}</span>
               )}
             </div>
 
@@ -522,12 +535,12 @@ export function QuickAddModal({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-medium text-[var(--text-primary)]">
-                      {getMessage('category.suggested', 'en-IN', { category: categorySuggestion.category.name })}
+                      {getMessage('category.suggested', locale, { category: categorySuggestion.category.name })}
                     </p>
                     <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
                       {categorySuggestion.method === 'user_correction'
-                        ? getMessage('category.yourCorrection')
-                        : getMessage('category.ruleAgreement', 'en-IN', { percent: Math.round(categorySuggestion.confidence * 100) })} · {getMessage('category.confirmBeforeSaving')}
+                        ? getMessage('category.yourCorrection', locale)
+                        : getMessage('category.ruleAgreement', locale, { percent: Math.round(categorySuggestion.confidence * 100) })} · {getMessage('category.confirmBeforeSaving', locale)}
                     </p>
                   </div>
                   <button
@@ -536,17 +549,23 @@ export function QuickAddModal({
                     disabled={isSubmitting}
                     className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] disabled:opacity-50"
                   >
-                    {getMessage('category.useSuggestion')}
+                    {getMessage('category.useSuggestion', locale)}
                   </button>
                 </div>
                 <ul className="mt-2 space-y-0.5 text-[10px] text-[var(--text-secondary)]">
                   {categorySuggestion.evidence.map((item, index) => (
-                    <li key={`${item.source}-${index}`}>{item.source}: {item.detail}</li>
+                    <li key={`${item.source}-${index}`}>{localizeEvidence(item.source, locale)}: {localizeEvidence(item.detail, locale)}</li>
                   ))}
                 </ul>
-                {correctionSaved && <p className="mt-2 text-[10px] text-[var(--income-fg)]">{getMessage('category.correctionSaved')} {getMessage('category.notSharedTraining')}</p>}
               </div>
             )}
+
+            {userId && description.trim() && categoryId && <div className="mb-2">
+              {savedMerchantCategoryId !== categoryId
+                ? <button type="button" onClick={() => void rememberMerchantCategory()} className="rounded-md border border-[var(--border-subtle)] px-2.5 py-1.5 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]">{getMessage('category.rememberMerchant', locale)}</button>
+                : <p className="text-[10px] text-[var(--text-muted)]">{getMessage('category.merchantRuleSaved', locale)}</p>}
+              {correctionSaved && <p className="mt-1 text-[10px] text-[var(--income-fg)]">{getMessage('category.correctionSaved', locale)} {getMessage('category.notSharedTraining', locale)}</p>}
+            </div>}
 
             <div className="flex flex-wrap gap-1.5">
               {topCategories.map((cat) => {

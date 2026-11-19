@@ -34,10 +34,10 @@ The novelty assessment also proposes SentenceTransformer plus XGBoost as a compa
 
 ## Evaluation plan and current evidence
 
-`ml/transaction-categorization/evaluation.py` supplies a chronological split and dependency-free per-category precision/recall/F1, macro F1, weighted F1, confusion matrix, and abstention rate. The Python tests use synthetic narration only. The following remain **not measured** because no consented or licensed labeled dataset and trained artifact were supplied:
+`ml/transaction-categorization/evaluation.py` supplies a chronological split and dependency-free per-category precision/recall/F1, macro F1, weighted F1, confusion matrix, abstention rate, and fixed-width top-label expected calibration error (ECE) with confidence/accuracy bins. Calibration excludes abstentions and reports its evaluated coverage. Rule-agreement and model scores are treated as inputs to a diagnostic, not proof that their confidence values are calibrated. The Python tests use synthetic narration only. The following remain **not measured** because no consented or licensed labeled dataset and trained artifact were supplied:
 
 - Macro F1 (target >85%), weighted F1, precision, recall, and confusion matrix.
-- Confidence calibration and coverage/accuracy tradeoff.
+- Confidence calibration and coverage/accuracy tradeoff on a valid labeled corpus (the ECE calculation and report fields are implemented, but not empirically measured).
 - Inference latency and memory on target Android devices.
 - Comparative baselines and merchant-neighborhood quality.
 
