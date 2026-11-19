@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { v7 as uuidv7 } from 'uuid';
-import { parseINRToPaise } from '@arth/contracts';
+import { formatPaiseToINR, parseNonNegativeINRToPaise, paiseToDecimal } from '@arth/contracts';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { detectTaxFieldCandidates, type DocumentExtractionMethod, type ExtractedTaxCandidate } from './document-extractor';
 import { classifyTaxDocument, type DocumentClassificationSuggestion, type TaxDocumentKind } from './document-classifier';
 
 type DocumentKind = TaxDocumentKind;
 type PendingExtraction = { fields: ExtractedTaxCandidate[]; method: DocumentExtractionMethod; classification: DocumentClassificationSuggestion };
-type ExtractedField = { id: string; document_id: string; field_key: string; field_value: { value?: string; currency?: string; [key: string]: unknown }; source_page: number | null; source_location: string | null; extraction_method: 'text_pdf' | 'ocr_local' | 'spreadsheet' | 'manual'; confidence: number; verification_status: 'awaiting_confirmation' | 'verified' | 'conflicting' | 'evidence_required' | 'not_applicable' | 'manual_review' };
+type ExtractedField = { id: string; document_id: string; field_key: string; field_value: { amount_paise?: string; value?: string; currency?: string; [key: string]: unknown }; source_page: number | null; source_location: string | null; extraction_method: 'text_pdf' | 'ocr_local' | 'spreadsheet' | 'manual'; confidence: number; verification_status: 'extracted' | 'awaiting_confirmation' | 'verified' | 'conflicting' | 'evidence_required' | 'not_applicable' | 'manual_review' };
 type TaxDocument = { id: string; document_type: DocumentKind; display_name: string; tax_year: string | null; assessment_year: string | null; issuer_name: string | null; document_status: string; created_at: string; fields: ExtractedField[] };
 const DOCUMENT_TYPES: Array<[DocumentKind, string]> = [
   ['form16', 'Form 16'], ['form16a', 'Form 16A'], ['form130', 'Form 130'], ['form131', 'Form 131'], ['form26as', 'Form 26AS'], ['ais', 'AIS'], ['tis', 'TIS'], ['payslip', 'Payslip'], ['investment_declaration', 'Investment declaration'], ['epf', 'EPF statement'], ['ppf', 'PPF statement'], ['life_insurance', 'Life insurance receipt'], ['elss', 'ELSS statement'], ['nps', 'NPS statement'], ['health_insurance', 'Health insurance receipt'], ['home_loan_interest', 'Home loan interest certificate'], ['rent_receipt', 'Rent receipt'], ['rental_agreement', 'Rental agreement'], ['tuition_fee', 'Tuition fee receipt'], ['education_loan_interest', 'Education loan interest certificate'], ['donation_receipt', 'Donation receipt'], ['fd_interest', 'Fixed deposit interest certificate'], ['savings_interest', 'Savings interest statement'], ['capital_gains', 'Capital gains statement'], ['investment_statement', 'Investment statement'], ['bank_statement', 'Bank statement'], ['other_tax_document', 'Other tax document'],
@@ -197,7 +197,7 @@ export function DocumentsTaxCentre({ userId }: { userId: string }) {
       for (const field of pendingExtraction.fields) {
         const response = await fetch(`/api/backend/financial/documents/${id}/fields`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ field_key: field.key, field_value: { value: field.value, currency: 'INR' }, source_page: field.page,
+        body: JSON.stringify({ field_key: field.key, field_value: { amount_paise: parseNonNegativeINRToPaise(field.value).toString(), currency: 'INR' }, source_page: field.page,
             source_location: field.location, extraction_method: pendingExtraction.method, confidence: field.confidence }),
         });
         if (!response.ok) throw new Error('Document metadata saved, but one or more extracted fields could not be saved. Delete this document and retry.');
@@ -210,20 +210,23 @@ export function DocumentsTaxCentre({ userId }: { userId: string }) {
 
   async function addManualField(document: TaxDocument, key: string) {
     const value = manualValues[`${document.id}:${key}`] || '';
-    try { parseINRToPaise(value); } catch { setError('Enter a valid INR amount with no more than two decimal places.'); return; }
+    let amountPaise: string;
+    try { amountPaise = parseNonNegativeINRToPaise(value).toString(); } catch { setError('Enter a valid INR amount with no more than two decimal places.'); return; }
     const response = await fetch(`/api/backend/financial/documents/${document.id}/fields`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ field_key: key, field_value: { value, currency: 'INR' }, source_page: null, source_location: 'Entered by the user from the source document', extraction_method: 'manual', confidence: 1 }),
+      body: JSON.stringify({ field_key: key, field_value: { amount_paise: amountPaise, currency: 'INR' }, source_page: null, source_location: 'Entered by the user from the source document', extraction_method: 'manual', confidence: 1 }),
     });
     if (!response.ok) { setError('Could not save the manual value.'); return; }
     setManualValues((current) => ({ ...current, [`${document.id}:${key}`]: '' })); await loadDocuments();
   }
 
   async function reviewField(document: TaxDocument, field: ExtractedField, status: ExtractedField['verification_status']) {
-    const raw = reviewValues[field.id] ?? String(field.field_value.value ?? '');
+    const raw = reviewValues[field.id] ?? editableAmount(field.field_value);
+    let amountPaise: string;
+    try { amountPaise = parseNonNegativeINRToPaise(raw).toString(); } catch { setError('Enter a valid INR amount with no more than two decimal places.'); return; }
     const response = await fetch(`/api/backend/financial/documents/${document.id}/fields/${field.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ field_value: { ...field.field_value, value: raw }, verification_status: status }),
+      body: JSON.stringify({ field_value: { amount_paise: amountPaise, currency: 'INR' }, verification_status: status }),
     });
     if (!response.ok) { setError('Could not save the field review.'); return; }
     await loadDocuments();
@@ -265,7 +268,7 @@ export function DocumentsTaxCentre({ userId }: { userId: string }) {
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-medium">{document.display_name}</h3><p className="text-xs text-[var(--text-muted)]">{DOCUMENT_TYPES.find(([kind]) => kind === document.document_type)?.[1]} · {document.tax_year || 'Tax year not identified'} · {document.issuer_name || 'Issuer not supplied'} · Metadata only</p></div><button type="button" className="rounded-md border px-3 py-1.5 text-xs" onClick={() => void deleteDocument(document)}>Delete document</button></div>
       {document.fields.length === 0 && <p className="mt-3 text-xs text-[var(--text-secondary)]">No values extracted. Add a value from the source document below.</p>}
       <div className="mt-3 space-y-3">{document.fields.map((field) => <div key={field.id} className="rounded-md border border-[var(--border-subtle)] p-3">
-        <div className="grid gap-2 md:grid-cols-[1fr_180px_100px]"><label className="text-xs">{FIELD_LABELS[field.field_key] || field.field_key}<input className={inputClass} value={reviewValues[field.id] ?? String(field.field_value.value ?? '')} onChange={(event) => setReviewValues((current) => ({ ...current, [field.id]: event.target.value }))} /></label><div className="text-xs text-[var(--text-secondary)]">{field.source_location || 'Manual entry'}{field.source_page ? ` · page ${field.source_page}` : ''}<p className="mt-1">Confidence {Math.round(field.confidence * 100)}% · {field.extraction_method} · {field.verification_status}</p></div><div className="flex flex-col gap-1">{field.verification_status !== 'verified' && <button type="button" className="rounded-md border px-2 py-1 text-xs" onClick={() => void reviewField(document, field, 'verified')}>Verify value</button>}<button type="button" className="rounded-md border px-2 py-1 text-xs" onClick={() => void reviewField(document, field, 'manual_review')}>Needs review</button></div></div>
+        <div className="grid gap-2 md:grid-cols-[1fr_180px_100px]"><label className="text-xs">{FIELD_LABELS[field.field_key] || field.field_key} (INR)<input className={inputClass} inputMode="decimal" value={reviewValues[field.id] ?? editableAmount(field.field_value)} onChange={(event) => setReviewValues((current) => ({ ...current, [field.id]: event.target.value }))} /></label><div className="text-xs text-[var(--text-secondary)]">{field.source_location || 'Manual entry'}{field.source_page ? ` · page ${field.source_page}` : ''}<p className="mt-1">{field.field_value.amount_paise ? formatPaiseToINR(BigInt(field.field_value.amount_paise)) : 'Legacy amount'} · {Math.round(field.confidence * 100)}% confidence · {field.extraction_method} · {field.verification_status}</p></div><div className="flex flex-col gap-1">{field.verification_status !== 'verified' && <button type="button" className="rounded-md border px-2 py-1 text-xs" onClick={() => void reviewField(document, field, 'verified')}>Verify value</button>}<button type="button" className="rounded-md border px-2 py-1 text-xs" onClick={() => void reviewField(document, field, 'manual_review')}>Needs review</button></div></div>
       </div>)}</div>
       <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_180px_auto]">{Object.keys(FIELD_LABELS).map((key) => <div key={key} className="contents"><label className="sr-only" htmlFor={`${document.id}:${key}`}>{FIELD_LABELS[key]}</label><input id={`${document.id}:${key}`} className={inputClass} placeholder={`Manual ${FIELD_LABELS[key]} (₹)`} value={manualValues[`${document.id}:${key}`] || ''} onChange={(event) => setManualValues((current) => ({ ...current, [`${document.id}:${key}`]: event.target.value }))} /><span className="hidden sm:block" /><button type="button" className="rounded-md border px-3 py-1.5 text-xs" onClick={() => void addManualField(document, key)}>Add value</button></div>)}</div>
     </article>)}</div>}
@@ -295,5 +298,15 @@ async function sha256(file: File) {
     const hash = await globalThis.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   } catch { return null; }
+}
+
+function editableAmount(fieldValue: ExtractedField['field_value']) {
+  if (typeof fieldValue.amount_paise === 'string' && /^\d{1,19}$/.test(fieldValue.amount_paise)) {
+    try { return paiseToDecimal(BigInt(fieldValue.amount_paise)); } catch { return ''; }
+  }
+  if (typeof fieldValue.value === 'string') {
+    try { return paiseToDecimal(parseNonNegativeINRToPaise(fieldValue.value)); } catch { return ''; }
+  }
+  return '';
 }
 

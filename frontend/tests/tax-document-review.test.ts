@@ -37,6 +37,17 @@ test('exact ledger amount matching returns evidence options without classifying 
   assert.equal(exactLedgerAmountSourceOptions(Number.MAX_SAFE_INTEGER + 1, fields).length, 0);
 });
 
+test('canonical paise values match exactly and fractional rupees do not enter whole-rupee tax fields', () => {
+  const fractional: TaxDocumentReviewRecord = {
+    ...document('fractional', 'AY2026-27', '0'),
+    fields: [{ id: 'fractional-field', field_key: 'salary.gross', field_value: { amount_paise: '120000050', currency: 'INR' }, verification_status: 'verified' }],
+  };
+  const fields = verifiedTaxFieldsForPeriod([fractional], 'AY2026-27');
+  assert.equal(exactLedgerAmountSourceOptions(120000050, fields).length, 1);
+  assert.equal(exactLedgerAmountSourceOptions(120000000, fields).length, 0);
+  assert.equal(verifiedValue(fields, 'salary.gross'), null);
+});
+
 test('tax profile source links include only period-verified fields exactly matching an input', () => {
   const records = [document('salary', 'TY2026-27', '1200000'), document('tds', 'TY2026-27', '84000')].map((item, index) => ({
     ...item, fields: [{ ...item.fields[0], field_key: index === 0 ? 'salary.gross' : 'tax.tds' }],

@@ -26,6 +26,10 @@ Each module lives under `packages/financial-modules/src/modules/<module>` with `
 
 For implementation, the owner should: validate request/response schemas; keep privileged access server-side; authorize every record against the signed-in user; add domain and adapter tests; document model/ruleset version, evidence, and assumptions; return `unavailable` for missing, stale, or unverified inputs; and enable the feature only after review. Do not modify auth, transaction IDs, shared tables, RLS, or existing category taxonomy without coordination. Add database migrations append-only and preserve RLS.
 
+## Document intake API ownership
+
+The SpendSense document intake owner maintains `backend/src/modules/documents/` and the authenticated `/api/v1/financial/documents` and `/api/v1/financial/documents/:id/fields` endpoints. These endpoints persist only user-scoped metadata and provenance-aware extracted facts under the existing RLS policies. Monetary facts use integer paise in `field_value.amount_paise`; legacy rupee-shaped values are accepted at the API boundary and immediately normalized. Tax calculation and deduction modules consume only period-matched verified facts. They must not register duplicate document endpoints or write directly to these tables outside the same authorization boundary. Original document files remain local to the user's device by default.
+
 ## Conflicts recorded
 
 - The novelty assessment ranks Safe-to-Spend as the overall project novelty, but the user's assigned contribution is transaction categorization. This repository follows the user's ownership boundary; the Safe-to-Spend module is a scaffold only.

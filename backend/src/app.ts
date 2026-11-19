@@ -14,6 +14,8 @@ import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
 import type { IDashboardService } from './modules/dashboard/dashboard.service.js';
 import { balanceRoutes } from './modules/balances/balance.routes.js';
 import type { IBalanceService } from './modules/balances/balance.service.js';
+import { documentsRoutes } from './modules/documents/documents.routes.js';
+import type { IDocumentsService } from './modules/documents/documents.service.js';
 
 /**
  * Fastify application factory function.
@@ -26,7 +28,8 @@ export async function buildApp(
   customCategoryService?: ICategoryService,
   customPeopleService?: IPeopleService,
   customDashboardService?: IDashboardService,
-  customBalanceService?: IBalanceService
+  customBalanceService?: IBalanceService,
+  customDocumentsService?: IDocumentsService
 ): Promise<FastifyInstance> {
   const config: AppConfig = {
     ...loadConfig(),
@@ -63,6 +66,10 @@ export async function buildApp(
   await app.register(balanceRoutes, {
     config,
     service: customBalanceService,
+  });
+  await app.register(documentsRoutes, {
+    config,
+    service: customDocumentsService,
   });
   return app;
 }
