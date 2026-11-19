@@ -94,7 +94,7 @@ jobs:
 
       - name: Run Android release checks
         working-directory: android
-        run: ./gradlew testLocalDebugUnitTest --no-daemon --stacktrace
+        run: bash ./gradlew testLocalDebugUnitTest --no-daemon --stacktrace
 
       - name: Build signed direct distribution APK
         working-directory: android
@@ -104,7 +104,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
           VERSION_CODE: ${{ env.VERSION_CODE }}
-        run: ./gradlew :app:assembleLocalRelease --no-daemon --stacktrace
+        run: bash ./gradlew :app:assembleLocalRelease --no-daemon --stacktrace
 
       - name: Verify package, signature, permissions, and metadata
         id: artifact
