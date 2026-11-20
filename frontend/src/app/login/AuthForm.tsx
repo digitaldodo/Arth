@@ -369,7 +369,7 @@ export function AuthForm({
       )}
 
       {/* Success Notice */}
-      {successMessage && (
+      {successMessage && mode !== 'forgot' && (
         <div
           role="status"
           className="p-3 rounded-[3px] bg-[var(--income-bg)] border border-[var(--income-border)] text-[var(--income-fg)] text-[12px] flex items-start justify-between gap-2"
@@ -948,7 +948,53 @@ export function AuthForm({
       )}
 
       {/* MODE 3: FORGOT PASSWORD */}
-      {mode === 'forgot' && (
+      {mode === 'forgot' && successMessage && (
+        <section
+          role="status"
+          aria-live="polite"
+          className="space-y-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] p-4 sm:p-5"
+        >
+          <div className="flex items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--bg-surface)] text-base" aria-hidden="true">✉</span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Check your inbox</h2>
+              <p className="mt-1 break-all text-xs leading-5 text-[var(--text-secondary)]">
+                We processed the recovery request for <strong className="font-medium text-[var(--text-primary)]">{email}</strong>. If this address is linked to a SpendSense account, a password recovery link has been sent.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3.5">
+            <p className="text-xs font-medium text-[var(--text-primary)]">If the email doesn’t arrive</p>
+            <ul className="mt-2 space-y-1.5 pl-4 text-xs leading-5 text-[var(--text-secondary)]">
+              <li>Check your spam or junk folder and allow a few minutes.</li>
+              <li>Confirm the address is the one you used to create the account.</li>
+              <li>If you signed up with Google, return to sign in and choose Continue with Google.</li>
+            </ul>
+          </div>
+
+          <p className="text-[11px] leading-5 text-[var(--text-muted)]">For account privacy, this page can’t confirm whether an email address is registered.</p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => { setEmail(''); setSuccessMessage(null); setErrorMessage(null); }}
+              className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+            >
+              Try another email
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('signin')}
+              className="rounded-lg bg-[var(--action-primary-bg)] px-3 py-2 text-xs font-medium text-[var(--action-primary-fg)] transition hover:opacity-90"
+            >
+              Back to sign in
+            </button>
+          </div>
+        </section>
+      )}
+
+      {mode === 'forgot' && !successMessage && (
         <form onSubmit={handleResetPassword} className="space-y-3.5">
           <div className="space-y-1">
             <label
@@ -960,7 +1006,7 @@ export function AuthForm({
             <input
               id="reset-email"
               name="email"
-              type="text"
+              type="email"
               required
               autoComplete="email"
               placeholder="you@domain.com"
@@ -968,6 +1014,7 @@ export function AuthForm({
               onChange={(e) => setEmail(e.target.value)}
               className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
             />
+            <p className="text-[11px] leading-5 text-[var(--text-muted)]">Enter the email used for your account. For privacy, we can’t confirm account registration from this screen.</p>
           </div>
 
           <button
@@ -999,7 +1046,7 @@ export function AuthForm({
                 Sending recovery link...
               </span>
             ) : (
-              'Send Reset Link'
+              'Send recovery link'
             )}
           </button>
 
