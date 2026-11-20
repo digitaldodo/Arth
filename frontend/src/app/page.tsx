@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server';
 import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
 import { UnauthenticatedHome } from '@/app/UnauthenticatedHome';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
-import { generateRandomCandidateUsername } from '@/lib/username';
 import { getPasswordStatus } from '@/lib/auth/password-status';
 
 export const dynamic = 'force-dynamic';
@@ -65,20 +64,19 @@ export default async function HomePage({
 
       if (profile?.username) {
         username = profile.username;
-      } else if (!username) {
-        // First-login initialization for legacy or OAuth users without a username
-        const generated = generateRandomCandidateUsername();
-        const { data: updatedProfile } = await supabase
-          .from('profiles')
-          .update({ username: generated, updated_at: new Date().toISOString() })
-          .eq('id', user.id)
-          .select('username')
-          .maybeSingle();
-
-        if (updatedProfile?.username) {
-          username = updatedProfile.username;
-        } else {
-          username = generated;
+      } else {
+        // Use the database repair function so the displayed handle is persisted,
+        // normalized, and checked against the same unique index as signup.
+        const { data: recoveredProfile, error: recoveryError } = await supabase.rpc(
+          'fn_recover_user_profile',
+          { p_user_id: user.id }
+        );
+        const recoveredUsername =
+          recoveredProfile && typeof recoveredProfile === 'object'
+            ? (recoveredProfile as { username?: unknown }).username
+            : undefined;
+        if (!recoveryError && typeof recoveredUsername === 'string') {
+          username = recoveredUsername;
         }
       }
 

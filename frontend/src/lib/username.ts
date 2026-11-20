@@ -53,7 +53,8 @@ export function generateRandomCandidateUsername(): string {
 }
 
 /**
- * Generates 2-3 available alternative username suggestions when a candidate is taken.
+ * Generates up to 3 alternatives, returning only candidates confirmed available.
+ * A missing or failed availability check never produces an unverified suggestion.
  */
 export async function generateUsernameSuggestions(
   base: string,
@@ -79,24 +80,24 @@ export async function generateUsernameSuggestions(
   const suggestions: string[] = [];
   for (const candidate of uniqueCandidates) {
     if (suggestions.length >= 3) break;
-    if (checkAvailableFn) {
-      try {
-        const ok = await checkAvailableFn(candidate);
-        if (ok) {
-          suggestions.push(candidate);
-        }
-      } catch {
-        suggestions.push(candidate);
-      }
-    } else {
-      suggestions.push(candidate);
+    if (!checkAvailableFn) return [];
+    try {
+      const ok = await checkAvailableFn(candidate);
+      if (ok) suggestions.push(candidate);
+    } catch {
+      // Fail closed: an unverified candidate must not be presented as available.
     }
   }
 
-  while (suggestions.length < 2) {
+  let attempts = 0;
+  while (suggestions.length < 2 && checkAvailableFn && attempts < 20) {
+    attempts += 1;
     const fallback = generateRandomCandidateUsername();
-    if (!suggestions.includes(fallback)) {
-      suggestions.push(fallback);
+    if (suggestions.includes(fallback)) continue;
+    try {
+      if (await checkAvailableFn(fallback)) suggestions.push(fallback);
+    } catch {
+      // Keep the verified suggestion list only.
     }
   }
 

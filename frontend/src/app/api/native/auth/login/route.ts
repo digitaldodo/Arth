@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isValidUsername } from '@/lib/username';
-import { resolveEmailFromUsername } from '@/app/login/actions';
+import { lookupEmailByUsername } from '@/app/login/actions';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 
 export const dynamic = 'force-dynamic';
@@ -41,14 +41,20 @@ export async function POST(request: Request) {
         );
       }
 
-      const resolved = await resolveEmailFromUsername(normalizedUsername);
-      if (!resolved) {
+      const lookup = await lookupEmailByUsername(normalizedUsername);
+      if (lookup.status === 'unavailable') {
+        return NextResponse.json(
+          { error: 'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.' },
+          { status: 503, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+      if (lookup.status === 'not_found') {
         return NextResponse.json(
           { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
           { status: 401, headers: { 'Cache-Control': 'no-store' } }
         );
       }
-      targetEmail = resolved;
+      targetEmail = lookup.email;
     }
 
     const supabase = await createClient();

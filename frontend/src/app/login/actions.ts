@@ -41,6 +41,18 @@ function isValidPassword(password: string): boolean {
 
 type AuthClient = Awaited<ReturnType<typeof createClient>>;
 
+async function getAvailableUsernameSuggestions(
+  supabase: AuthClient,
+  base: string
+): Promise<string[]> {
+  return generateUsernameSuggestions(base, async (candidate) => {
+    const { data, error } = await supabase.rpc('fn_check_username_available', {
+      p_username: candidate,
+    });
+    return !error && data === true;
+  });
+}
+
 /** Persist the status marker only after Supabase has confirmed password authentication or update. */
 async function markPasswordConfigured(supabase: AuthClient, recordSetAt = false): Promise<boolean> {
   const data = recordSetAt
@@ -82,12 +94,25 @@ export async function isServiceRoleConfigured(): Promise<boolean> {
 export async function resolveEmailFromUsername(
   normalizedUsername: string
 ): Promise<string | null> {
+  const result = await lookupEmailByUsername(normalizedUsername);
+  return result.status === 'resolved' ? result.email : null;
+}
+
+export type UsernameLookupResult =
+  | { status: 'resolved'; email: string }
+  | { status: 'not_found' }
+  | { status: 'unavailable' };
+
+/** Distinguishes a missing username from a lookup service/configuration failure. */
+export async function lookupEmailByUsername(
+  normalizedUsername: string
+): Promise<UsernameLookupResult> {
   const serviceRoleKey = getServiceRoleKey();
   const supabaseUrl =
     process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 
   if (!serviceRoleKey || !supabaseUrl) {
-    return null;
+    return { status: 'unavailable' };
   }
 
   try {
@@ -107,13 +132,17 @@ export async function resolveEmailFromUsername(
       { p_username: normalizedUsername }
     );
 
-    if (error || !email || typeof email !== 'string') {
-      return null;
+    if (error) {
+      return { status: 'unavailable' };
     }
 
-    return email.trim().toLowerCase();
+    if (!email || typeof email !== 'string') {
+      return { status: 'not_found' };
+    }
+
+    return { status: 'resolved', email: email.trim().toLowerCase() };
   } catch {
-    return null;
+    return { status: 'unavailable' };
   }
 }
 
@@ -155,21 +184,21 @@ export async function signInWithEmailAction(
       };
     }
 
-    targetEmail = await resolveEmailFromUsername(normalizedUsername);
-
-    if (!targetEmail) {
-      if (!hasServiceRoleKey()) {
-        return {
-          error:
-            'Username login requires server configuration (SUPABASE_SERVICE_ROLE_KEY). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel project environment variables, or sign in using your registered email address.',
-        };
-      }
+    const lookup = await lookupEmailByUsername(normalizedUsername);
+    if (lookup.status === 'unavailable') {
+      return {
+        error:
+          'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.',
+      };
+    }
+    if (lookup.status === 'not_found') {
       // Generic authentication failure to prevent username enumeration
       return {
         error:
           'Invalid email, username, or password. Please verify your credentials and try again.',
       };
     }
+    targetEmail = lookup.email;
   }
 
   try {
@@ -855,10 +884,8 @@ export async function setUsernameAction(
 
   const normalizedUsername = rawUsername.toLowerCase();
   if (isReservedUsername(normalizedUsername)) {
-    const suggestions = await generateUsernameSuggestions(normalizedUsername);
     return {
       error: 'This username is reserved. Please choose another username.',
-      suggestions,
     };
   }
 
@@ -884,15 +911,7 @@ export async function setUsernameAction(
         rpcError.code === '23505' ||
         rpcError.message.includes('already taken')
       ) {
-        const suggestions = await generateUsernameSuggestions(
-          normalizedUsername,
-          async (cand) => {
-            const { data } = await supabase.rpc('fn_check_username_available', {
-              p_username: cand,
-            });
-            return Boolean(data);
-          }
-        );
+        const suggestions = await getAvailableUsernameSuggestions(supabase, normalizedUsername);
         return {
           error: 'This username is already taken. Please choose another username.',
           suggestions,
@@ -919,15 +938,7 @@ export async function setUsernameAction(
             updateError.message.includes('unique') ||
             updateError.message.includes('already taken')
           ) {
-            const suggestions = await generateUsernameSuggestions(
-              normalizedUsername,
-              async (cand) => {
-                const { data } = await supabase.rpc('fn_check_username_available', {
-                  p_username: cand,
-                });
-                return Boolean(data);
-              }
-            );
+            const suggestions = await getAvailableUsernameSuggestions(supabase, normalizedUsername);
             return {
               error: 'This username is already taken. Please choose another username.',
               suggestions,
@@ -990,11 +1001,9 @@ export async function checkUsernameAvailabilityAction(
   }
 
   if (isReservedUsername(cleanUsername)) {
-    const suggestions = await generateUsernameSuggestions(cleanUsername);
     return {
       available: false,
       error: 'This username is reserved. Please choose another username.',
-      suggestions,
     };
   }
 
@@ -1013,15 +1022,7 @@ export async function checkUsernameAvailabilityAction(
     }
 
     if (!isAvailable) {
-      const suggestions = await generateUsernameSuggestions(
-        cleanUsername,
-        async (cand) => {
-          const { data } = await supabase.rpc('fn_check_username_available', {
-            p_username: cand,
-          });
-          return Boolean(data);
-        }
-      );
+      const suggestions = await getAvailableUsernameSuggestions(supabase, cleanUsername);
       return {
         available: false,
         error: 'This username is already taken. Please choose another username.',
