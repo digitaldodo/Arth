@@ -6,7 +6,7 @@ This inventory records the scope implemented for the user's contribution and the
 
 | Area | Current entry point | Status |
 |---|---|---|
-| Product name, visual identity, and responsive app shell | `frontend/src/components/brand/ArthLogo.tsx`, `frontend/src/app/layout.tsx`, `frontend/src/app/UnauthenticatedHome.tsx`, `frontend/src/app/globals.css` | Customer-facing web, PWA, and Android launcher identity is SpendSense; existing storage, APIs, auth, package IDs, and offline keys remain stable. |
+| Product name, visual identity, and responsive app shell | `frontend/src/components/brand/ArthLogo.tsx`, `frontend/src/app/layout.tsx`, `frontend/src/app/UnauthenticatedHome.tsx`, `frontend/src/app/globals.css`, `frontend/src/features/transactions/TransactionAppShell.tsx` | Customer-facing web, PWA, and Android launcher identity is SpendSense; main app screens load on first visit and retain state afterward, with phone/tablet bottom navigation and desktop tabs at a wider breakpoint. Existing storage, APIs, auth, package IDs, and offline keys remain stable. |
 | Transaction category suggestions | `frontend/src/features/categorization/` and `frontend/src/features/transactions/QuickAddModal.tsx` | Conservative Indian merchant/context weak-label baseline; only distinct signals that agree can suggest; the user confirms or corrects; explicit user feedback and saved merchant rules are account-scoped and local. |
 | Categorization research/evaluation | `ml/transaction-categorization/`, `frontend/tests/categorization-pipeline.test.ts`, `docs/SPENDSENSE_TRANSACTION_CATEGORIZATION_RESEARCH.md` | Reproducible evaluation entrypoints and synthetic fixtures exist. No production-trained artifact or measured macro-F1 claim is included. |
 | Language preference readiness | `frontend/src/lib/i18n/`, `frontend/src/features/settings/LanguagePreference.tsx` | English India is default; users can persist a per-account English/Hinglish preference, and category suggestion guidance localizes from message keys. |
@@ -39,9 +39,9 @@ The standard direct APK uses Android's user-granted Notification access to detec
 
 ## Not claimed as complete
 
+- The app shell now defers screen rendering and code loading until a screen is first visited, but a full visual review of every route at phone, tablet, laptop, and large-monitor sizes remains to be completed.
+- No production FastText categorization model is trained or active. The current Indian-context suggestion pipeline is a conservative rule baseline; the greater-than-85% macro-F1 research target has not been measured, and no consented customer dataset is available.
 - Android debug builds compile and unit tests pass. No physical installation or SMS allowlisting test was possible in this workspace; the user confirmed no device was available.
-- The categorization research target of greater than 85% macro F1 has not been measured.
-- No production FastText artifact is trained or shipped.
 - Automatic inbox/history access is not available in the direct-download APK; visible notification detection is opt-in and best effort.
 - Tax estimation and deduction rules are team-owned and are not implemented by the document intake feature.
 - The user-owned `/api/v1/financial/documents` and `/fields` endpoints are registered by `backend/src/modules/documents/`. The tax calculation module must consume these verified facts and must not register duplicate document handlers.

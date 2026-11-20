@@ -208,7 +208,7 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
   });
 
   describe('4. Persistent Navigation & Service Worker App Shell Precache', () => {
-    test('TransactionAppShell mounts all five views persistently to eliminate tab-switching reloading', () => {
+    test('TransactionAppShell lazily mounts screens on first visit, then preserves them for quick navigation', () => {
       const shellPath = path.join(
         projectRoot,
         'src',
@@ -218,26 +218,17 @@ describe('Critical Improvements: Balances, Offline PWA, Quick Add & Persistent N
       );
       const content = fs.readFileSync(shellPath, 'utf8');
 
-      assert.ok(
-        content.includes("activeView === 'home' ? 'block' : 'hidden'"),
-        'DashboardPage must remain mounted with block/hidden toggling'
-      );
-      assert.ok(
-        content.includes("activeView === 'ledger' ? 'block' : 'hidden'"),
-        'TransactionLedger must remain mounted with block/hidden toggling'
-      );
-      assert.ok(
-        content.includes("activeView === 'people' ? 'block' : 'hidden'"),
-        'PeoplePage must remain mounted with block/hidden toggling'
-      );
-      assert.ok(
-        content.includes("activeView === 'categories' ? 'block' : 'hidden'"),
-        'CategoryManager must remain mounted with block/hidden toggling'
-      );
-      assert.ok(
-        content.includes("activeView === 'more' ? 'block' : 'hidden'"),
-        'Settings / More must remain mounted with block/hidden toggling'
-      );
+      for (const view of ['home', 'ledger', 'people', 'categories', 'documents', 'more']) {
+        assert.ok(
+          content.includes(`visitedViews.has('${view}') &&`),
+          `${view} screen must mount on first visit and stay mounted afterward`
+        );
+      }
+      assert.ok(content.includes("new Set(['home'])"), 'Only the dashboard should be mounted on initial navigation');
+      assert.ok(content.includes("import('./TransactionLedger')"), 'Large screens should be split into on-demand chunks');
+      assert.ok(content.includes("import('@/features/imports/StatementImport')"), 'Document imports should load on demand');
+      assert.ok(content.includes('lg:hidden fixed inset-x-0 bottom-0'), 'Mobile and tablet navigation should stay available below desktop width');
+      assert.ok(content.includes('hidden lg:flex items-center gap-1.5'), 'The full navigation bar should appear only when desktop has room');
     });
 
     test('InstallPromptCard displays pending offline sync status and manual sync action while TransactionAppShell keeps main screens clean', () => {

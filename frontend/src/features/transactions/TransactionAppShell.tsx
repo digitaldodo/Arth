@@ -1,15 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { QuickAddModal } from './QuickAddModal';
-import { TransactionLedger } from './TransactionLedger';
-import { CategoryManager } from '@/features/categories/CategoryManager';
-import { PeoplePage } from '@/features/people/PeoplePage';
-import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
 import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
@@ -20,8 +17,6 @@ import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
 import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
 import { LanguagePreference } from '@/features/settings/LanguagePreference';
-import { StatementImport } from '@/features/imports/StatementImport';
-import { DocumentsTaxCentre } from '@/features/tax/DocumentsTaxCentre';
 import { useAppLock } from '@/features/app-lock/useAppLock';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { unlockAfterVerification } from '@/features/app-lock/verification';
@@ -51,6 +46,29 @@ interface TransactionAppShellProps {
 
 export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'documents' | 'more';
 
+function ViewLoading({ label }: { label: string }) {
+  return <div role="status" aria-live="polite" className="min-h-40 animate-pulse rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 text-sm text-[var(--text-muted)]">Opening {label}…</div>;
+}
+
+const DashboardPage = dynamic(() => import('@/features/dashboard/DashboardPage').then((module) => module.DashboardPage), {
+  loading: () => <ViewLoading label="your dashboard" />,
+});
+const TransactionLedger = dynamic(() => import('./TransactionLedger').then((module) => module.TransactionLedger), {
+  loading: () => <ViewLoading label="your ledger" />,
+});
+const PeoplePage = dynamic(() => import('@/features/people/PeoplePage').then((module) => module.PeoplePage), {
+  loading: () => <ViewLoading label="people" />,
+});
+const CategoryManager = dynamic(() => import('@/features/categories/CategoryManager').then((module) => module.CategoryManager), {
+  loading: () => <ViewLoading label="categories" />,
+});
+const DocumentsTaxCentre = dynamic(() => import('@/features/tax/DocumentsTaxCentre').then((module) => module.DocumentsTaxCentre), {
+  loading: () => <ViewLoading label="documents" />,
+});
+const StatementImport = dynamic(() => import('@/features/imports/StatementImport').then((module) => module.StatementImport), {
+  loading: () => <ViewLoading label="statement tools" />,
+});
+
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   return (
     <AuthProvider user={user}>
@@ -69,6 +87,11 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const [passwordStatus, setPasswordStatus] = useState<PasswordStatus>(user?.passwordStatus ?? 'unknown');
   const hasPassword = passwordStatus === 'configured';
   const [activeView, setActiveView] = useState<AppView>('home');
+  const [visitedViews, setVisitedViews] = useState<Set<AppView>>(() => new Set(['home']));
+  const navigateToView = (view: AppView) => {
+    setVisitedViews((visited) => visited.has(view) ? visited : new Set(visited).add(view));
+    setActiveView(view);
+  };
   const [ledgerInitialFilter, setLedgerInitialFilter] = useState<{
     categoryId?: string;
     necessity?: NecessityClass;
@@ -98,7 +121,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       (!openedCategoriesFromMore || activeView !== 'categories') &&
       (activeView !== 'more' || moreSubView === 'hub'),
     onBack: () => {
-      setActiveView('home');
+      navigateToView('home');
       return true;
     },
   });
@@ -110,7 +133,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     enabled: activeView === 'categories' && openedCategoriesFromMore,
     onBack: () => {
       setOpenedCategoriesFromMore(false);
-      setActiveView('more');
+      navigateToView('more');
       return true;
     },
   });
@@ -119,7 +142,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     id: 'subscreen-documents',
     priority: 'subscreen',
     enabled: activeView === 'documents',
-    onBack: () => { setActiveView('more'); return true; },
+    onBack: () => { navigateToView('more'); return true; },
   });
 
   // Priority 2: Settings subview in More returns to More Hub
@@ -282,12 +305,12 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   return (
     <>
     <div hidden={isAppLocked} aria-hidden={isAppLocked} inert={isAppLocked} className="min-h-screen">
-    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-12">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] lg:pb-12">
       {/* Top Application Header */}
       <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 xl:px-12 py-3 sm:py-3.5">
         <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <Link href="/" onClick={() => setActiveView('home')} aria-label="Go to dashboard" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
+            <Link href="/" onClick={() => navigateToView('home')} aria-label="Go to dashboard" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
               <ArthLogo
                 variant="full"
                 className="h-6 sm:h-7 w-auto max-w-[110px] sm:max-w-[130px] text-[var(--text-primary)] group-hover:opacity-90 transition-opacity shrink-0"
@@ -299,10 +322,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
             {/* Desktop Navigation Switcher */}
             {user && (
-              <div className="hidden sm:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-md border border-[var(--border-hairline)] ml-2 lg:ml-4">
+              <div className="hidden lg:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-lg border border-[var(--border-hairline)] ml-2 lg:ml-4">
                 <button
                   type="button"
-                  onClick={() => setActiveView('home')}
+                  onClick={() => navigateToView('home')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'home'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -313,7 +336,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveView('ledger')}
+                  onClick={() => navigateToView('ledger')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'ledger'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -324,7 +347,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveView('people')}
+                  onClick={() => navigateToView('people')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'people'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -335,7 +358,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveView('categories')}
+                  onClick={() => navigateToView('categories')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'categories'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -346,7 +369,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveView('documents')}
+                  onClick={() => navigateToView('documents')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'documents'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -357,7 +380,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveView('more')}
+                  onClick={() => navigateToView('more')}
                   className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'more'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
@@ -430,7 +453,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             </div>
             <button
               type="button"
-              onClick={() => setActiveView('more')}
+              onClick={() => navigateToView('more')}
               className="text-xs font-medium text-[var(--text-primary)] underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             >
               Choose username &rarr;
@@ -440,23 +463,23 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
         {user ? (
           <>
-            {/* Persistent Tab Container: All views stay mounted in the DOM to eliminate reload delay */}
-            <div className={activeView === 'home' ? 'block' : 'hidden'}>
+            {/* Mount each destination on first visit, then preserve its state for fast return navigation. */}
+            {visitedViews.has('home') && <div className={activeView === 'home' ? 'view-enter' : 'hidden'}>
               <DashboardPage
                 userId={user.id}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-                onNavigateToLedger={() => setActiveView('ledger')}
+                onNavigateToLedger={() => navigateToView('ledger')}
                 onOpenFilteredLedger={(filter) => {
                   setLedgerInitialFilter(filter);
-                  setActiveView('ledger');
+                  navigateToView('ledger');
                 }}
                 refreshTrigger={refreshTrigger}
                 initialBalances={shellBalances}
                 onBalancesLoaded={(b) => setShellBalances(b)}
               />
-            </div>
+            </div>}
 
-            <div className={activeView === 'ledger' ? 'block' : 'hidden'}>
+            {visitedViews.has('ledger') && <div className={activeView === 'ledger' ? 'view-enter' : 'hidden'}>
               <TransactionLedger
                 key={ledgerInitialFilter ? `${ledgerInitialFilter.categoryId || ''}:${ledgerInitialFilter.necessity || ''}:${ledgerInitialFilter.startDate}:${ledgerInitialFilter.endDate}` : 'all'}
                 initialFilter={ledgerInitialFilter}
@@ -472,25 +495,25 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
               />
-            </div>
+            </div>}
 
-            <div className={activeView === 'people' ? 'block' : 'hidden'}>
+            {visitedViews.has('people') && <div className={activeView === 'people' ? 'view-enter' : 'hidden'}>
               <PeoplePage
                 userId={user.id}
                 onRefreshShell={() => setRefreshTrigger((prev) => prev + 1)}
               />
-            </div>
+            </div>}
 
-            <div className={activeView === 'categories' ? 'block' : 'hidden'}>
+            {visitedViews.has('categories') && <div className={activeView === 'categories' ? 'view-enter' : 'hidden'}>
               <CategoryManager userId={user.id} onCategoryChange={handleCategoryChanged} />
-            </div>
+            </div>}
 
-            <div className={activeView === 'documents' ? 'block' : 'hidden'}>
+            {visitedViews.has('documents') && <div className={activeView === 'documents' ? 'view-enter' : 'hidden'}>
               <DocumentsTaxCentre userId={user.id} />
               <StatementImport userId={user.id} onImported={() => setRefreshTrigger((prev) => prev + 1)} />
-            </div>
+            </div>}
 
-                        <div className={activeView === 'more' ? 'block' : 'hidden'}>
+            {visitedViews.has('more') && <div className={activeView === 'more' ? 'view-enter' : 'hidden'}>
               <div className="space-y-5">
                 {/* 1. APPEARANCE SUBVIEW */}
                 {moreSubView === 'appearance' && (
@@ -752,7 +775,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                     <div className="grid gap-3">
                       <button
                         type="button"
-                        onClick={() => setActiveView('documents')}
+                        onClick={() => navigateToView('documents')}
                         className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
                       >
                         <div className="flex items-center gap-3">
@@ -790,7 +813,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         type="button"
                         onClick={() => {
                           setOpenedCategoriesFromMore(true);
-                          setActiveView('categories');
+                          navigateToView('categories');
                         }}
                         className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
                       >
@@ -870,7 +893,8 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                   </div>
                 )}
               </div>
-            </div>          </>
+            </div>}
+          </>
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -896,12 +920,12 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       {user && (
         <nav
           aria-label="Mobile Navigation"
-          className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-2 pt-1 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around"
+          className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-2 pt-1 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around"
         >
           {/* 1. Home */}
           <button
             type="button"
-            onClick={() => setActiveView('home')}
+            onClick={() => navigateToView('home')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'home'
                 ? 'text-[var(--text-primary)] font-bold'
@@ -915,7 +939,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           {/* 2. Ledger */}
           <button
             type="button"
-            onClick={() => setActiveView('ledger')}
+            onClick={() => navigateToView('ledger')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'ledger'
                 ? 'text-[var(--text-primary)] font-bold'
@@ -941,7 +965,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           {/* 4. People */}
           <button
             type="button"
-            onClick={() => setActiveView('people')}
+            onClick={() => navigateToView('people')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'people'
                 ? 'text-[var(--text-primary)] font-bold'
@@ -955,7 +979,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           {/* 5. More */}
           <button
             type="button"
-            onClick={() => setActiveView('more')}
+            onClick={() => navigateToView('more')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
               activeView === 'more' || activeView === 'categories'
                 ? 'text-[var(--text-primary)] font-bold'
