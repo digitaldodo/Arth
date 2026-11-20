@@ -1,9 +1,8 @@
 import React from 'react';
 import {
-  ARTH_FULL_LOGO_VIEWBOX,
-  ARTH_FULL_LOGO_PATH,
-  ARTH_SYMBOL_VIEWBOX,
-  ARTH_SYMBOL_PATH,
+  SPENDSENSE_FULL_LOGO_VIEWBOX,
+  SPENDSENSE_SYMBOL_VIEWBOX,
+  SPENDSENSE_SYMBOL_PATH,
 } from './logo-paths';
 
 export interface ArthLogoProps extends React.SVGProps<SVGSVGElement> {
@@ -33,8 +32,7 @@ export function ArthLogo({
   ...props
 }: ArthLogoProps) {
   const isFull = variant === 'full';
-  const viewBox = isFull ? ARTH_FULL_LOGO_VIEWBOX : ARTH_SYMBOL_VIEWBOX;
-  const pathD = isFull ? ARTH_FULL_LOGO_PATH : ARTH_SYMBOL_PATH;
+  const viewBox = isFull ? SPENDSENSE_FULL_LOGO_VIEWBOX : SPENDSENSE_SYMBOL_VIEWBOX;
 
   const fill =
     theme === 'black'
@@ -56,21 +54,25 @@ export function ArthLogo({
       {title && <title>{title}</title>}
       {isFull ? (
         <>
-          <path d={ARTH_SYMBOL_PATH} fill={fill} />
+          <path d={SPENDSENSE_SYMBOL_PATH} fill="none" stroke={fill} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M 49 104 H 111" stroke="#10B981" strokeWidth="7" strokeLinecap="round" />
           <text
-            x="1320"
-            y="625"
+            x="190"
+            y="108"
             fill={fill}
             fontFamily="Inter, Arial, sans-serif"
-            fontSize="290"
+            fontSize="72"
             fontWeight="600"
-            letterSpacing="-16"
+            letterSpacing="-2"
           >
             SpendSense
           </text>
         </>
       ) : (
-        <path d={pathD} fill={fill} />
+        <>
+          <path d={SPENDSENSE_SYMBOL_PATH} fill="none" stroke={fill} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M 49 104 H 111" stroke="#10B981" strokeWidth="7" strokeLinecap="round" />
+        </>
       )}
     </svg>
   );
