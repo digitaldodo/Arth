@@ -96,7 +96,17 @@ export function sanitizeUserFacingError(
     return 'Passwords do not match. Please verify both fields.';
   }
 
-  // 3. Rate Limits
+  // 3. RLS / Row-Level Security & Permission Rejections
+  if (
+    lower.includes('row-level security') ||
+    lower.includes('violates row-level security policy') ||
+    lower.includes('permission denied') ||
+    lower.includes('42501')
+  ) {
+    return 'Access denied. You do not have permission to perform this action.';
+  }
+
+  // 4. Rate Limits
   if (
     lower.includes('too many requests') ||
     lower.includes('rate limit') ||
@@ -106,7 +116,25 @@ export function sanitizeUserFacingError(
     return 'Too many attempts in a short period. Please wait a few moments before trying again.';
   }
 
-  // 4. Temporary backend unavailability / Gateway failures
+  // 4. Username Lookup & Authentication Service Availability
+  if (
+    lower.includes('username lookup unavailable') ||
+    lower.includes('username sign-in is temporarily unavailable') ||
+    lower.includes('username sign-in requires') ||
+    lower.includes('username login requires')
+  ) {
+    return 'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.';
+  }
+
+  if (
+    lower.includes('auth service unavailable') ||
+    lower.includes('authapierror') ||
+    lower.includes('authentication service is temporarily unavailable')
+  ) {
+    return 'Authentication service is temporarily unavailable. Please try again shortly.';
+  }
+
+  // 5. Temporary backend unavailability / Gateway failures
   if (
     lower.includes('backend service is currently unavailable') ||
     lower.includes('bad gateway') ||
@@ -116,7 +144,7 @@ export function sanitizeUserFacingError(
     return 'SpendSense is temporarily unavailable. Your existing financial records have not been confirmed as loaded.';
   }
 
-  // 5. Network & Connection Failures (Node undici, browser fetch, timeout, unreachable)
+  // 6. Network & Connection Failures (Node undici, browser fetch, timeout, unreachable)
   if (
     lower.includes('fetch failed') ||
     lower.includes('failed to fetch') ||
@@ -134,7 +162,7 @@ export function sanitizeUserFacingError(
     return 'Unable to connect to the server. Please check your internet connection and try again.';
   }
 
-  // 6. Database, SQL, Postgres, PostgREST internals leakage prevention
+  // 7. Database, SQL, Postgres, PostgREST internals leakage prevention
   if (
     lower.includes('pgrst') ||
     lower.includes('postgres') ||

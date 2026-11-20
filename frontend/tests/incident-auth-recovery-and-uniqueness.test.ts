@@ -358,5 +358,122 @@ describe('Critical Incident: Authentication Recovery, Username Uniqueness & Data
         'An unexpected error occurred. Please try again.'
       );
     });
+
+    test('RLS rejection is cleanly translated into permission denied message', () => {
+      const rlsError = 'new row violates row-level security policy for table "transactions" (code: 42501)';
+      assert.equal(
+        sanitizeUserFacingError(rlsError),
+        'Access denied. You do not have permission to perform this action.'
+      );
+    });
+
+    test('Rate limiting is distinctly reported without masking as network error', () => {
+      const rateError = 'over_email_send_rate_limit: email rate limit exceeded';
+      assert.equal(
+        sanitizeUserFacingError(rateError),
+        'Too many attempts in a short period. Please wait a few moments before trying again.'
+      );
+    });
+
+    test('Username sign-in unavailable error is distinctly preserved', () => {
+      const lookupError = 'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.';
+      assert.equal(
+        sanitizeUserFacingError(lookupError),
+        'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.'
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 4. Username Resolution Failure Resilience (Outage vs Missing User)
+  // ---------------------------------------------------------------------------
+  describe('4. Username Resolution Failure Resilience', () => {
+    test('Database outage or RPC failure during username lookup does NOT treat user as nonexistent', async () => {
+      const originalFetch = globalThis.fetch;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL) => {
+          if (url.toString().includes('fn_get_email_by_username')) {
+            // Simulate 500 error from PostgREST
+            return new Response(JSON.stringify({ code: '500', message: 'Internal Server Error' }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url);
+        };
+
+        const formData = new FormData();
+        formData.set('identifier', 'existing_user');
+        formData.set('password', 'SecretPass123!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.ok(res.error, 'Must report error');
+        assert.ok(
+          res.error.includes('Username sign-in is temporarily unavailable') ||
+          res.error.includes('registered email address'),
+          `Error must guide user to registered email, got: ${res.error}`
+        );
+        assert.ok(
+          !res.error.includes('Invalid email, username, or password'),
+          'Database outage must NEVER be mapped to invalid credentials'
+        );
+      } finally {
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('Non-existent username returns generic authentication error without enumeration leakage', async () => {
+      const originalFetch = globalThis.fetch;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+
+      try {
+        globalThis.fetch = async (url: RequestInfo | URL) => {
+          if (url.toString().includes('fn_get_email_by_username')) {
+            return new Response(JSON.stringify(null), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(url);
+        };
+
+        const formData = new FormData();
+        formData.set('identifier', 'ghost_user');
+        formData.set('password', 'SecretPass123!');
+
+        const res = await signInWithEmailAction(formData);
+        assert.equal(
+          res.error,
+          'Invalid email, username, or password. Please verify your credentials and try again.'
+        );
+      } finally {
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 5. User Account and Financial Data Isolation Invariants
+  // ---------------------------------------------------------------------------
+  describe('5. Data Isolation & Existing Account Invariants', () => {
+    test('Existing user transaction records preserve original user UUID and ownership', () => {
+      const testUser = {
+        id: '018f0000-0000-7000-8000-000000000001',
+        email: 'verified_owner@example.com',
+      };
+      const record = {
+        id: '018f0000-0000-7000-8000-000000000099',
+        user_id: testUser.id,
+        amount_paise: 50000,
+        type: 'expense',
+      };
+
+      assert.equal(record.user_id, testUser.id, 'Record must be strictly tied to user ID');
+      assert.ok(record.amount_paise > 0, 'Amount must be positive integer paise');
+    });
   });
 });

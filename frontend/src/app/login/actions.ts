@@ -133,6 +133,8 @@ export async function lookupEmailByUsername(
     );
 
     if (error) {
+      const correlationId = `lookup_err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      console.error(`[Username Lookup Error ${correlationId}]:`, error.message);
       return { status: 'unavailable' };
     }
 
@@ -141,7 +143,9 @@ export async function lookupEmailByUsername(
     }
 
     return { status: 'resolved', email: email.trim().toLowerCase() };
-  } catch {
+  } catch (err: unknown) {
+    const correlationId = `lookup_catch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    console.error(`[Username Lookup Exception ${correlationId}]:`, err instanceof Error ? err.message : String(err));
     return { status: 'unavailable' };
   }
 }
@@ -186,6 +190,12 @@ export async function signInWithEmailAction(
 
     const lookup = await lookupEmailByUsername(normalizedUsername);
     if (lookup.status === 'unavailable') {
+      if (!hasServiceRoleKey()) {
+        return {
+          error:
+            'Username login requires server configuration (SUPABASE_SERVICE_ROLE_KEY). Please sign in using your registered email address.',
+        };
+      }
       return {
         error:
           'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.',
@@ -230,6 +240,8 @@ export async function signInWithEmailAction(
             'Too many sign-in attempts. Please wait a few moments before trying again.',
         };
       }
+      const correlationId = `auth_err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      console.error(`[Auth Sign-In Error ${correlationId}]:`, error.message);
       return {
         error: sanitizeUserFacingError(error.message, 'Unable to sign in. Please check your credentials and try again.'),
       };
@@ -246,6 +258,8 @@ export async function signInWithEmailAction(
 
     return { success: true, redirectUrl: '/' };
   } catch (err: unknown) {
+    const correlationId = `auth_catch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    console.error(`[Auth Sign-In Exception ${correlationId}]:`, err instanceof Error ? err.message : String(err));
     return { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') };
   }
 }
@@ -886,12 +900,17 @@ export async function setUsernameAction(
   if (isReservedUsername(normalizedUsername)) {
     try {
       const supabase = await createClient();
+      const verified = await getAvailableUsernameSuggestions(supabase, normalizedUsername);
+      const suggestions = verified && verified.length >= 2 ? verified : await generateUsernameSuggestions(normalizedUsername);
       return {
         error: 'This username is reserved. Please choose another username.',
-        suggestions: await getAvailableUsernameSuggestions(supabase, normalizedUsername),
+        suggestions,
       };
     } catch {
-      return { error: 'This username is reserved. Please choose another username.' };
+      return {
+        error: 'This username is reserved. Please choose another username.',
+        suggestions: await generateUsernameSuggestions(normalizedUsername),
+      };
     }
   }
 
@@ -1009,15 +1028,18 @@ export async function checkUsernameAvailabilityAction(
   if (isReservedUsername(cleanUsername)) {
     try {
       const supabase = await createClient();
+      const verified = await getAvailableUsernameSuggestions(supabase, cleanUsername);
+      const suggestions = verified && verified.length >= 2 ? verified : await generateUsernameSuggestions(cleanUsername);
       return {
         available: false,
         error: 'This username is reserved. Please choose another username.',
-        suggestions: await getAvailableUsernameSuggestions(supabase, cleanUsername),
+        suggestions,
       };
     } catch {
       return {
         available: false,
         error: 'This username is reserved. Please choose another username.',
+        suggestions: await generateUsernameSuggestions(cleanUsername),
       };
     }
   }

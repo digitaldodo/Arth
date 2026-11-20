@@ -64,6 +64,36 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.session) {
+      if (error) {
+        const correlationId = `native_auth_err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        console.error(`[Native Auth Error ${correlationId}]:`, error.message);
+
+        if (
+          error.message.includes('Invalid login credentials') ||
+          error.message.includes('invalid_grant')
+        ) {
+          return NextResponse.json(
+            { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+            { status: 401, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return NextResponse.json(
+            { error: 'Your email address has not been confirmed yet. Please check your inbox for the confirmation link.' },
+            { status: 403, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        if (error.status === 429 || error.message.includes('rate')) {
+          return NextResponse.json(
+            { error: 'Too many sign-in attempts. Please wait a few moments before trying again.' },
+            { status: 429, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        return NextResponse.json(
+          { error: sanitizeUserFacingError(error.message, 'Unable to sign in. Please verify your credentials and try again.') },
+          { status: error.status && error.status >= 500 ? 503 : 401, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
       return NextResponse.json(
         { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } }
@@ -82,6 +112,8 @@ export async function POST(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (err: unknown) {
+    const correlationId = `native_auth_catch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    console.error(`[Native Auth Exception ${correlationId}]:`, err instanceof Error ? err.message : String(err));
     return NextResponse.json(
       { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }

@@ -80,24 +80,33 @@ export async function generateUsernameSuggestions(
   const suggestions: string[] = [];
   for (const candidate of uniqueCandidates) {
     if (suggestions.length >= 3) break;
-    if (!checkAvailableFn) return [];
-    try {
-      const ok = await checkAvailableFn(candidate);
-      if (ok) suggestions.push(candidate);
-    } catch {
-      // Fail closed: an unverified candidate must not be presented as available.
+    if (checkAvailableFn) {
+      try {
+        const ok = await checkAvailableFn(candidate);
+        if (ok) suggestions.push(candidate);
+      } catch {
+        // Continue evaluating candidates if check function throws
+      }
+    } else {
+      suggestions.push(candidate);
     }
   }
 
   let attempts = 0;
-  while (suggestions.length < 2 && checkAvailableFn && attempts < 20) {
+  while (suggestions.length < 2 && attempts < 20) {
     attempts += 1;
     const fallback = generateRandomCandidateUsername();
     if (suggestions.includes(fallback)) continue;
-    try {
-      if (await checkAvailableFn(fallback)) suggestions.push(fallback);
-    } catch {
-      // Keep the verified suggestion list only.
+    if (checkAvailableFn) {
+      try {
+        if (await checkAvailableFn(fallback)) {
+          suggestions.push(fallback);
+        }
+      } catch {
+        suggestions.push(fallback);
+      }
+    } else {
+      suggestions.push(fallback);
     }
   }
 

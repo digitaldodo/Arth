@@ -82,13 +82,17 @@ export function QuickAddModal({
   const [savedMerchantCategoryId, setSavedMerchantCategoryId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    setCorrectionSaved(false);
-    setSavedMerchantCategoryId(null);
-    if (userId && description.trim()) {
-      void findCategoryCorrection(userId, merchantFingerprint(description)).then((id) => {
-        if (active) setSavedMerchantCategoryId(id);
-      });
-    }
+    void (async () => {
+      if (active) {
+        setCorrectionSaved(false);
+        if (userId && description.trim()) {
+          const id = await findCategoryCorrection(userId, merchantFingerprint(description));
+          if (active) setSavedMerchantCategoryId(id);
+        } else {
+          setSavedMerchantCategoryId(null);
+        }
+      }
+    })();
     return () => { active = false; };
   }, [description, userId]);
   const categorySuggestion = useMemo(
