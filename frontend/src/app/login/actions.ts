@@ -219,6 +219,20 @@ export async function signInWithEmailAction(
     });
 
     if (error) {
+      const lower = error.message.toLowerCase();
+      if (
+        lower.includes('fetch failed') ||
+        lower.includes('enotfound') ||
+        lower.includes('econnrefused') ||
+        lower.includes('etimedout') ||
+        lower.includes('ebusy')
+      ) {
+        return {
+          error:
+            'Authentication service is temporarily unavailable. Please try again shortly.',
+        };
+      }
+
       if (
         error.message.includes('Invalid login credentials') ||
         error.message.includes('invalid_grant')
@@ -260,6 +274,19 @@ export async function signInWithEmailAction(
   } catch (err: unknown) {
     const correlationId = `auth_catch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     console.error(`[Auth Sign-In Exception ${correlationId}]:`, err instanceof Error ? err.message : String(err));
+    const lower = (err instanceof Error ? err.message : String(err)).toLowerCase();
+    if (
+      lower.includes('fetch failed') ||
+      lower.includes('enotfound') ||
+      lower.includes('econnrefused') ||
+      lower.includes('etimedout') ||
+      lower.includes('ebusy')
+    ) {
+      return {
+        error:
+          'Authentication service is temporarily unavailable. Please try again shortly.',
+      };
+    }
     return { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') };
   }
 }

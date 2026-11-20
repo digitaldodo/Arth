@@ -68,6 +68,20 @@ export async function POST(request: Request) {
         const correlationId = `native_auth_err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         console.error(`[Native Auth Error ${correlationId}]:`, error.message);
 
+        const lower = error.message.toLowerCase();
+        if (
+          lower.includes('fetch failed') ||
+          lower.includes('enotfound') ||
+          lower.includes('econnrefused') ||
+          lower.includes('etimedout') ||
+          lower.includes('ebusy')
+        ) {
+          return NextResponse.json(
+            { error: 'Authentication service is temporarily unavailable. Please try again shortly.' },
+            { status: 503, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+
         if (
           error.message.includes('Invalid login credentials') ||
           error.message.includes('invalid_grant')
@@ -114,6 +128,19 @@ export async function POST(request: Request) {
   } catch (err: unknown) {
     const correlationId = `native_auth_catch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     console.error(`[Native Auth Exception ${correlationId}]:`, err instanceof Error ? err.message : String(err));
+    const lower = (err instanceof Error ? err.message : String(err)).toLowerCase();
+    if (
+      lower.includes('fetch failed') ||
+      lower.includes('enotfound') ||
+      lower.includes('econnrefused') ||
+      lower.includes('etimedout') ||
+      lower.includes('ebusy')
+    ) {
+      return NextResponse.json(
+        { error: 'Authentication service is temporarily unavailable. Please try again shortly.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
     return NextResponse.json(
       { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
