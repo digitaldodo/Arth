@@ -129,7 +129,10 @@ export function sanitizeUserFacingError(
   if (
     lower.includes('auth service unavailable') ||
     lower.includes('authapierror') ||
-    lower.includes('authentication service is temporarily unavailable')
+    lower.includes('authentication service is temporarily unavailable') ||
+    lower.includes('invalid api key') ||
+    lower.includes('api key') ||
+    lower.includes('apikey')
   ) {
     return 'Authentication service is temporarily unavailable. Please try again shortly.';
   }
