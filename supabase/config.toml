@@ -33,28 +33,28 @@ jwt_expiry = 3600
 enable_signup = true
 
 [auth.email.template.confirmation]
-subject = "Confirm your Arth email address"
-content_path = "./templates/confirmation.html"
+subject = "Confirm your SpendSense email address."
+content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Arth password"
-content_path = "./templates/recovery.html"
+subject = "Reset your SpendSense password."
+content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]
-subject = "Your Arth sign-in link"
-content_path = "./templates/magic_link.html"
+subject = "Your SpendSense sign-in link."
+content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.email_change]
-subject = "Confirm your new email address for Arth"
-content_path = "./templates/email_change.html"
+subject = "Confirm your new SpendSense email address."
+content_path = "./supabase/templates/email_change.html"
 
 [auth.email.template.invite]
-subject = "You have been invited to Arth"
-content_path = "./templates/invite.html"
+subject = "You're invited to SpendSense."
+content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.reauthentication]
-subject = "Your Arth verification code"
-content_path = "./templates/reauthentication.html"
+subject = "Your SpendSense verification code."
+content_path = "./supabase/templates/reauthentication.html"
 
 [storage]
 enabled = false

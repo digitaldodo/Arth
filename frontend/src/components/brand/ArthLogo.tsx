@@ -3,13 +3,12 @@ import {
   SPENDSENSE_FULL_LOGO_VIEWBOX,
   SPENDSENSE_SYMBOL_VIEWBOX,
   SPENDSENSE_SYMBOL_PATH,
+  SPENDSENSE_PAGE_PATH,
+  SPENDSENSE_PAGE_FOLD_PATH,
 } from './logo-paths';
 
 export interface ArthLogoProps extends React.SVGProps<SVGSVGElement> {
-  /**
-   * 'full': Symbol + 'SpendSense' wordmark (aspect ratio ~3.36:1)
-   * 'symbol': Standalone geometric 'A' emblem (aspect ratio ~1.30:1)
-   */
+  /** 'full': ledger symbol and SpendSense wordmark; 'symbol': standalone mark. */
   variant?: 'full' | 'symbol';
   /**
    * 'auto': Uses currentColor (adapts automatically to light/dark text colors)
@@ -52,27 +51,25 @@ export function ArthLogo({
       {...props}
     >
       {title && <title>{title}</title>}
-      {isFull ? (
-        <>
-          <path d={SPENDSENSE_SYMBOL_PATH} fill="none" stroke={fill} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M 49 104 H 111" stroke="#10B981" strokeWidth="7" strokeLinecap="round" />
-          <text
-            x="190"
-            y="108"
-            fill={fill}
-            fontFamily="Inter, Arial, sans-serif"
-            fontSize="72"
-            fontWeight="600"
-            letterSpacing="-2"
-          >
-            SpendSense
-          </text>
-        </>
-      ) : (
-        <>
-          <path d={SPENDSENSE_SYMBOL_PATH} fill="none" stroke={fill} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M 49 104 H 111" stroke="#10B981" strokeWidth="7" strokeLinecap="round" />
-        </>
+      <g>
+        <rect x="0" y="0" width="160" height="160" rx="34" fill="#193F37" />
+        <path d={SPENDSENSE_PAGE_PATH} fill="#F6F4ED" />
+        <path d={SPENDSENSE_PAGE_FOLD_PATH} fill="none" stroke="#D9E2D9" strokeWidth="3" strokeLinejoin="round" />
+        <path d={SPENDSENSE_SYMBOL_PATH} fill="none" stroke="#193F37" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M 94 128 H 111" stroke="#B67645" strokeWidth="5" strokeLinecap="round" />
+      </g>
+      {isFull && (
+        <text
+          x="184"
+          y="106"
+          fill={fill}
+          fontFamily="Inter, Arial, sans-serif"
+          fontSize="63"
+          fontWeight="600"
+          letterSpacing="-1.8"
+        >
+          SpendSense
+        </text>
       )}
     </svg>
   );

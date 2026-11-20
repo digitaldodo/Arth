@@ -1,0 +1,58 @@
+name: Supabase configuration validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/config.toml'
+      - 'supabase/templates/**'
+      - 'scripts/validate_spendsense_email_templates.py'
+      - 'scripts/validate_spendsense_brand_assets.py'
+      - 'scripts/generate_spendsense_brand_assets.py'
+      - 'scripts/generate_supabase_email_templates.py'
+      - 'frontend/src/app/layout.tsx'
+      - 'frontend/src/app/manifest.ts'
+      - 'frontend/src/app/icon.svg'
+      - 'frontend/public/favicon*'
+      - 'frontend/public/icons/**'
+      - 'frontend/public/brand/**'
+      - 'android/app/src/main/res/**'
+      - '.github/workflows/supabase-config.yml'
+  pull_request:
+    paths:
+      - 'supabase/config.toml'
+      - 'supabase/templates/**'
+      - 'scripts/validate_spendsense_email_templates.py'
+      - 'scripts/validate_spendsense_brand_assets.py'
+      - 'scripts/generate_spendsense_brand_assets.py'
+      - 'scripts/generate_supabase_email_templates.py'
+      - 'frontend/src/app/layout.tsx'
+      - 'frontend/src/app/manifest.ts'
+      - 'frontend/src/app/icon.svg'
+      - 'frontend/public/favicon*'
+      - 'frontend/public/icons/**'
+      - 'frontend/public/brand/**'
+      - 'android/app/src/main/res/**'
+      - '.github/workflows/supabase-config.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-auth-email-configuration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+      - name: Validate Supabase CLI configuration from repository root
+        run: pnpm dlx supabase@3.2.0 config validate
+      - name: Validate configured template files and flow variables
+        run: python scripts/validate_spendsense_email_templates.py
+      - name: Validate SpendSense web and Android icon assets
+        run: python scripts/validate_spendsense_brand_assets.py

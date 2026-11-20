@@ -1,8 +1,8 @@
 {
   "packageId": "com.digitaldodo.arth",
   "host": "arth-9h3f.vercel.app",
-  "name": "Arth",
-  "launcherName": "Arth",
+  "name": "SpendSense",
+  "launcherName": "SpendSense",
   "themeColor": "#1C1917",
   "themeColorDark": "#0C0A09",
   "navigationColor": "#1C1917",

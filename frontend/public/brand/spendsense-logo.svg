@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 160" role="img" aria-label="SpendSense">
+  <rect width="160" height="160" rx="34" fill="#193F37"/>
+  <path d="M42 20h52l34 34v78q0 8-8 8H40q-8 0-8-8V28q0-8 10-8z" fill="#F6F4ED"/>
+  <path d="M94 20v34h34" fill="none" stroke="#D9E2D9" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M96 57H64c-11 0-17 6-17 15 0 8 6 12 17 16l19 6c11 4 17 10 17 18 0 9-7 15-19 15H49" fill="none" stroke="#193F37" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M94 128h17" stroke="#B67645" stroke-width="5" stroke-linecap="round"/>
+  <text x="184" y="106" fill="#181615" font-family="Inter, Arial, sans-serif" font-size="63" font-weight="600" letter-spacing="-1.8">SpendSense</text>
+</svg>

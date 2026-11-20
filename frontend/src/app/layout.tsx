@@ -27,6 +27,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://arth-9h3f.vercel.app"),
   title: "SpendSense — Personal Finance",
   description:
     "A clear, private-first personal finance workspace for tracking Indian income and spending, reviewing transactions, and organizing financial documents.",
@@ -36,6 +37,7 @@ export const metadata: Metadata = {
     description: "Track income and spending, review transaction suggestions, and organize financial documents.",
     siteName: "SpendSense",
     type: "website",
+    images: [{ url: "/brand/spendsense-og.png", width: 1200, height: 630, alt: "SpendSense personal finance" }],
   },
   appleWebApp: {
     capable: true,
@@ -44,8 +46,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico" },
       { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48", type: "image/x-icon" },
       { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],

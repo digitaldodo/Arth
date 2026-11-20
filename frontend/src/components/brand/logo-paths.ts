@@ -1,5 +1,8 @@
-// SpendSense's ledger mark: a continuous, confident S with a single emerald rule.
-export const SPENDSENSE_FULL_LOGO_VIEWBOX = '0 0 640 160';
+// A folded ledger page carries the SpendSense S mark; the warm rule echoes a book line.
+export const SPENDSENSE_FULL_LOGO_VIEWBOX = '0 0 620 160';
 export const SPENDSENSE_SYMBOL_VIEWBOX = '0 0 160 160';
 export const SPENDSENSE_SYMBOL_PATH =
-  'M 119 35 C 105 21 89 15 69 15 C 39 15 19 31 19 54 C 19 76 34 87 62 94 L 84 100 C 103 105 112 113 112 126 C 112 143 96 154 72 154 C 50 154 32 146 18 131';
+  'M 96 57 H 64 C 53 57 47 63 47 72 C 47 80 53 84 64 88 L 83 94 C 94 98 100 104 100 112 C 100 121 93 127 81 127 H 49';
+export const SPENDSENSE_PAGE_PATH =
+  'M 42 20 H 94 L 128 54 V 132 Q 128 140 120 140 H 40 Q 32 140 32 132 V 28 Q 32 20 42 20 Z';
+export const SPENDSENSE_PAGE_FOLD_PATH = 'M 94 20 V 54 H 128';

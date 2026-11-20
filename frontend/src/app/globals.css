@@ -28,7 +28,7 @@
 }
 
 /* ==========================================================================
-   Arth — Ledger Minimal Design Tokens
+   SpendSense — Ledger Minimal Design Tokens
    Light Mode (Warm Archival Paper baseline)
    ========================================================================== */
 :root, .light, [data-theme="light"] {
@@ -124,7 +124,7 @@
 }
 
 /* ==========================================================================
-   Arth — Ledger Minimal Design Tokens
+   SpendSense — Ledger Minimal Design Tokens
    Dark Mode (Restrained Obsidian baseline)
    Activated by .dark class or OS dark preference
    ========================================================================== */
