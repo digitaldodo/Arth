@@ -626,6 +626,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 hasPassword={hasPassword}
                 onAccountPasswordVerified={() => setPasswordStatus('configured')}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+                onNavigateToStatementImport={() => navigateToView('documents')}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
               />

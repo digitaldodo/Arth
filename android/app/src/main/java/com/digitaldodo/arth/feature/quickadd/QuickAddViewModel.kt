@@ -22,6 +22,10 @@ data class QuickAddUiState(
     val transactionDate: Long = System.currentTimeMillis(),
     val description: String = "",
     val notes: String = "",
+    val suggestedCategory: Category? = null,
+    val suggestionConfidence: Float? = null,
+    val suggestionEvidence: String? = null,
+    val suggestionMethod: String? = null,
     val isSubmitting: Boolean = false,
     val isSaved: Boolean = false,
     val errorMessage: String? = null
@@ -119,7 +123,28 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onDescriptionChanged(desc: String) {
-        _uiState.update { it.copy(description = desc) }
+        val suggestion = com.digitaldodo.arth.core.sms.IndianCategorizationEngine.suggestCategory(
+            context = getApplication(),
+            narration = desc,
+            categories = _uiState.value.categories,
+            type = _uiState.value.type
+        )
+        _uiState.update { current ->
+            current.copy(
+                description = desc,
+                suggestedCategory = suggestion?.category,
+                suggestionConfidence = suggestion?.confidence,
+                suggestionEvidence = suggestion?.evidence,
+                suggestionMethod = suggestion?.method,
+                selectedCategory = if (current.selectedCategory == null && suggestion != null) suggestion.category else current.selectedCategory
+            )
+        }
+    }
+
+    fun applySuggestedCategory() {
+        _uiState.value.suggestedCategory?.let { category ->
+            _uiState.update { it.copy(selectedCategory = category) }
+        }
     }
 
     fun onNotesChanged(notes: String) {
@@ -135,6 +160,20 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
 
         val category = state.selectedCategory ?: state.categories.firstOrNull() ?: Category(name = "General")
 
+        val wasSuggested = state.suggestedCategory != null
+        val matchedSuggestion = wasSuggested && (category.id == state.suggestedCategory?.id)
+        val categoryVerified = wasSuggested && matchedSuggestion
+        val categoryWasCorrected = wasSuggested && !matchedSuggestion
+        val categorizationMethod = if (categoryWasCorrected) "user_correction" else if (categoryVerified) (state.suggestionMethod ?: "weak_supervision") else "manual"
+
+        if (categoryWasCorrected && state.description.isNotBlank()) {
+            com.digitaldodo.arth.core.sms.IndianCategorizationEngine.saveCategoryCorrection(
+                context = getApplication(),
+                merchantText = state.description,
+                categoryId = category.id
+            )
+        }
+
         val tx = Transaction(
             id = UUID.randomUUID().toString(),
             amountPaise = state.amountPaise,
@@ -148,7 +187,13 @@ class QuickAddViewModel(application: Application) : AndroidViewModel(application
             transactionDate = state.transactionDate,
             notes = state.notes.trim().takeIf { it.isNotBlank() },
             counterparty = state.description.trim().takeIf { it.isNotBlank() },
-            syncStatus = SyncStatus.PENDING
+            syncStatus = SyncStatus.PENDING,
+            ingestionSource = "manual",
+            categoryVerified = categoryVerified,
+            categorizationMethod = categorizationMethod,
+            categorySuggestionConfidence = state.suggestionConfidence,
+            categoryEvidence = state.suggestionEvidence,
+            categoryWasCorrected = categoryWasCorrected
         )
 
         viewModelScope.launch {

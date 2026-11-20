@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
         SmsSuggestionEntity::class,
         SyncOutboxEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class ArthDatabase : RoomDatabase() {
@@ -49,6 +49,22 @@ abstract class ArthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN ingestionSource TEXT NOT NULL DEFAULT 'manual'")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN statementReference TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN accountId TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN importBatchId TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN parserVersion TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categorizationModelVersion TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categoryVerified INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categorizationMethod TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categorySuggestionConfidence REAL")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categoryEvidence TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN categoryWasCorrected INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): ArthDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context.applicationContext).also { INSTANCE = it }
@@ -60,7 +76,7 @@ abstract class ArthDatabase : RoomDatabase() {
                 context,
                 ArthDatabase::class.java,
                 "arth_native.db"
-            ).addMigrations(MIGRATION_2_3)
+            ).addMigrations(MIGRATION_2_3, MIGRATION_3_4)
             .addCallback(object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)

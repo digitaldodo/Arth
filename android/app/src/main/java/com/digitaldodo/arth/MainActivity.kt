@@ -62,6 +62,8 @@ import com.digitaldodo.arth.feature.settings.SettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
 import com.digitaldodo.arth.feature.sms.SmsSettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsViewModel
+import com.digitaldodo.arth.feature.statement.StatementImportScreen
+import com.digitaldodo.arth.feature.statement.StatementImportViewModel
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
@@ -80,6 +82,7 @@ class MainActivity : FragmentActivity() {
     private val peopleViewModel: PeopleViewModel by viewModels()
     private val balancesViewModel: BalancesViewModel by viewModels()
     private val smsViewModel: SmsViewModel by viewModels()
+    private val statementImportViewModel: StatementImportViewModel by viewModels()
 
     private var biometricErrorMessage by mutableStateOf<String?>(null)
 
@@ -126,6 +129,7 @@ class MainActivity : FragmentActivity() {
                         peopleViewModel = peopleViewModel,
                         balancesViewModel = balancesViewModel,
                         smsViewModel = smsViewModel,
+                        statementImportViewModel = statementImportViewModel,
                         isLoggedInInitial = secureStorage.isLoggedIn()
                     )
                 }
@@ -266,6 +270,7 @@ fun ArthAppNavHost(
     peopleViewModel: PeopleViewModel,
     balancesViewModel: BalancesViewModel,
     smsViewModel: SmsViewModel,
+    statementImportViewModel: StatementImportViewModel,
     isLoggedInInitial: Boolean
 ) {
     val navController = rememberNavController()
@@ -306,6 +311,7 @@ fun ArthAppNavHost(
                 peopleViewModel = peopleViewModel,
                 balancesViewModel = balancesViewModel,
                 smsViewModel = smsViewModel,
+                statementImportViewModel = statementImportViewModel,
                 onOpenQuickAdd = { showQuickAddSheet = true },
                 onSignOut = {
                     authViewModel.logout {
@@ -339,6 +345,7 @@ fun MainTabsScaffold(
     peopleViewModel: PeopleViewModel,
     balancesViewModel: BalancesViewModel,
     smsViewModel: SmsViewModel,
+    statementImportViewModel: StatementImportViewModel,
     onOpenQuickAdd: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -346,7 +353,7 @@ fun MainTabsScaffold(
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "sms_settings", "security_settings")
+    val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "sms_settings", "security_settings", "statement_import")
     val isPersonDetail = currentRoute.startsWith("person_detail")
 
     // Priority 1: Back from person detail returns to people
@@ -560,7 +567,8 @@ fun MainTabsScaffold(
                 composable(Screen.Ledger.route) {
                     LedgerScreen(
                         viewModel = ledgerViewModel,
-                        onAddTransactionClick = onOpenQuickAdd
+                        onAddTransactionClick = onOpenQuickAdd,
+                        onImportStatementClick = { tabNavController.navigate("statement_import") }
                     )
                 }
 
@@ -632,6 +640,13 @@ fun MainTabsScaffold(
 
                 composable("security_settings") {
                     SecuritySettingsScreen(
+                        onBack = { tabNavController.popBackStack() }
+                    )
+                }
+
+                composable("statement_import") {
+                    StatementImportScreen(
+                        viewModel = statementImportViewModel,
                         onBack = { tabNavController.popBackStack() }
                     )
                 }

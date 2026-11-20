@@ -61,6 +61,16 @@ class TransactionRepository(
             },
             description = transaction.counterparty ?: transaction.categoryName,
             notes = transaction.notes,
+            statementReference = transaction.statementReference,
+            accountId = transaction.accountId,
+            importBatchId = transaction.importBatchId,
+            ingestionSource = transaction.ingestionSource,
+            parserVersion = transaction.parserVersion,
+            categorizationModelVersion = transaction.categorizationModelVersion,
+            categoryVerified = transaction.categoryVerified,
+            categorizationMethod = transaction.categorizationMethod,
+            categorySuggestionConfidence = transaction.categorySuggestionConfidence,
+            categoryWasCorrected = transaction.categoryWasCorrected,
             recordedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
                 timeZone = TimeZone.getTimeZone("UTC")
             }.format(Date(transaction.createdAt))
@@ -153,6 +163,16 @@ class TransactionRepository(
                         counterparty = dto.description,
                         isDeleted = false,
                         syncStatus = SyncStatus.SYNCED.name,
+                        ingestionSource = dto.ingestionSource ?: "manual",
+                        statementReference = dto.statementReference,
+                        accountId = dto.accountId,
+                        importBatchId = dto.importBatchId,
+                        parserVersion = dto.parserVersion,
+                        categorizationModelVersion = dto.categorizationModelVersion,
+                        categoryVerified = dto.categoryVerified ?: false,
+                        categorizationMethod = dto.categorizationMethod,
+                        categorySuggestionConfidence = dto.categorySuggestionConfidence,
+                        categoryWasCorrected = dto.categoryWasCorrected ?: false,
                         createdAt = createdMillis,
                         updatedAt = updatedMillis
                     )
@@ -498,6 +518,12 @@ class SmsSuggestionRepository(
         val finalMerchant = customMerchant ?: suggestion.merchant
         val finalMode = customPaymentMode ?: suggestion.paymentMode
 
+        val source = when (suggestion.sender) {
+            "User-shared message" -> "message_share"
+            "Notification" -> "notification"
+            else -> "sms"
+        }
+
         val tx = Transaction(
             id = UUID.randomUUID().toString(),
             amountPaise = finalAmount,
@@ -513,7 +539,13 @@ class SmsSuggestionRepository(
                 if (!suggestion.bank.isNullOrBlank()) append("[${suggestion.bank}] ")
                 if (!suggestion.accountMask.isNullOrBlank()) append("A/c: ${suggestion.accountMask}")
             }.trim().takeIf { it.isNotBlank() },
-            counterparty = finalMerchant
+            counterparty = finalMerchant,
+            statementReference = suggestion.refNumber,
+            ingestionSource = source,
+            parserVersion = "sms_classifier_v1",
+            categoryVerified = true,
+            categorizationMethod = "weak_supervision",
+            categorySuggestionConfidence = suggestion.confidence.toFloat() / 100f
         )
 
         transactionRepository.addTransaction(tx)
@@ -534,11 +566,21 @@ class SmsSuggestionRepository(
 
     suspend fun autoConfirmIfEligible(suggestion: SmsSuggestion, categoryDao: CategoryDao) {
         if (suggestion.status != SuggestionStatus.PENDING || suggestion.confidence < 95) return
-        val defaultCategory = categoryDao.getById("cat-other-expense") ?: return
+        val allCategories = categoryDao.getAllDirect().map { it.toDomain() }
+        val suggested = com.digitaldodo.arth.core.sms.IndianCategorizationEngine.suggestCategory(
+            context = null,
+            narration = suggestion.merchant ?: "",
+            categories = allCategories,
+            type = suggestion.type
+        )
+        val targetCategory = suggested?.category
+            ?: categoryDao.getById("cat-other-expense")?.toDomain()
+            ?: return
+
         confirmSuggestion(
             suggestion = suggestion,
-            categoryId = defaultCategory.id,
-            categoryName = defaultCategory.name,
+            categoryId = targetCategory.id,
+            categoryName = targetCategory.name,
             necessity = NecessityTier.ESSENTIAL,
             customNotes = "Auto-recorded from high-confidence SMS"
         )

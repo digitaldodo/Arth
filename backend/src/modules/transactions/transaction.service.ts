@@ -35,7 +35,7 @@ export interface StoredTransactionRecord {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
-  ingestion_source?: 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+  ingestion_source?: 'manual' | 'bank_statement' | 'sms' | 'notification' | 'message_share' | 'message' | 'account_aggregator';
   parser_version?: string | null;
   categorization_model_version?: string | null;
   category_verified?: boolean;

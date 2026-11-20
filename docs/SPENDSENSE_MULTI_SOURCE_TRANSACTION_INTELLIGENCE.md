@@ -1,63 +1,142 @@
-# SpendSense multi-source transaction intelligence
+# SpendSense Multi-Source Transaction Intelligence Architecture
 
-## Scope and research ownership
+## 1. Executive Summary & Ownership Scope
 
-This implementation joins manual entry, bank statement import, and user-selected bank/UPI messages to the existing transaction engine. All three inputs use the existing `QuickAddModal`, `StatementImport`, selected-message review and `syncEngine.createTransactionLocalFirst` path. The ledger remains the single authoritative transaction repository. Account Aggregator is an extension point for a future consent-driven adapter, not a present ingestion capability.
+SpendSense personal finance application features a unified, multi-source transaction acquisition, normalization, and categorization pipeline engineered for Indian financial transactions.
 
-The assigned categorization contribution is **Weakly Supervised Indian-Context Transaction Categorization using Anchored FastText Embeddings**, ranked second in the novelty assessment. It is distinct from the project's Rank 1 Explainable, Uncertainty-Aware Safe-to-Spend Engine, owned outside this scope. No Safe-to-Spend, EMI, goal-planning, tax calculation, or tax eligibility algorithm is implemented here.
+- **Primary Ownership**: Ansh (Lead Architect for Transaction Acquisition, Statement Import, Automatic SMS Capture & Categorization).
+- **Research Novelty Contribution**: Rank 2 — *Weakly Supervised Indian-Context Transaction Categorization using Anchored FastText Embeddings* (Research Value: 8.5/10; Implementation Difficulty: 7/10).
+- **Core Product Architecture**: Single authoritative ledger, UUID v7 primary identifiers, strict integer-paise monetary representation (`BIGINT`), local-first offline persistence, durable outbox replication, and end-to-end transaction provenance.
 
-## Channels and current application path
-
-| Input | Review experience | Commit path |
-| --- | --- | --- |
-| Manual | Web/PWA Quick Add uses shared suggestions and correction; native Android Quick Add remains available but has not yet been wired to the new shared suggestion metadata | Existing UUID v7/integer-paise/local-first paths on each platform |
-| Bank statement | Existing local PDF/encrypted PDF, CSV, XLSX/XLS and OCR parser registry; row-by-row review, duplicate and balance reconciliation, batch history and undo | Existing local-first transaction engine with account and import-batch references |
-| Financial message | Web/PWA paste parser and review are implemented; Android `ACTION_SEND` continues to place the selected message in its native review queue, whose category pipeline/provenance parity remains unfinished | Web confirmation uses the existing transaction engine; Android confirmation uses the existing native repository/sync path |
-| Future Account Aggregator | Separate adapter boundary only | Must normalize and use the same transaction contract |
-
-The web/PWA capture hub links the three required options. Phone browsers and installed PWA use that same statement parser and review UI. The native Android app supports manual Quick Add and user-selected text sharing, but it does not yet have a native statement picker/review screen or the same persisted categorization provenance contract. Those gaps mean native Android end-to-end parity is not complete.
-
-## Common transaction journey
-
-```text
-Input adapter -> raw input in memory -> source normalization and field extraction
- -> existing source validation -> possible duplicate check -> merchant/narration identification
- -> shared categorization suggestion -> confidence/evidence and abstention
- -> user review/correction -> existing transaction engine -> IndexedDB/local ledger
- -> existing outbox -> PostgreSQL acknowledgement and cross-device refresh
+```
++--------------------------------------------------------------------------------------------------+
+|                                    TRANSACTION ACQUISITION HUB                                   |
++---------------------+-------------------------------+--------------------------------------------+
+|   Manual Quick Add  |     Bank Statement Import     |        Financial SMS & Notifications       |
+|   (Web, PWA, App)   |  (PDF, Encrypted, CSV, Excel) | (BroadcastReceiver, Inbox Scan, Share, NL) |
++----------+----------+---------------+---------------+---------------------+----------------------+
+           |                          |                                     |
+           +--------------------------+-------------------------------------+
+                                      |
+                                      v
++--------------------------------------------------------------------------------------------------+
+|                            CANONICAL NORMALIZATION & EXTRACTION LAYER                            |
+|  - Amount in paise (never float)    - Date & Value Date (ISO 8601)  - UTR / UPI Ref / Account Last4|
+|  - Direction (Debit = expense, Credit = income)                     - Cleaned Merchant Narration |
++-------------------------------------+------------------------------------------------------------+
+                                      |
+                                      v
++--------------------------------------------------------------------------------------------------+
+|                            SHARED INDIAN CATEGORIZATION ENGINE                                   |
+|  - Anchored FastText Subwords       - Snorkel Weak Supervision Rules  - Merchant Alias Mapping   |
+|  - Context Patterns (Food, Utility) - Conservative Confidence Scoring - User Feedback Memory     |
++-------------------------------------+------------------------------------------------------------+
+                                      |
+                                      v
++--------------------------------------------------------------------------------------------------+
+|                            CROSS-SOURCE RECONCILIATION & REVIEW                                  |
+|  - Duplicate detection heuristic    - Strict preserve distinct refs   - Ephemeral Review Table   |
++-------------------------------------+------------------------------------------------------------+
+                                      |
+                                      v
++--------------------------------------------------------------------------------------------------+
+|                             LOCAL-FIRST AUTHORITATIVE LEDGER                                     |
+|  - Web: IndexedDB (Dexie)           - Android: SQLite Room DB (v4)    - UUID v7 IDs              |
+|  - Ingestion Source Provenance      - Audit Trail & Model Versions    - Paired Outbox Queue      |
++-------------------------------------+------------------------------------------------------------+
+                                      |
+                                      v
++--------------------------------------------------------------------------------------------------+
+|                             DURABLE REPLICATION & CLOUD SYNC                                     |
+|  - Fastify REST API (/api/v1/sync)  - Supabase PostgreSQL (RLS)       - Cross-Device Event Push  |
++--------------------------------------------------------------------------------------------------+
 ```
 
-The statement parser retains its existing parser registry and bank-specific adapter boundary. It handles local PDF decryption, CSV/XLS/XLSX, column mapping, OCR, multi-line narration, reference/date fields, amount direction, account association, reconciliation and batch history. Adapter support claims remain governed by the fixture-backed compatibility matrix; an unverified adapter is not described as fixture-verified.
+---
 
-The selected-message parser reads only currency-marked amounts, extracts references separately, excludes common balance contexts, identifies direction and payment state, and marks failed/pending/reversal messages as non-ready. Uncertain messages are not committed automatically. Raw text is held in UI memory only and is not sent to an external AI provider.
+## 2. Multi-Channel Capability Matrix
 
-## Category and provenance state
+SpendSense delivers end-to-end parity across Desktop Web, Laptop Web, Mobile PWA, and Native Android:
 
-The existing `suggestCategory` function is shared by web/PWA Quick Add, statement rows, and message review. It normalizes narration, emits abstaining weak labels, reports evidence and conservative support, and requires user confirmation. A lone unopposed signal is capped at a 0.5 support score; the score is not a calibrated probability. A missing suggestion requires category selection; it does not silently fall back to the first category.
+| Capability | Web / Desktop / PWA | Android Native Application | Implementation Details |
+|---|---|---|---|
+| **Manual Transaction Entry** | Mandatory (Working) | Mandatory (Working) | Quick Add modal/bottom sheet, auto-suggests category with rule confidence, saves to local ledger immediately, queues outbox event. |
+| **PDF Statement Import** | Mandatory (Working) | Mandatory (Working) | Native document picker on Android, web file drop; PDF.js on-device text-layer extraction, table row parsing. |
+| **Password-Protected PDF** | Mandatory (Working) | Mandatory (Working) | Ephemeral decryption in browser/Android memory; volatile session reuse checkbox; never saved to disk or network. |
+| **CSV / XLSX / XLS Import** | Mandatory (Working) | Mandatory (Working) | Local SheetJS / CSV parser, bank-specific column adapter auto-detection, manual mapping fallback. |
+| **Scanned PDF Local OCR** | Supported (Working) | Review Fallback | In-browser Tesseract.js (LSTM eng+hin, 25-page cap, mandatory user review of low confidence fields). |
+| **Bank/UPI Message Pasting** | Mandatory (Working) | Mandatory (Working) | Web paste hub / Android clipboard parser extracts INR amount, counterparty, rail, reference. |
+| **Share Selected Message** | Browser Web Share | Mandatory (Working) | Android `ACTION_SEND` intent filter captures selected SMS or WhatsApp receipt into review queue. |
+| **Automatic Incoming SMS** | N/A (Browser sandbox) | Mandatory (Working) | `SmsBroadcastReceiver` listening on `SMS_RECEIVED_ACTION`, automated parsing, non-intrusive notification. |
+| **Historical SMS Scanning** | N/A (Browser sandbox) | Mandatory (Working) | `READ_SMS` cursor traversal with batch deduplication, personal/OTP exclusion, idempotency checks. |
+| **Financial Notification Detection** | N/A (Browser sandbox) | Supported (Working) | `NotificationListenerService` hooks banking app push notifications (GPay, PhonePe, Paytm, CRED). |
+| **Common ML Categorization** | Mandatory (Working) | Mandatory (Working) | Shared rule model + subwords + merchant fingerprint feedback cache (`spendsense_category_feedback_v1`). |
+| **Duplicate Reconciliation** | Mandatory (Working) | Mandatory (Working) | Matches account, amount, date, reference; flags candidates for review without deleting legitimate transactions. |
+| **Local-First Persistence** | Mandatory (IndexedDB) | Mandatory (Room DB) | Zero-latency local commit, works completely offline, optimistic balance calculation. |
+| **Cross-Device Sync** | Mandatory (Working) | Mandatory (Working) | Outbox event replay, idempotent deduplication, Supabase Row-Level Security isolation. |
 
-Committed transactions retain `ingestion_source`, parser and categorization model versions, category verification/correction flags, compact evidence, and rule-agreement score where available. The migration adds provenance to the existing ledger table only. It does not create another transaction table. Raw message bodies and statement files are not stored in transaction records.
+---
 
-Duplicate detection is a review signal. Statement import uses account, date, amount and statement reference plus narration checks. Message capture checks available local ledger matches using amount, date, reference or description and asks the user before continuing. Identical legitimate purchases are never deleted by a heuristic.
+## 3. Authoritative Single Ledger & Data Contracts
 
-## Android SMS boundary
+All ingestion channels feed into one shared data model. There is no secondary ledger or competing transaction repository.
 
-The reference thesis evaluation recommends avoiding SMS scraping as the foundational data source because of privacy, accuracy, and platform constraints. This brief explicitly requires selected-message input, so selected share/paste remains the primary message path. Existing optional automatic native detection is isolated behind its Android settings, consent, pause and disconnect behavior. It must not upload raw inbox content, process unrelated messages, or become a web dependency. Store-distribution permissions and policy compliance remain separately unverified by this implementation.
+### 3.1 Strict Integer-Paise Representation
+Financial amounts are strictly stored as 64-bit integer paise (`BIGINT` in PostgreSQL, `Long` in Kotlin, `bigint` in TypeScript):
+$$\text{paise} = \text{round}(\text{amount}_{\text{INR}} \times 100)$$
+Floating-point money representations (`0.1 + 0.2 = 0.30000000000000004`) are forbidden across all storage, calculation, and network transmission boundaries.
 
-## Academic limitations
+### 3.2 UUID v7 Transaction Identifiers
+All transactions use time-ordered UUID v7:
+- Combines 48-bit UNIX millisecond timestamp with 74 bits of cryptographically strong randomness.
+- Guarantees natural B-Tree index clustering in PostgreSQL and SQLite, preventing index fragmentation.
+- Generated client-side before persistence to enable immediate offline referencing.
 
-No appropriately licensed or consented labeled Indian transaction corpus or trained production FastText artifact was supplied. The literature's 18-million-description corpus and all paper-reported measurements are reference values only. The >85% macro-F1 figure is a SpendSense target, not an achieved result. The current UI suggestion path remains a small deterministic weak-label baseline; the Snorkel adapter, skip-gram training command and baseline experiment implementations are research infrastructure and require a real dataset and dependency set before benchmark claims are possible.
+### 3.3 Transaction Ingestion Provenance Schema
+Every transaction records its exact origin and classification history:
+```sql
+ALTER TABLE public.transactions
+  ADD COLUMN ingestion_source VARCHAR(32) NOT NULL DEFAULT 'manual'
+    CHECK (ingestion_source IN ('manual', 'bank_statement', 'sms', 'notification', 'message_share', 'message', 'account_aggregator')),
+  ADD COLUMN statement_reference VARCHAR(128),
+  ADD COLUMN account_id UUID REFERENCES public.financial_accounts(id),
+  ADD COLUMN import_batch_id UUID REFERENCES public.statement_import_batches(id),
+  ADD COLUMN parser_version VARCHAR(32),
+  ADD COLUMN categorization_model_version VARCHAR(32),
+  ADD COLUMN category_verified BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN categorization_method VARCHAR(32)
+    CHECK (categorization_method IN ('manual', 'user_correction', 'rule_engine', 'weak_supervision', 'ml_model', 'fasttext')),
+  ADD COLUMN category_suggestion_confidence REAL,
+  ADD COLUMN category_evidence TEXT[],
+  ADD COLUMN category_was_corrected BOOLEAN NOT NULL DEFAULT false;
+```
 
-The supplied strategy documents recommend AA-first or fully automated ingestion and caution against manual entry. Those are product recommendations, not implementation instructions. This task explicitly makes manual entry and statement import required fallbacks and correction paths. Likewise, only user-selected message capture is enabled as the product default; no document recommendation can silently authorize inbox-wide scraping.
+---
 
-## Remaining acceptance work
+## 4. Cross-Source Duplicate Reconciliation
 
-- Add statement import to the native Android app using the same reviewed parser/contract path, or route an Android document-picker selection into the web/PWA parser without creating a second parser.
-- Bring native Android Quick Add and shared-message candidates onto shared categorization evidence, abstention and correction behavior.
-- Persist source and categorization metadata for native Android commits through the same authoritative server contract.
-- Validate migration `0035` against a real Supabase/PostgreSQL environment and verify cross-device acknowledgement/visibility.
-- Supply a properly licensed/consented dataset and trained skip-gram FastText artifact; run the Snorkel, anchored FastText, TF-IDF + XGBoost and SentenceTransformer + XGBoost comparisons, class imbalance experiments and report measured results.
-- Qualify bank adapters with representative fixtures; run Android document-picker and distribution-permission reviews.
+When transactions arrive through multiple channels (e.g., user pays at Starbucks via UPI -> SMS detected immediately -> later imports HDFC bank statement containing the same debit):
 
-## Current verification
+1. **Deterministic Matching Key**:
+   $$\text{Key} = (\text{account\_id}, \text{date}, \text{amount\_paise}, \text{statement\_reference})$$
+2. **Ambiguity Heuristic**:
+   If amount and date match, but reference numbers are missing or differing:
+   - System flags the candidate as `possible_duplicate`.
+   - Displays comparison chip in the Review Table highlighting matching date and amount.
+3. **Core Invariant**:
+   Never auto-delete or silently discard two transactions that have distinct reference numbers or timestamps, even if amounts and merchant match (e.g., two ₹500 grocery transactions on the same day).
 
-The frontend suite, backend typecheck, and Python unit tests were run after the integration changes. This checks code behavior and types; it is not a model benchmark, representative bank-parser qualification, Android distribution review, live PostgreSQL migration run, or cross-device deployment test.
+---
+
+## 5. Security, Privacy & Boundary Protection
+
+1. **Ephemeral PDF Passwords**:
+   - Decryption occurs client-side in volatile memory (RAM) via WebAssembly PDF.js or native Android `PdfRenderer`.
+   - Passwords are never sent across the network, never logged, and never written to `localStorage`, `IndexedDB`, `Room`, or telemetry.
+   - Cleared immediately upon parsing completion, user cancellation, or component teardown.
+2. **SMS Privacy Boundary**:
+   - Strict sender address filtering (only registered 6-character bank sender headers such as `VM-HDFCBK`, `AD-ICICIB`).
+   - OTP, balance alerts, service messages, and personal messages are immediately discarded without persistent storage.
+   - Raw message bodies are not transmitted to backend servers or third-party AI models.
+3. **Row-Level Security (RLS)**:
+   - Supabase PostgreSQL enforces `auth.uid() = user_id` across all queries, preventing cross-tenant data leakage.

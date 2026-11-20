@@ -1,0 +1,482 @@
+{
+  "dataset": {
+    "rows": 60,
+    "train_rows": 48,
+    "test_rows": 12,
+    "split": "chronological holdout",
+    "personal_data_uploaded": false
+  },
+  "models": {
+    "weak_label_rules": {
+      "per_category": {
+        "food_dining": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "shopping": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "utilities": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1
+        },
+        "rent": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "transport": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1
+        },
+        "education": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "emi_loan": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "healthcare": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "entertainment": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "salary": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "other_income": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 2
+        },
+        "transfer": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "refund": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 2
+        },
+        "other": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "macro_f1": 0.619047619047619,
+      "weighted_f1": 0.8888888888888888,
+      "abstention_rate": 0.0,
+      "confusion_matrix": {
+        "food_dining": {
+          "food_dining": 1,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "shopping": {
+          "food_dining": 0,
+          "shopping": 1,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "utilities": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 1,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "rent": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "transport": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 1,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "education": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "emi_loan": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "healthcare": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 1,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "entertainment": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 1,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "salary": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 1,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "other_income": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 2,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "transfer": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 1,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "refund": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 2,
+          "other": 0,
+          "<abstain>": 0
+        },
+        "other": {
+          "food_dining": 0,
+          "shopping": 0,
+          "utilities": 0,
+          "rent": 0,
+          "transport": 0,
+          "education": 0,
+          "emi_loan": 0,
+          "healthcare": 0,
+          "entertainment": 0,
+          "salary": 0,
+          "other_income": 0,
+          "transfer": 0,
+          "refund": 0,
+          "other": 0,
+          "<abstain>": 0
+        }
+      },
+      "confidence_calibration": {
+        "method": "fixed_width_top_label_ece",
+        "bins": 10,
+        "evaluated_predictions": 12,
+        "excluded_abstentions": 0,
+        "expected_calibration_error": 0.3333333333333333,
+        "calibration_bins": [
+          {
+            "lower_bound": 0.5,
+            "upper_bound": 0.6,
+            "count": 6,
+            "mean_confidence": 0.5,
+            "accuracy": 1.0
+          },
+          {
+            "lower_bound": 0.9,
+            "upper_bound": 1.0,
+            "count": 6,
+            "mean_confidence": 1.0,
+            "accuracy": 0.8333333333333334
+          }
+        ]
+      },
+      "mean_latency_ms": 0.19154999995407707
+    },
+    "snorkel_label_model": {
+      "status": "not_run",
+      "reason": "Snorkel adapter unavailable or could not fit the LF matrix: RuntimeError"
+    },
+    "tfidf_xgboost": {
+      "status": "not_run",
+      "reason": "scikit-learn and xgboost research dependencies are not installed"
+    },
+    "sentence_transformer_xgboost": {
+      "status": "not_run",
+      "reason": "Research dependencies or local model artifact unavailable: ModuleNotFoundError"
+    },
+    "snorkel_anchored_fasttext_xgboost": {
+      "status": "not_run",
+      "reason": "No unsupervised skip-gram FastText artifact supplied"
+    },
+    "anchored_fasttext": {
+      "status": "not_run",
+      "reason": "No trained model artifact supplied"
+    },
+    "agreement_hybrid": {
+      "status": "not_run",
+      "reason": "Requires FastText artifact"
+    }
+  },
+  "labeling_functions": {
+    "training_rows": 48,
+    "per_function": {
+      "merchant_keywords": {
+        "coverage": 0.25,
+        "abstention_rate": 0.75,
+        "category_votes": {
+          "food_dining": 3,
+          "shopping": 4,
+          "transport": 3,
+          "entertainment": 2
+        }
+      },
+      "upi_handle_patterns": {
+        "coverage": 0.0,
+        "abstention_rate": 1.0,
+        "category_votes": {}
+      },
+      "bank_narration_patterns": {
+        "coverage": 0.08333333333333333,
+        "abstention_rate": 0.9166666666666666,
+        "category_votes": {
+          "salary": 2,
+          "refund": 2
+        }
+      },
+      "known_biller_formats": {
+        "coverage": 0.14583333333333334,
+        "abstention_rate": 0.8541666666666666,
+        "category_votes": {
+          "utilities": 7
+        }
+      },
+      "direction_and_transfer": {
+        "coverage": 0.041666666666666664,
+        "abstention_rate": 0.9583333333333334,
+        "category_votes": {
+          "transfer": 2
+        }
+      },
+      "transaction_intent": {
+        "coverage": 0.1875,
+        "abstention_rate": 0.8125,
+        "category_votes": {
+          "salary": 2,
+          "other_income": 1,
+          "transfer": 4,
+          "refund": 2
+        }
+      },
+      "biller_and_context": {
+        "coverage": 0.7083333333333334,
+        "abstention_rate": 0.2916666666666667,
+        "category_votes": {
+          "food_dining": 5,
+          "shopping": 5,
+          "utilities": 7,
+          "rent": 3,
+          "transport": 3,
+          "education": 3,
+          "emi_loan": 3,
+          "healthcare": 3,
+          "entertainment": 2
+        }
+      }
+    },
+    "rows_with_multiple_votes": 20,
+    "conflicting_rows": 1,
+    "pairwise_overlap_counts": {
+      "merchant_keywords::upi_handle_patterns": 0,
+      "merchant_keywords::bank_narration_patterns": 0,
+      "merchant_keywords::known_biller_formats": 0,
+      "merchant_keywords::direction_and_transfer": 0,
+      "merchant_keywords::transaction_intent": 0,
+      "merchant_keywords::biller_and_context": 6,
+      "upi_handle_patterns::bank_narration_patterns": 0,
+      "upi_handle_patterns::known_biller_formats": 0,
+      "upi_handle_patterns::direction_and_transfer": 0,
+      "upi_handle_patterns::transaction_intent": 0,
+      "upi_handle_patterns::biller_and_context": 0,
+      "bank_narration_patterns::known_biller_formats": 0,
+      "bank_narration_patterns::direction_and_transfer": 0,
+      "bank_narration_patterns::transaction_intent": 4,
+      "bank_narration_patterns::biller_and_context": 0,
+      "known_biller_formats::direction_and_transfer": 0,
+      "known_biller_formats::transaction_intent": 0,
+      "known_biller_formats::biller_and_context": 7,
+      "direction_and_transfer::transaction_intent": 2,
+      "direction_and_transfer::biller_and_context": 0,
+      "transaction_intent::biller_and_context": 1
+    }
+  }
+}

@@ -60,7 +60,7 @@ export interface ValidatedCreateTransactionInput {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
-  ingestion_source?: 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+  ingestion_source?: 'manual' | 'bank_statement' | 'sms' | 'notification' | 'message_share' | 'message' | 'account_aggregator';
   parser_version?: string | null;
   categorization_model_version?: string | null;
   category_verified?: boolean;
@@ -199,7 +199,7 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     throw new ValidationError('Statement reference cannot exceed 120 characters');
   }
   const ingestionSource = payload.ingestion_source;
-  if (ingestionSource !== undefined && !['manual', 'bank_statement', 'message', 'account_aggregator'].includes(String(ingestionSource))) {
+  if (ingestionSource !== undefined && !['manual', 'bank_statement', 'sms', 'notification', 'message_share', 'message', 'account_aggregator'].includes(String(ingestionSource))) {
     throw new ValidationError('Invalid transaction ingestion source');
   }
   const parserVersion = payload.parser_version;

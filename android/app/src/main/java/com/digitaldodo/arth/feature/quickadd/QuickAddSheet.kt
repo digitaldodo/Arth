@@ -388,6 +388,47 @@ fun QuickAddSheet(
                 )
             )
 
+            val suggested = state.suggestedCategory
+            if (suggested != null) {
+                val isSelected = state.selectedCategory?.id == suggested.id
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) ArthTheme.colors.emerald.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { viewModel.applySuggestedCategory() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isSelected) "✓ Suggested: " else "💡 Suggestion: ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isSelected) ArthTheme.colors.emerald else ArthTheme.colors.textSecondary
+                        )
+                        Text(
+                            text = "${suggested.icon} ${suggested.name}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = " (${(state.suggestionConfidence?.times(100))?.toInt() ?: 50}%)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ArthTheme.colors.textMuted
+                        )
+                    }
+                    if (!isSelected) {
+                        Text(
+                            text = "Apply",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
 
             // 7. Notes (Optional)

@@ -34,6 +34,8 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [passwordRequired, setPasswordRequired] = useState(false);
+  const [rememberSessionPassword, setRememberSessionPassword] = useState(false);
+  const sessionPasswordRef = useRef<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
   const passwordCallback = useRef<PasswordCallback | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -102,6 +104,7 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   }, [userId]);
   useEffect(() => () => {
     parseVersion.current++;
+    sessionPasswordRef.current = null;
     if (pdfTask.current) void pdfTask.current.destroy().catch(() => {});
   }, []);
   const selectedAccount = useMemo(() => accounts.find((a) => a.id === accountId), [accounts, accountId]);
@@ -223,12 +226,22 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
     const task = pdfjs.getDocument({ data: await pdfFile.arrayBuffer() });
     pdfTask.current = task;
     let encrypted = false;
+    let autoTriedSessionPassword = false;
     task.onPassword = (updatePassword: PasswordCallback, reason: number) => {
       encrypted = true;
+      if (sessionPasswordRef.current && !autoTriedSessionPassword && reason !== pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
+        autoTriedSessionPassword = true;
+        updatePassword(sessionPasswordRef.current);
+        return;
+      }
+      if (reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
+        sessionPasswordRef.current = null;
+        setError('That PDF password did not unlock the file. Try again. Passwords are processed only in volatile memory on this device.');
+      } else {
+        setError('This PDF is encrypted. Enter its document password to continue.');
+      }
       passwordCallback.current = updatePassword;
       setPasswordRequired(true);
-      if (reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD) setError('That PDF password did not unlock the file. Try again. Passwords are processed only in this browser.');
-      else setError('This PDF is encrypted. Enter its document password to continue.');
     };
     const pdf = await task.promise;
     setPasswordRequired(false); setError(''); passwordCallback.current = null;
@@ -278,12 +291,21 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
       task = pdfjs.getDocument({ data: await file.arrayBuffer() });
       pdfTask.current = task;
+      let autoTriedSessionPassword = false;
       task.onPassword = (updatePassword: PasswordCallback, reason: number) => {
+        if (sessionPasswordRef.current && !autoTriedSessionPassword && reason !== pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
+          autoTriedSessionPassword = true;
+          updatePassword(sessionPasswordRef.current);
+          return;
+        }
+        if (reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
+          sessionPasswordRef.current = null;
+          setError('That PDF password did not unlock the file. Try again. Passwords are processed only in volatile memory on this device.');
+        } else {
+          setError('Enter the document password to unlock it locally for OCR.');
+        }
         passwordCallback.current = updatePassword;
         setPasswordRequired(true);
-        setError(reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD
-          ? 'That PDF password did not unlock the file. Try again. The password is used only in this browser.'
-          : 'Enter the document password to unlock it locally for OCR.');
       };
       const pdf = await task.promise;
       if (version !== parseVersion.current) return;
@@ -378,10 +400,28 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   function submitPassword(event: React.FormEvent) {
     event.preventDefault();
     if (!password || !passwordCallback.current) return;
+    const pwd = password;
+    if (rememberSessionPassword) {
+      sessionPasswordRef.current = pwd;
+    } else {
+      sessionPasswordRef.current = null;
+    }
     const callback = passwordCallback.current;
-    callback(password);
+    callback(pwd);
     setPassword('');
     setError('');
+  }
+
+  function cancelPasswordPrompt() {
+    setPasswordRequired(false);
+    setPassword('');
+    passwordCallback.current = null;
+    if (pdfTask.current) {
+      void pdfTask.current.destroy().catch(() => {});
+      pdfTask.current = null;
+    }
+    setProcessing(false);
+    setError('Statement decryption was cancelled. You can choose another file or retry with the correct password.');
   }
 
   function updateRow(key: string, patch: Partial<ParsedStatementRow>) {
@@ -582,10 +622,62 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       <label className="block text-sm font-medium">Choose a statement <input type="file" accept=".pdf,.csv,.xlsx,.xls" className="mt-2 block w-full text-sm" onChange={(event) => { const picked = event.target.files?.[0]; if (picked) void readFile(picked); }} /></label>
       <p className="text-xs text-[var(--text-muted)]">PDF, CSV, XLSX, or XLS · up to 30 MB. Encrypted PDFs are unlocked locally. Scanned PDFs can use optional English/Hindi OCR in this browser; OCR output always requires review.</p>
       {processing && <p role="status" className="text-sm">{ocrProgress > 0 ? `Local OCR progress: ${ocrProgress}%` : 'Reading file on this device…'}</p>}
-      {passwordRequired && <form onSubmit={submitPassword} className="rounded-lg border border-[var(--border-subtle)] p-4 space-y-3">
-        <label className="block text-sm font-medium">PDF document password<div className="mt-1 flex gap-2"><input className={inputClass} type={showPassword ? 'text' : 'password'} autoComplete="off" value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" onClick={() => setShowPassword((v) => !v)} className="rounded-md border px-3 text-xs">{showPassword ? 'Hide' : 'Show'}</button></div></label>
-        <button className="rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-sm font-medium text-[var(--action-primary-fg)]" type="submit">Unlock locally</button>
-      </form>}
+      {passwordRequired && (
+        <form onSubmit={submitPassword} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Encrypted PDF Statement</h3>
+            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">Password required</span>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Indian banks password-protect statements (e.g. uppercase PAN or DOB). Decryption is performed entirely within your browser — the password is an ephemeral in-memory credential, never written to disk, cookies, or remote databases.
+          </p>
+          <label className="block text-xs font-medium text-[var(--text-primary)]">
+            Document password
+            <div className="mt-1 flex gap-2">
+              <input
+                className={inputClass}
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="off"
+                placeholder="Enter statement password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="rounded-md border border-[var(--border-subtle)] px-3 text-xs text-[var(--text-secondary)]"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rememberSessionPassword}
+              onChange={(e) => setRememberSessionPassword(e.target.checked)}
+              className="rounded border-[var(--border-subtle)]"
+            />
+            <span>Remember in volatile browser memory for this session (auto-unlocks same-password statements until tab close)</span>
+          </label>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              className="rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-xs font-medium text-[var(--action-primary-fg)]"
+              type="submit"
+            >
+              Unlock locally
+            </button>
+            <button
+              type="button"
+              onClick={cancelPasswordPrompt}
+              className="rounded-md border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-secondary)]"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
       {error && <p role="alert" className="rounded-md border border-red-300/50 bg-red-50/50 p-3 text-sm text-red-700 dark:text-red-300">{error} {file?.name.toLowerCase().endsWith('.pdf') && 'You can export the statement as CSV or Excel and retry.'}</p>}
       {message && <p role="status" className="text-sm text-[var(--text-secondary)]">{message}</p>}
       {result?.ocrRequired && <div className="rounded-lg border border-[var(--border-subtle)] p-4"><p className="text-sm font-medium">Scanned PDF detected</p><p className="mt-1 text-xs text-[var(--text-secondary)]">OCR runs in this browser using bundled English and Hindi language files. The PDF is not uploaded. OCR may misread dates, amounts or debit/credit direction; all extracted rows will require your review.</p><button type="button" disabled={processing} onClick={() => void runLocalOcr()} className="mt-3 rounded-md border px-3 py-2 text-xs disabled:opacity-50">{processing ? 'Processing locally…' : 'Run local OCR'}</button></div>}

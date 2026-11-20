@@ -91,6 +91,17 @@ data class Transaction(
     val counterparty: String? = null,
     val isDeleted: Boolean = false,
     val syncStatus: SyncStatus = SyncStatus.PENDING,
+    val ingestionSource: String = "manual",
+    val statementReference: String? = null,
+    val accountId: String? = null,
+    val importBatchId: String? = null,
+    val parserVersion: String? = null,
+    val categorizationModelVersion: String? = null,
+    val categoryVerified: Boolean = false,
+    val categorizationMethod: String? = null,
+    val categorySuggestionConfidence: Float? = null,
+    val categoryEvidence: String? = null,
+    val categoryWasCorrected: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 ) {

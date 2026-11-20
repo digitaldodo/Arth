@@ -1,0 +1,61 @@
+date,narration,label
+2026-09-01,Swiggy UPI txn id 9812450123 Bangalore,food_dining
+2026-09-02,Zomato order 4410291 payment to food merchant,food_dining
+2026-09-03,Dominos pizza restaurant dine in debit card,food_dining
+2026-09-04,Cafe Coffee Day payment via UPI cafe dining,food_dining
+2026-09-05,Amazon India marketplace retail purchase,shopping
+2026-09-06,Flipkart Internet Pvt Ltd retail shopping,shopping
+2026-09-07,Blinkit instant grocery store mart,shopping
+2026-09-08,Zepto daily grocery shopping order,shopping
+2026-09-09,BESCOM electricity bill payment via BillDesk,utilities
+2026-09-10,TNEB power bill payment online utilities,utilities
+2026-09-11,Airtel broadband broadband internet bill recharge,utilities
+2026-09-12,Indraprastha Gas piped natural gas bill,utilities
+2026-09-13,Monthly house rent transfer to landlord,rent
+2026-09-14,House rent payment lease landlord account,rent
+2026-09-15,Uber India Systems cab ride transport,transport
+2026-09-16,Ola Cabs transport trip ride,transport
+2026-09-17,IRCTC train ticket booking railway transport,transport
+2026-09-18,Indian Oil petrol pump fuel station metro,transport
+2026-09-19,DPS School tuition fee education,education
+2026-09-20,Delhi University college examination fee education,education
+2026-09-21,HDFC Bank home loan EMI monthly repayment,emi_loan
+2026-09-22,Car loan installment debit emi,emi_loan
+2026-09-23,Apollo Pharmacy diagnostic clinic medicines healthcare,healthcare
+2026-09-24,Fortis Hospital consultation fee clinic,healthcare
+2026-09-25,PVR Cinemas movie theatre ticket booking entertainment,entertainment
+2026-09-26,Netflix subscription streaming entertainment,entertainment
+2026-09-27,Spotify India monthly music subscription,entertainment
+2026-09-28,Salary credit employer payroll ACH credit,salary
+2026-09-29,Monthly payroll salary credited to account,salary
+2026-09-30,Bank savings interest credited to account,other_income
+2026-10-01,Dividend payout from mutual fund,other_income
+2026-10-02,Self transfer to own savings account IMPS,transfer
+2026-10-03,Own account transfer NEFT between accounts,transfer
+2026-10-04,Refund credited for cancelled order reversal,refund
+2026-10-05,Transaction reversed credit adjustment refund,refund
+2026-10-06,Swiggy food delivery restaurant lunch,food_dining
+2026-10-07,Starbucks coffee cafe food merchant,food_dining
+2026-10-08,Myntra fashion retail shopping,shopping
+2026-10-09,Ajio retail store order shopping,shopping
+2026-10-10,Tata Power electricity bill online payment,utilities
+2026-10-11,Jio Fiber broadband recharge utilities,utilities
+2026-10-12,Apartment rental payment to landlord,rent
+2026-10-13,Bangalore Metro Rail smartcard recharge transport,transport
+2026-10-14,HPCL petrol fuel debit card payment,transport
+2026-10-15,Allen coaching tuition fee education,education
+2026-10-16,SBI personal loan emi repayment,emi_loan
+2026-10-17,Max Healthcare hospital inpatient deposit,healthcare
+2026-10-18,BookMyShow cinema tickets entertainment,entertainment
+2026-10-19,Salary for October credited payroll,salary
+2026-10-20,Cashback credited from reward points other income,other_income
+2026-10-21,Self transfer from SBI to HDFC own account,transfer
+2026-10-22,Reversal of failed merchant debit refund,refund
+2026-10-23,McDonalds restaurant meal food dining,food_dining
+2026-10-24,D-Mart retail store supermarket shopping,shopping
+2026-10-25,BWSSB water bill payment utilities,utilities
+2026-10-26,Fastag highway toll recharge transport,transport
+2026-10-27,Medplus pharmacy healthcare medicals,healthcare
+2026-10-28,PlayStation Network gaming entertainment,entertainment
+2026-10-29,Quarterly interest credited by bank,other_income
+2026-10-30,Refund of duplicate charge reversal,refund

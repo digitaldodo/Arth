@@ -2,7 +2,7 @@ import type { TransactionType } from './categories.js';
 
 export type PaymentMethod = 'online' | 'cash';
 export type NecessityClass = 'essential' | 'optional' | 'luxury';
-export type TransactionIngestionSource = 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+export type TransactionIngestionSource = 'manual' | 'bank_statement' | 'sms' | 'notification' | 'message_share' | 'message' | 'account_aggregator';
 export type CategorizationMethod = 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none';
 export interface CategorizationEvidenceDTO { source: string; detail: string; }
 

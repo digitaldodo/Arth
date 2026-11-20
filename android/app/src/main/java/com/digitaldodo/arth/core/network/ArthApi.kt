@@ -34,6 +34,12 @@ data class CategoryListResponseDto(
 )
 
 @Serializable
+data class CategorizationEvidenceApiDto(
+    val source: String,
+    val detail: String
+)
+
+@Serializable
 data class CreateTransactionApiRequest(
     val id: String,
     val amount: String,
@@ -44,6 +50,17 @@ data class CreateTransactionApiRequest(
     val necessity: String? = null,
     val description: String? = null,
     val notes: String? = null,
+    @SerialName("statement_reference") val statementReference: String? = null,
+    @SerialName("account_id") val accountId: String? = null,
+    @SerialName("import_batch_id") val importBatchId: String? = null,
+    @SerialName("ingestion_source") val ingestionSource: String? = null,
+    @SerialName("parser_version") val parserVersion: String? = null,
+    @SerialName("categorization_model_version") val categorizationModelVersion: String? = null,
+    @SerialName("category_verified") val categoryVerified: Boolean? = null,
+    @SerialName("categorization_method") val categorizationMethod: String? = null,
+    @SerialName("category_suggestion_confidence") val categorySuggestionConfidence: Float? = null,
+    @SerialName("category_evidence") val categoryEvidence: List<CategorizationEvidenceApiDto>? = null,
+    @SerialName("category_was_corrected") val categoryWasCorrected: Boolean? = null,
     @SerialName("recorded_at") val recordedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null
 )
@@ -68,6 +85,16 @@ data class TransactionApiDto(
     val necessity: String? = null,
     val description: String? = null,
     val notes: String? = null,
+    @SerialName("statement_reference") val statementReference: String? = null,
+    @SerialName("account_id") val accountId: String? = null,
+    @SerialName("import_batch_id") val importBatchId: String? = null,
+    @SerialName("ingestion_source") val ingestionSource: String? = null,
+    @SerialName("parser_version") val parserVersion: String? = null,
+    @SerialName("categorization_model_version") val categorizationModelVersion: String? = null,
+    @SerialName("category_verified") val categoryVerified: Boolean? = null,
+    @SerialName("categorization_method") val categorizationMethod: String? = null,
+    @SerialName("category_suggestion_confidence") val categorySuggestionConfidence: Float? = null,
+    @SerialName("category_was_corrected") val categoryWasCorrected: Boolean? = null,
     @SerialName("recorded_at") val recordedAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("updated_at") val updatedAt: String? = null
