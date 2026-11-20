@@ -884,9 +884,15 @@ export async function setUsernameAction(
 
   const normalizedUsername = rawUsername.toLowerCase();
   if (isReservedUsername(normalizedUsername)) {
-    return {
-      error: 'This username is reserved. Please choose another username.',
-    };
+    try {
+      const supabase = await createClient();
+      return {
+        error: 'This username is reserved. Please choose another username.',
+        suggestions: await getAvailableUsernameSuggestions(supabase, normalizedUsername),
+      };
+    } catch {
+      return { error: 'This username is reserved. Please choose another username.' };
+    }
   }
 
   try {
@@ -1001,10 +1007,19 @@ export async function checkUsernameAvailabilityAction(
   }
 
   if (isReservedUsername(cleanUsername)) {
-    return {
-      available: false,
-      error: 'This username is reserved. Please choose another username.',
-    };
+    try {
+      const supabase = await createClient();
+      return {
+        available: false,
+        error: 'This username is reserved. Please choose another username.',
+        suggestions: await getAvailableUsernameSuggestions(supabase, cleanUsername),
+      };
+    } catch {
+      return {
+        available: false,
+        error: 'This username is reserved. Please choose another username.',
+      };
+    }
   }
 
   try {
