@@ -13,8 +13,11 @@ describe('Indian-context weak-label categorization', () => {
     assert.doesNotMatch(normalizeNarration('UPI to Swiggy Ref 123456789 paid Rs. 450'), /450/);
   });
 
-  test('abstains when only one weak rule fires', () => {
-    assert.equal(suggestCategory('payment at Zomato', categories, 'expense'), null);
+  test('surfaces one weak rule as a low-strength suggestion that still needs confirmation', () => {
+    const result = suggestCategory('payment at Zomato', categories, 'expense');
+    assert.equal(result?.category.id, 'food');
+    assert.equal(result?.confidence, 0.5);
+    assert.equal(result?.needsConfirmation, true);
   });
 
   test('suggests with explanation when two independent signals agree', () => {

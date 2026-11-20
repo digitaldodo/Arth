@@ -2,6 +2,9 @@ import type { TransactionType } from './categories.js';
 
 export type PaymentMethod = 'online' | 'cash';
 export type NecessityClass = 'essential' | 'optional' | 'luxury';
+export type TransactionIngestionSource = 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+export type CategorizationMethod = 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none';
+export interface CategorizationEvidenceDTO { source: string; detail: string; }
 
 export interface CreateTransactionRequest {
   id: string; // Client-generated UUID v7
@@ -16,6 +19,14 @@ export interface CreateTransactionRequest {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
+  ingestion_source?: TransactionIngestionSource;
+  parser_version?: string | null;
+  categorization_model_version?: string | null;
+  category_verified?: boolean;
+  categorization_method?: CategorizationMethod;
+  category_suggestion_confidence?: number | null;
+  category_evidence?: CategorizationEvidenceDTO[];
+  category_was_corrected?: boolean;
   recorded_at?: string; // Client local recording timestamp (ISO 8601) preserved across offline sync
   created_at?: string; // Client recording timestamp (ISO 8601) preserved across offline sync
 }
@@ -36,6 +47,14 @@ export interface TransactionDTO {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
+  ingestion_source?: TransactionIngestionSource;
+  parser_version?: string | null;
+  categorization_model_version?: string | null;
+  category_verified?: boolean;
+  categorization_method?: CategorizationMethod;
+  category_suggestion_confidence?: number | null;
+  category_evidence?: CategorizationEvidenceDTO[];
+  category_was_corrected?: boolean;
   recorded_at: string; // Immutable local creation timestamp used for balance baseline snapshot boundary
   created_at: string; // Server upload/insertion timestamp
   updated_at: string;

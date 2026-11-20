@@ -1,53 +1,45 @@
 # SpendSense Indian-context transaction categorization
 
-## Research question
+## Research question and ownership
 
 Can weak supervision and domain-anchored FastText improve category suggestions for short, abbreviated, noisy Indian bank and UPI narrations while keeping uncertain cases reviewable?
 
-The supplied novelty assessment identifies anchored FastText plus weak labeling as the user's assigned research contribution. It sets macro F1 above 85% as an experimental target. It does not provide an evaluated SpendSense dataset or measured result; this implementation makes no accuracy claim.
+The user's assigned contribution is **Weakly Supervised Indian-Context Transaction Categorization using Anchored FastText Embeddings**. The novelty assessment ranks this candidate second (Research Value 8.5/10; Implementation Difficulty 7/10). The project's overall Rank 1 novelty is the uncertainty-aware Safe-to-Spend engine, owned by another team member. This document does not claim that transaction categorization is the project's overall Rank 1 contribution.
 
-## Implemented pipeline
+## Implemented product path
 
-1. **Normalization.** `frontend/src/features/categorization/pipeline.ts` applies Unicode normalization, case normalization, and removal of common amount and payment-reference patterns. It retains merchant and payment context for rules. The research adapter in `ml/transaction-categorization/pipeline.py` additionally extracts a UPI handle, transaction rail, and reference into separate fields.
-2. **Weak labeling.** Merchant-alias and transaction-context labeling functions emit category votes or abstain. The UI suggests only when there are at least two agreeing signals and no tie. Its displayed agreement is a transparent rule-agreement fraction, not a calibrated probability.
-3. **Human review.** Suggestions never write transactions. The user selects or changes the category before saving. Explicit corrections are scoped to the signed-in browser account and stored locally as a SHA-256 merchant fingerprint, category ID, and timestamp. Raw narration is not saved by this feedback path, and this feedback is not uploaded or used for global training.
-4. **Replaceable model provider.** The Python research module defines an `EmbeddingModel` adapter and an `AnchoredFastTextProvider` that requires a model artifact, category anchors, and a confidence threshold. No trained model is bundled or active. Until a valid dataset, trained artifact, and evaluation review exist, the production UI is the conservative weak-label baseline only.
+Manual Quick Add, bank statement row review, and selected bank/UPI message review call the same frontend `suggestCategory` pipeline. The pipeline normalizes narration, applies abstaining merchant/context weak-label functions, preserves supporting evidence, and declines to suggest on conflicting evidence. A single unopposed signal is exposed only as a low-strength suggestion; users must confirm or change it before saving. A missing suggestion requires user category selection; it does not fall back to the first category.
 
-## Categories and dimensions
+Transaction commits continue through the existing transaction engine. Provenance records input source, parser/model version, user verification, compact evidence, method, score when available, and correction state. This does not add another ledger. The detailed channel architecture and commit boundary are in `SPENDSENSE_TRANSACTION_INTELLIGENCE_ARCHITECTURE.md` and `SPENDSENSE_CATEGORIZATION_API_CONTRACT.md`.
 
-Initial labels are Food & Dining, Shopping, Utilities, Rent, Transport, Education, EMIs & Loans, Healthcare, Entertainment, Salary, Other income, Transfers, Refunds, and Other. Runtime suggestions map onto the existing category IDs; this module does not create or migrate a second category taxonomy. Income/expense type, necessity, payment method, merchant, and user category remain separate fields. Categorization is not a tax eligibility decision.
+## Methodology status
 
-## Label functions
+- **Narration normalization:** TypeScript and Python implementations normalize case/spacing, references, currency amounts, rails and UPI handles while maintaining reference/handle fields separately. Source parsers retain their own original text transiently; transaction records do not store full message bodies or bank documents.
+- **Weak supervision:** Existing labeling functions cover merchant aliases, transaction intent and biller/context patterns. The research module now has an optional Snorkel `LabelModel` adapter. The client-side agreement fraction is not a learned generative model and is not calibrated confidence. LF coverage, overlap, conflict, abstention and label-model assumptions must be recorded in a real experiment.
+- **Anchored FastText:** A training command now trains unsupervised skip-gram subword vectors and writes a run manifest. The repository's supervised FastText artifact adapter remains optional. No FastText artifact, approved Indian transaction corpus or measured semantic anchor quality is present.
+- **Baselines and hybrid:** The evaluation runner includes TF-IDF unigram/bigram + XGBoost and SentenceTransformer `all-MiniLM-L6-v2` + XGBoost. An experimental Snorkel pseudo-label + skip-gram FastText anchor-feature + XGBoost path is also available when dependencies, data and a trained embedding artifact are supplied. Optional training-only RandomOverSampler, SMOTE and semantic text augmentation experiments are implemented behind a flag. None has been run on an approved labeled corpus. No production model dependency was introduced.
+- **Human verification:** Explicit categories are confirmed before commit. The browser-scoped correction store hashes merchant fingerprints and does not train a global model. Transaction metadata retains the classification evidence and user confirmation where a candidate is committed through the current API.
 
-- `merchant_aliases`: known merchant aliases, including representative Indian UPI and marketplace names; abstains when no known alias matches.
-- `transaction_intent`: income, refund, reversal, and own-account transfer language; abstains on ambiguous narration.
-- `biller_and_context` / `transactionContexts`: utilities, rent, education, loan repayment, healthcare, food, shopping, transport, and entertainment context; abstains without context.
-- Weak-label aggregation counts votes, records which functions voted, and abstains for no vote, a tie, or insufficient agreement. Votes are noisy labels, not ground truth.
+## Taxonomy and field separation
 
-The current TypeScript interface is deliberately conservative and has no global model call. The Python aggregation is a transparent weak-label combiner, not the Snorkel library's learned generative label model. A teammate can replace it behind a provider after data governance and evaluation are approved.
+Runtime suggestions map to the user's existing category IDs and type. Research labels may include Food & Dining, Shopping, Utilities, Rent, Transport, Education, EMIs & Loans, Healthcare, Entertainment, Salary, Other Income, Transfers, Refunds and Other. Income/expense direction, necessity, payment method, merchant identity and tax treatment remain independent fields. The classifier does not decide tax eligibility.
 
-## FastText and comparisons
+## Evaluation and results
 
-The proposed experiment will train domain-adapted subword FastText embeddings on permitted, anonymized, synthetic, or appropriately licensed Indian transaction text. Anchors should be reviewed per category and cover UPI handles, merchant aliases, bank narration, card/NEFT/IMPS/RTGS descriptors, income, transfers, utilities, and billers. Merchant-neighborhood discovery may inform reviewed aliases but must not automatically create user-facing global rules.
+The evaluation utilities provide chronological splitting and metrics for precision, recall, macro/weighted F1, per-category support/F1, confusion matrix, abstention and top-label calibration diagnostics. Calibration code is a metric implementation, not calibration evidence. A labeled benchmark must additionally report accuracy, LF coverage/conflict/abstention, training/inference timing, model dimensions and hyperparameters.
 
-The novelty assessment also proposes SentenceTransformer plus XGBoost as a comparative architecture; the thesis and strategy documents emphasize broader financial-intelligence/AA features. Those are research alternatives, not current production dependencies. Compare a keyword/regex baseline, TF-IDF, anchored FastText, and a selected hybrid on the same frozen temporal test set. Use XGBoost or sentence embeddings only if evidence justifies their operational cost and privacy footprint.
+No licensed or consented labeled corpus or trained model was supplied. Therefore SpendSense accuracy, precision, recall, Macro F1, Weighted F1, per-category performance, calibration, coverage trade-offs, inference latency and comparative gains are **not measured**. The novelty assessment's >85% macro F1 is a target only. Its cited Alhenshiri values (93.6% accuracy for SentenceTransformer + XGBoost, 87.2% TF-IDF + XGBoost, macro F1 0.866, weighted F1 0.857) and Toran/Flowcast's 91% average balanced accuracy are literature values, not SpendSense results. See `SPENDSENSE_MODEL_BENCHMARKS.md` for the run requirements.
 
-## Evaluation plan and current evidence
+## Reproducibility and limitations
 
-`ml/transaction-categorization/evaluation.py` supplies a chronological split and dependency-free per-category precision/recall/F1, macro F1, weighted F1, confusion matrix, abstention rate, and fixed-width top-label expected calibration error (ECE) with confidence/accuracy bins. Calibration excludes abstentions and reports its evaluated coverage. Rule-agreement and model scores are treated as inputs to a diagnostic, not proof that their confidence values are calibrated. The Python tests use synthetic narration only. The following remain **not measured** because no consented or licensed labeled dataset and trained artifact were supplied:
+Use a frozen manifest with source/license/consent, source counts, category definitions, exact and near-duplicate controls, anonymization procedure, temporal split IDs, random seeds where supported, dependency versions, model versions and artifacts. Split before oversampling or text augmentation. Do not create near-duplicate train/test records. FastText's library training interface may not expose a portable random seed, so pin the corpus hash and library version and do not claim bitwise determinism.
 
-- Macro F1 (target >85%), weighted F1, precision, recall, and confusion matrix.
-- Confidence calibration and coverage/accuracy tradeoff on a valid labeled corpus (the ECE calculation and report fields are implemented, but not empirically measured).
-- Inference latency and memory on target Android devices.
-- Comparative baselines and merchant-neighborhood quality.
+The current product baseline is a small hand-authored weak-label set, not a production-quality model. It may fail on unknown or ambiguous merchants. Paper datasets, paper metrics and the literature's 18-million narration corpus are not available to SpendSense. The user's supplied research files were available at paths outside the repository; product recommendations there were treated as reference context while the explicit implementation requirements in the user request remained controlling.
 
-For each experiment, freeze a dataset manifest, label definitions, model version, and date cutoff. Keep later transactions out of training and tuning. Split by time (and ideally by merchant/user group) to reduce near-duplicate leakage. Report class counts, per-category support, abstention, and confidence calibration with results. Do not use personal customer narrations without lawful basis, informed scope, and appropriate de-identification.
+## Supporting research documents
 
-## Limitations and next research steps
-
-- The shipping web baseline is a small, hand-authored weak-label set; it will not identify unfamiliar merchants semantically and can fail on atypical narration.
-- Agreement between rules is not a probability of correctness.
-- Category display names must match an existing category; unmatched labels abstain.
-- Feedback remains browser-local and user-specific. It is not a global training corpus.
-- The FastText provider is an integration boundary, not a claim that a trained or benchmarked model currently exists.
-- Add reviewed aliases and category mappings only with a documented test; evaluate normalization against actual supported bank formats before expanding coverage.
+- `SPENDSENSE_WEAK_SUPERVISION_METHODOLOGY.md`
+- `SPENDSENSE_FASTTEXT_TRAINING_AND_ANCHORING.md`
+- `SPENDSENSE_DATASET_AND_LABELING_GUIDE.md`
+- `SPENDSENSE_MODEL_BENCHMARKS.md`
+- `SPENDSENSE_MULTI_SOURCE_TRANSACTION_INTELLIGENCE.md`

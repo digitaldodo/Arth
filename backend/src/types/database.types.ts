@@ -49,6 +49,18 @@ export interface TransactionRow {
   necessity: NecessityClass | null; // required if expense, null if income
   description: string | null;
   notes: string | null;
+  account_id?: string | null;
+  import_batch_id?: string | null;
+  statement_reference?: string | null;
+  ingestion_source: 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+  parser_version: string | null;
+  categorization_model_version: string | null;
+  category_verified: boolean;
+  categorization_method: 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none' | null;
+  category_suggestion_confidence: number | null;
+  category_evidence: Array<{ source: string; detail: string }>;
+  category_was_corrected: boolean;
+  recorded_at?: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null; // soft-delete

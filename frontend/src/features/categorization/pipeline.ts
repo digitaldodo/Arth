@@ -28,7 +28,7 @@ const merchantAliases: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 const transactionContexts: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\b(?:restaurant|cafe|food delivery|dining)\b/i, 'Food & Dining'],
+  [/\b(?:restaurant|cafe|food delivery|food merchant|dining)\b/i, 'Food & Dining'],
   [/\b(?:retail|shopping|marketplace)\b/i, 'Shopping'],
   [/\b(?:electricity|water bill|gas bill|broadband|recharge)\b/i, 'Utilities'],
   [/\b(?:rent|landlord)\b/i, 'Rent'],
@@ -91,16 +91,17 @@ export function suggestCategory(
     }
   }
   const votes = votesFor(normalized);
-  // A single lookup hit is too weak to explain as a suggestion. Require at
-  // least two distinct evidence sources to agree.
-  if (votes.length < 2 || new Set(votes.map((vote) => vote.source)).size < 2) return null;
+  if (votes.length < 1) return null;
 
   const counts = new Map<string, number>();
   for (const vote of votes) counts.set(vote.label, (counts.get(vote.label) ?? 0) + 1);
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const [label, count] = ranked[0];
-  const confidence = count / votes.length;
-  if (confidence < 0.67 || (ranked[1]?.[1] === count)) return null;
+  // A single weak signal is surfaced only as a low-strength suggestion and
+  // always remains subject to user confirmation.
+  const sourceCount = new Set(votes.map((vote) => vote.source)).size;
+  const confidence = sourceCount < 2 ? 0.5 : count / votes.length;
+  if ((sourceCount >= 2 && confidence < 0.67) || (ranked[1]?.[1] === count)) return null;
 
   const category = categories.find((item) => item.type === type && item.name.trim().toLocaleLowerCase('en-IN') === label.toLocaleLowerCase('en-IN'));
   if (!category) return null;

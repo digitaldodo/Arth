@@ -1,0 +1,8 @@
+# Research-only dependencies. Do not install these in the web or Android runtime.
+fasttext-wheel>=0.9.2
+snorkel>=0.10.0
+scikit-learn>=1.4
+xgboost>=2.0
+sentence-transformers>=3.0
+imbalanced-learn>=0.12
+numpy>=1.26

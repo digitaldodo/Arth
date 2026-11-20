@@ -60,6 +60,14 @@ export interface ValidatedCreateTransactionInput {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
+  ingestion_source?: 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+  parser_version?: string | null;
+  categorization_model_version?: string | null;
+  category_verified?: boolean;
+  categorization_method?: 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none';
+  category_suggestion_confidence?: number | null;
+  category_evidence?: Array<{ source: string; detail: string }>;
+  category_was_corrected?: boolean;
   recorded_at: string;
   created_at?: string;
 }
@@ -190,6 +198,37 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
   if (statementReference !== undefined && statementReference !== null && (typeof statementReference !== 'string' || statementReference.trim().length > 120)) {
     throw new ValidationError('Statement reference cannot exceed 120 characters');
   }
+  const ingestionSource = payload.ingestion_source;
+  if (ingestionSource !== undefined && !['manual', 'bank_statement', 'message', 'account_aggregator'].includes(String(ingestionSource))) {
+    throw new ValidationError('Invalid transaction ingestion source');
+  }
+  const parserVersion = payload.parser_version;
+  if (parserVersion !== undefined && parserVersion !== null && (typeof parserVersion !== 'string' || parserVersion.length > 80)) {
+    throw new ValidationError('Parser version cannot exceed 80 characters');
+  }
+  const categorizationModelVersion = payload.categorization_model_version;
+  if (categorizationModelVersion !== undefined && categorizationModelVersion !== null && (typeof categorizationModelVersion !== 'string' || categorizationModelVersion.length > 80)) {
+    throw new ValidationError('Categorization model version cannot exceed 80 characters');
+  }
+  const categoryVerified = payload.category_verified;
+  if (categoryVerified !== undefined && typeof categoryVerified !== 'boolean') {
+    throw new ValidationError('category_verified must be a boolean');
+  }
+  const method = payload.categorization_method;
+  const methods = ['weak_supervision', 'anchored_fasttext', 'user_correction', 'manual', 'none'];
+  if (method !== undefined && !methods.includes(String(method))) throw new ValidationError('Invalid categorization method');
+  const confidence = payload.category_suggestion_confidence;
+  if (confidence !== undefined && confidence !== null && (typeof confidence !== 'number' || !Number.isFinite(confidence) || confidence < 0 || confidence > 1)) {
+    throw new ValidationError('Category suggestion confidence must be between 0 and 1');
+  }
+  const evidence = payload.category_evidence;
+  if (evidence !== undefined && (!Array.isArray(evidence) || evidence.length > 12 || evidence.some((item) =>
+    !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).source !== 'string' ||
+    typeof (item as Record<string, unknown>).detail !== 'string' ||
+    ((item as Record<string, string>).source.length + (item as Record<string, string>).detail.length > 240)
+  ))) throw new ValidationError('Category evidence must contain at most 12 short source/detail items');
+  const categoryWasCorrected = payload.category_was_corrected;
+  if (categoryWasCorrected !== undefined && typeof categoryWasCorrected !== 'boolean') throw new ValidationError('category_was_corrected must be a boolean');
 
   // 9. Validate Recording Timestamp (preserves original recording timestamp across offline sync)
   let recorded_at: string;
@@ -228,6 +267,14 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     ...(accountId === undefined ? {} : { account_id: accountId === null ? null : accountId.toLowerCase() }),
     ...(importBatchId === undefined ? {} : { import_batch_id: importBatchId === null ? null : importBatchId.toLowerCase() }),
     ...(statementReference === undefined ? {} : { statement_reference: statementReference === null ? null : statementReference.trim() }),
+    ...(ingestionSource === undefined ? {} : { ingestion_source: ingestionSource as ValidatedCreateTransactionInput['ingestion_source'] }),
+    ...(parserVersion === undefined ? {} : { parser_version: parserVersion as string | null }),
+    ...(categorizationModelVersion === undefined ? {} : { categorization_model_version: categorizationModelVersion as string | null }),
+    ...(categoryVerified === undefined ? {} : { category_verified: categoryVerified as boolean }),
+    ...(method === undefined ? {} : { categorization_method: method as ValidatedCreateTransactionInput['categorization_method'] }),
+    ...(confidence === undefined ? {} : { category_suggestion_confidence: confidence as number | null }),
+    ...(evidence === undefined ? {} : { category_evidence: evidence as ValidatedCreateTransactionInput['category_evidence'] }),
+    ...(categoryWasCorrected === undefined ? {} : { category_was_corrected: categoryWasCorrected as boolean }),
     recorded_at,
     created_at,
   };

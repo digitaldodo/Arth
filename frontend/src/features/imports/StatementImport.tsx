@@ -12,8 +12,10 @@ import { normalizeStatementTable, parseCsv, tagDuplicates, computeStatementSumma
 import { getStatementCompatibilityMatrix } from './statement-adapters';
 import { alignOcrRows, requireOcrReview, type OcrCell, type OcrLine } from './statement-ocr';
 import { skippedRowsForImport } from './statement-skip-history';
+import { merchantFingerprint, recordCategoryCorrection, suggestCategory } from '@/features/categorization';
+import { FinancialMessageCapture } from './FinancialMessageCapture';
 
-type Props = { userId: string; onImported: (count: number) => void };
+type Props = { userId: string; onImported: (count: number) => void; onManualEntry: () => void };
 type PasswordCallback = (password: string) => void;
 type ExistingLedgerRow = { transaction_date: string; amount_paise: number; type: string; description: string | null; account_id?: string | null; statement_reference?: string | null };
 type FinancialAccount = { id: string; name: string; institution: string; account_type: 'bank' | 'credit_card' | 'cash' | 'wallet' | 'investment' | 'loan'; account_number_last4: string | null; opening_balance_paise: string; current_balance_paise?: string };
@@ -23,7 +25,7 @@ const MAPPING_FIELDS: Array<[keyof StatementColumnMapping, string]> = [
   ['amount', 'Single amount'], ['type', 'Debit / credit type'], ['reference', 'Reference / UTR'], ['balance', 'Running balance'],
 ];
 
-export function StatementImport({ userId, onImported }: Props) {
+export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<StatementParseResult | null>(null);
   const [mappingHeaderIndex, setMappingHeaderIndex] = useState('0');
@@ -158,9 +160,9 @@ export function StatementImport({ userId, onImported }: Props) {
       if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const match = available.find((category) => category.type === row.type && row.description.toLowerCase().includes(category.name.toLowerCase()));
-        const fallback = available.find((category) => category.type === row.type);
-        return { ...row, categoryId: match?.id || fallback?.id || '' };
+        const suggested = suggestCategory(row.description, available, row.type);
+        const match = suggested?.category;
+        return { ...row, categoryId: match?.id || '' };
       });
       if (!parsed.rows.length) {
         setResult(parsed);
@@ -206,9 +208,9 @@ export function StatementImport({ userId, onImported }: Props) {
       if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const match = available.find((category) => category.type === row.type && row.description.toLowerCase().includes(category.name.toLowerCase()));
-        const fallback = available.find((category) => category.type === row.type);
-        return { ...row, categoryId: match?.id || fallback?.id || '' };
+        const suggested = suggestCategory(row.description, available, row.type);
+        const match = suggested?.category;
+        return { ...row, categoryId: match?.id || '' };
       });
       setResult(parsed); setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted using your column mapping. Review every row before importing.`);
     } catch (cause) { setError(sanitizeUserFacingError(cause, 'Could not parse those columns.')); }
@@ -354,9 +356,9 @@ export function StatementImport({ userId, onImported }: Props) {
       if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const match = available.find((category) => category.type === row.type && row.description.toLowerCase().includes(category.name.toLowerCase()));
-        const fallback = available.find((category) => category.type === row.type);
-        return { ...row, categoryId: match?.id || fallback?.id || '', selected: false };
+        const suggested = suggestCategory(row.description, available, row.type);
+        const match = suggested?.category;
+        return { ...row, categoryId: match?.id || '', selected: false };
       });
       setResult(parsed);
       setMessage(parsed.rows.length
@@ -493,6 +495,10 @@ export function StatementImport({ userId, onImported }: Props) {
       await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, 0);
       for (const row of selectedRows) {
         const category = categoriesById.get(row.categoryId)!;
+        const categorySuggestion = suggestCategory(row.description, categories, row.type);
+        if (categorySuggestion && categorySuggestion.category.id !== category.id) {
+          await recordCategoryCorrection(userId, merchantFingerprint(row.description), category.id);
+        }
         const response: CreateTransactionResponse = await syncEngine.createTransactionLocalFirst({
           id: uuidv7(), amount: row.amount, type: row.type, category_id: category.id,
           transaction_date: row.date, payment_method: row.paymentMethod,
@@ -500,6 +506,14 @@ export function StatementImport({ userId, onImported }: Props) {
           description: row.description.slice(0, 500),
           notes: `Statement import · ${result.bank}${row.reference ? ` · ref ${row.reference}` : ''} · batch ${batchId}`,
           account_id: accountId, import_batch_id: batchId, statement_reference: row.reference,
+          ingestion_source: 'bank_statement', parser_version: `${result.adapterId}:1`, category_verified: true,
+          categorization_method: categorySuggestion
+            ? categorySuggestion.category.id === category.id ? categorySuggestion.method : 'user_correction'
+            : 'manual',
+          category_suggestion_confidence: categorySuggestion?.confidence ?? null,
+          category_evidence: categorySuggestion ? [...categorySuggestion.evidence] : [],
+          category_was_corrected: Boolean(categorySuggestion && categorySuggestion.category.id !== category.id),
+          categorization_model_version: categorySuggestion?.method === 'weak_supervision' ? 'weak-label-rules-v1' : null,
         }, categories, userId);
         importedIds.push(response.transaction.id);
         importedRowKeys.add(row.key);
@@ -532,6 +546,13 @@ export function StatementImport({ userId, onImported }: Props) {
   const inputClass = 'w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1.5 text-xs text-[var(--text-primary)]';
   const mappingHeaderCells = result?.sourceTable?.[Number(mappingHeaderIndex)] || [];
   return <section className="space-y-5">
+    <nav aria-label="Transaction capture methods" className="grid gap-2 sm:grid-cols-3">
+      <button type="button" onClick={onManualEntry} className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Manual Entry</strong><span className="text-xs text-[var(--text-muted)]">Record an income or expense</span></button>
+      <a href="#bank-statement-import" className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Bank Statement</strong><span className="text-xs text-[var(--text-muted)]">Upload and review transactions</span></a>
+      <a href="#financial-message-capture" className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Financial Message</strong><span className="text-xs text-[var(--text-muted)]">Paste or share a selected message</span></a>
+    </nav>
+    <div id="financial-message-capture"><FinancialMessageCapture userId={userId} onImported={onImported} onManualEntry={onManualEntry} /></div>
+    <div id="bank-statement-import">
     <header>
       <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Documents &amp; Tax</p>
       <h1 className="mt-1 text-2xl font-semibold">Statement import</h1>
@@ -623,7 +644,7 @@ export function StatementImport({ userId, onImported }: Props) {
               <label className="text-[10px] text-[var(--text-muted)]">Amount (₹)<input className={inputClass} inputMode="decimal" value={row.amount} onChange={(event) => { const value = event.target.value; try { const paise = Number(parseINRToPaise(value)); updateRow(row.key, { amount: value, amountPaise: paise }); } catch { updateRow(row.key, { amount: value }); } }} /></label>
               <label className="text-[10px] text-[var(--text-muted)]">Type<select className={inputClass} value={row.type} onChange={(event) => updateRow(row.key, { type: event.target.value as 'income' | 'expense', categoryId: categories.find((category) => category.type === event.target.value)?.id || '' })}><option value="expense">Expense</option><option value="income">Income</option></select></label>
               <label className="text-[10px] text-[var(--text-muted)]">Payment channel<select className={inputClass} value={row.paymentMethod} onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' })}><option value="online">Online</option><option value="cash">Cash</option></select></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Category<select className={inputClass} value={row.categoryId} onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}><option value="">Choose category</option>{categories.filter((category) => category.type === row.type && !category.archived_at).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+              <label className="text-[10px] text-[var(--text-muted)]">Category<select className={inputClass} value={row.categoryId} onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}><option value="">Choose category</option>{categories.filter((category) => category.type === row.type && !category.archived_at).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select>{(() => { const suggestion = suggestCategory(row.description, categories, row.type); return suggestion ? <span className="mt-1 block text-[10px] text-[var(--text-secondary)]">Suggested: {suggestion.category.name} · {Math.round(suggestion.confidence * 100)}% rule agreement</span> : <span className="mt-1 block text-[10px] text-[var(--text-muted)]">No reliable suggestion · choose a category</span>; })()}</label>
             </div></div>
             <div className="ml-7 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
               {row.classification && (
@@ -706,6 +727,7 @@ export function StatementImport({ userId, onImported }: Props) {
         </div>
       )}
     </aside>
+    </div>
   </section>;
 
   async function undoBatchFor(target: StatementImportBatch) {

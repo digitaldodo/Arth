@@ -74,6 +74,42 @@ def transaction_intent(value: NormalizedText) -> Optional[str]:
     return ABSTAIN
 
 
+def merchant_keywords(value: NormalizedText) -> Optional[str]:
+    return merchant_aliases(value)
+
+
+def upi_handle_patterns(value: NormalizedText) -> Optional[str]:
+    if not value.merchant_handle:
+        return ABSTAIN
+    handle = value.merchant_handle
+    handle_categories = {
+        "swiggy": "food_dining", "zomato": "food_dining", "blinkit": "shopping",
+        "zepto": "shopping", "uber": "transport", "ola": "transport",
+    }
+    return next((category for merchant, category in handle_categories.items() if merchant in handle), ABSTAIN)
+
+
+def bank_narration_patterns(value: NormalizedText) -> Optional[str]:
+    patterns = (
+        (r"\b(?:neft|imps|rtgs)\b.*\b(?:own account|self transfer)\b", "transfer"),
+        (r"\b(?:salary|payroll)\b", "salary"),
+        (r"\b(?:refund|reversal|reversed|credited back)\b", "refund"),
+    )
+    return next((category for pattern, category in patterns if re.search(pattern, value.text)), ABSTAIN)
+
+
+def known_biller_formats(value: NormalizedText) -> Optional[str]:
+    if _contains(value.text, "bescom", "tneb", "billdesk", "electricity", "water bill", "gas bill", "broadband", "recharge"):
+        return "utilities"
+    return ABSTAIN
+
+
+def direction_and_transfer(value: NormalizedText) -> Optional[str]:
+    if _contains(value.text, "self transfer", "own account", "account transfer"):
+        return "transfer"
+    return ABSTAIN
+
+
 def biller_and_context(value: NormalizedText) -> Optional[str]:
     rules = {
         "utilities": ("electricity", "water", "gas", "broadband", "recharge", "billdesk", "bescom", "tneb"),
@@ -87,7 +123,11 @@ def biller_and_context(value: NormalizedText) -> Optional[str]:
 
 
 LABELING_FUNCTIONS: tuple[tuple[str, LabelingFunction], ...] = (
-    ("merchant_aliases", merchant_aliases),
+    ("merchant_keywords", merchant_keywords),
+    ("upi_handle_patterns", upi_handle_patterns),
+    ("bank_narration_patterns", bank_narration_patterns),
+    ("known_biller_formats", known_biller_formats),
+    ("direction_and_transfer", direction_and_transfer),
     ("transaction_intent", transaction_intent),
     ("biller_and_context", biller_and_context),
 )
@@ -107,9 +147,10 @@ def aggregate_weak_labels(votes: Iterable[tuple[str, Optional[str]]]) -> Predict
     total = sum(counts.values())
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     top, weight = ranked[0]
-    confidence = weight / total
+    # A lone weak signal is a low-strength candidate, never a 1.0 confidence.
+    confidence = 0.5 if total == 1 else weight / total
     tied = len(ranked) > 1 and math.isclose(ranked[0][1], ranked[1][1])
-    accepted = top if confidence >= 0.67 and not tied else None
+    accepted = top if (confidence >= 0.67 or total == 1) and not tied else None
     return Prediction(accepted, confidence, tuple(evidence), "weak-label-v1", "weak_supervision", accepted is None)
 
 

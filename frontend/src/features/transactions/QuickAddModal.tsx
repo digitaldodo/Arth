@@ -32,6 +32,7 @@ interface QuickAddModalProps {
   editingTransaction?: TransactionDTO | null;
   userId?: string;
 }
+interface QuickAddAccount { id: string; name: string; account_type: string; }
 
 export function QuickAddModal({
   isOpen,
@@ -73,6 +74,8 @@ export function QuickAddModal({
   );
   const [notes, setNotes] = useState<string>(() => editingTransaction?.notes ?? '');
   const [showNotes, setShowNotes] = useState<boolean>(() => Boolean(editingTransaction?.notes));
+  const [accountId, setAccountId] = useState<string>(() => editingTransaction?.account_id || '');
+  const [accounts, setAccounts] = useState<QuickAddAccount[]>([]);
 
   // Categories state
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
@@ -99,6 +102,16 @@ export function QuickAddModal({
     () => suggestCategory(description, categories, type, savedMerchantCategoryId),
     [description, categories, type, savedMerchantCategoryId],
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    void fetch('/api/backend/financial/accounts', { cache: 'no-store' })
+      .then(async (response) => response.ok ? await response.json() as { accounts?: QuickAddAccount[] } : { accounts: [] })
+      .then((data) => { if (active) setAccounts(data.accounts || []); })
+      .catch(() => { if (active) setAccounts([]); });
+    return () => { active = false; };
+  }, [isOpen, userId]);
 
   // Status & error states
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -131,6 +144,7 @@ export function QuickAddModal({
         setNecessity(editingTransaction.necessity || null);
         setDescription(editingTransaction.description || '');
         setNotes(editingTransaction.notes || '');
+        setAccountId(editingTransaction.account_id || '');
         setShowNotes(Boolean(editingTransaction.notes));
         setErrorMessage(null);
         setConsecutiveSuccessToast(null);
@@ -142,6 +156,7 @@ export function QuickAddModal({
         setNecessity(null);
         setDescription('');
         setNotes('');
+        setAccountId('');
         setShowNotes(false);
         setErrorMessage(null);
         setConsecutiveSuccessToast(null);
@@ -215,10 +230,11 @@ export function QuickAddModal({
         necessity !== (editingTransaction.necessity ?? null) ||
         description.trim() !== (editingTransaction.description || '').trim() ||
         notes.trim() !== (editingTransaction.notes || '').trim()
+        || accountId !== (editingTransaction.account_id || '')
       );
     }
-    return amount.trim() !== '' || description.trim() !== '' || notes.trim() !== '';
-  }, [editingTransaction, type, amount, categoryId, transactionDate, paymentMethod, necessity, description, notes]);
+    return amount.trim() !== '' || description.trim() !== '' || notes.trim() !== '' || accountId !== '';
+  }, [editingTransaction, type, amount, categoryId, transactionDate, paymentMethod, necessity, description, notes, accountId]);
 
   const handleAttemptClose = useCallback(() => {
     if (isSubmitting) return;
@@ -362,6 +378,16 @@ export function QuickAddModal({
           necessity: type === 'expense' ? necessity : null,
           description: description.trim() || null,
           notes: notes.trim() || null,
+          ...(accountId ? { account_id: accountId } : {}),
+          ingestion_source: 'manual' as const,
+          category_verified: true,
+          categorization_method: categorySuggestion
+            ? categorySuggestion.category.id === categoryId ? categorySuggestion.method : 'user_correction' as const
+            : 'manual' as const,
+          category_suggestion_confidence: categorySuggestion?.confidence ?? null,
+          category_evidence: categorySuggestion ? [...categorySuggestion.evidence] : [],
+          category_was_corrected: Boolean(categorySuggestion && categorySuggestion.category.id !== categoryId),
+          categorization_model_version: categorySuggestion?.method === 'weak_supervision' ? 'weak-label-rules-v1' : null,
         };
 
         const response = await syncEngine.createTransactionLocalFirst(
@@ -379,6 +405,7 @@ export function QuickAddModal({
           setNecessity(null);
           setDescription('');
           setNotes('');
+          setAccountId('');
           setShowNotes(false);
           setTxnId(uuidv7());
           setConsecutiveSuccessToast(
@@ -766,6 +793,14 @@ export function QuickAddModal({
               />
             </div>
           </div>
+
+          {!isEditMode && accounts.length > 0 && <div>
+            <label htmlFor="transaction-account-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Linked account <span className="text-[10px] text-[var(--text-muted)] font-normal">(optional)</span></label>
+            <select id="transaction-account-input" value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={isSubmitting} className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] focus:border-[var(--focus-ring)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-hidden">
+              <option value="">No account selected</option>
+              {accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.account_type}</option>)}
+            </select>
+          </div>}
 
           {/* 7. Collapsed Private Notes */}
           <div>

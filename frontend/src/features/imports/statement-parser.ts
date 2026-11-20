@@ -1,4 +1,5 @@
 import { detectStatementAdapter, findHeaderColumn } from './statement-adapters';
+import { assessPossibleDuplicate } from '@/features/categorization/duplicates';
 
 export type StatementKind = 'income' | 'expense';
 export type ImportReviewState = 'new' | 'possible_duplicate' | 'ambiguous' | 'needs_review' | 'imported';
@@ -551,28 +552,13 @@ export function tagDuplicates(
     };
   };
 
-  const exactLedgerRows = new Map<string, typeof existing>();
-  const exactLedgerWithoutReference = new Map<string, typeof existing>();
-  const referenceLedgerRows = new Map<string, typeof existing>();
-  for (const item of existing) {
-    const key = identity(item.transaction_date, item.amount_paise, item.type, item.description || '');
-    append(exactLedgerRows, key, item);
-    if (!item.statement_reference?.trim()) append(exactLedgerWithoutReference, key, item);
-    const reference = item.statement_reference?.trim().toLowerCase();
-    if (reference) {
-      const referenceKey = JSON.stringify([item.account_id || '', reference, item.amount_paise, item.type]);
-      append(referenceLedgerRows, referenceKey, item);
-    }
-  }
-
   return rows.map((row, rowIndex) => {
     const rowReference = row.reference?.trim().toLowerCase() || '';
-    const referenceKey = JSON.stringify([accountId || '', rowReference, row.amountPaise, row.type]);
-    const ledgerMatchesReference = Boolean(accountId && rowReference && referenceLedgerRows.has(referenceKey));
-    const key = identity(row.date, row.amountPaise, row.type, row.description);
-    const fallbackRows = rowReference ? exactLedgerWithoutReference.get(key) || [] : exactLedgerRows.get(key) || [];
-    const ledgerMatchesExact = fallbackRows.some((item) => !item.account_id || !accountId || item.account_id === accountId);
-    const duplicate = ledgerMatchesReference || ledgerMatchesExact;
+    const ledgerAssessment = assessPossibleDuplicate({
+      date: row.date, amountPaise: row.amountPaise, type: row.type,
+      description: row.description, accountId, reference: rowReference || null,
+    }, existing);
+    const duplicate = ledgerAssessment.possibleDuplicate;
 
     if (duplicate) {
       return markAlreadyRecorded(row, 'A matching ledger row exists. Confirm this is the same transaction before importing.');

@@ -15,8 +15,8 @@ def _cosine(left, right) -> float:
 
 
 class FastTextArtifact:
-    """Uses a supervised FastText classifier plus subword vectors and reviewed category anchors."""
-    def __init__(self, model_path: str, version: str, anchors: dict[str, tuple[str, ...]]):
+    """Optional supervised classifier plus subword similarities to reviewed anchors."""
+    def __init__(self, model_path: str, version: str, anchors: dict[str, tuple[str, ...]], anchor_threshold: float = 0.55):
         if not Path(model_path).is_file():
             raise FileNotFoundError("A versioned FastText model artifact is required")
         try:
@@ -26,6 +26,7 @@ class FastTextArtifact:
         self._model = fasttext.load_model(model_path)
         self.version = version
         self._anchors = anchors
+        self._anchor_threshold = anchor_threshold
 
     def predict(self, text: str) -> tuple[Optional[str], float, tuple[str, ...]]:
         labels, probabilities = self._model.predict(text, k=3)
@@ -43,13 +44,19 @@ class FastTextArtifact:
         token_vectors = [self._model.get_word_vector(token) for token in tokens if token]
         if token_vectors:
             mean_vector = [sum(vector[i] for vector in token_vectors) / len(token_vectors) for i in range(len(token_vectors[0]))]
-            anchor_scores = {
-                category: max((_cosine(mean_vector, self._model.get_word_vector(anchor)) for anchor in terms), default=0.0)
+            anchor_hits = {
+                category: max(((anchor, _cosine(mean_vector, self._model.get_word_vector(anchor))) for anchor in terms), key=lambda item: item[1], default=("", 0.0))
                 for category, terms in self._anchors.items()
             }
+            anchor_scores = {category: score for category, (_anchor, score) in anchor_hits.items()}
             ranked = [(category, probability * 0.75 + max(0.0, anchor_scores.get(category, 0.0)) * 0.25) for category, probability in ranked]
         category, score = max(ranked, key=lambda item: item[1])
-        return category, min(1.0, max(0.0, score)), ("supervised_fasttext", "subword_anchor_similarity")
+        evidence = ["supervised_fasttext"]
+        if token_vectors:
+            anchor, similarity = anchor_hits.get(category, ("", 0.0))
+            if anchor and similarity >= self._anchor_threshold:
+                evidence.append(f"anchor={anchor};cosine={similarity:.4f};threshold={self._anchor_threshold:.4f}")
+        return category, min(1.0, max(0.0, score)), tuple(evidence)
 
 
 class FastTextProvider:

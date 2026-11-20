@@ -35,6 +35,14 @@ export interface StoredTransactionRecord {
   account_id?: string | null;
   import_batch_id?: string | null;
   statement_reference?: string | null;
+  ingestion_source?: 'manual' | 'bank_statement' | 'message' | 'account_aggregator';
+  parser_version?: string | null;
+  categorization_model_version?: string | null;
+  category_verified?: boolean;
+  categorization_method?: 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none';
+  category_suggestion_confidence?: number | null;
+  category_evidence?: Array<{ source: string; detail: string }>;
+  category_was_corrected?: boolean;
   recorded_at?: string;
   created_at: string;
   updated_at: string;
@@ -134,6 +142,14 @@ function mapToTransactionDTO(
     ...(rec.account_id ? { account_id: rec.account_id } : {}),
     ...(rec.import_batch_id ? { import_batch_id: rec.import_batch_id } : {}),
     ...(rec.statement_reference ? { statement_reference: rec.statement_reference } : {}),
+    ingestion_source: rec.ingestion_source || 'manual',
+    ...(rec.parser_version ? { parser_version: rec.parser_version } : {}),
+    ...(rec.categorization_model_version ? { categorization_model_version: rec.categorization_model_version } : {}),
+    category_verified: rec.category_verified ?? false,
+    ...(rec.categorization_method ? { categorization_method: rec.categorization_method } : {}),
+    ...(rec.category_suggestion_confidence !== undefined ? { category_suggestion_confidence: rec.category_suggestion_confidence } : {}),
+    ...(rec.category_evidence ? { category_evidence: rec.category_evidence } : {}),
+    category_was_corrected: rec.category_was_corrected ?? false,
     recorded_at: rec.recorded_at || rec.created_at,
     created_at: rec.created_at,
     updated_at: rec.updated_at,
@@ -144,12 +160,18 @@ const CORE_TX_COLUMNS_WITH_CATEGORY =
   'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)';
 
 const EXTENDED_TX_COLUMNS_WITH_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, ingestion_source, parser_version, categorization_model_version, category_verified, categorization_method, category_suggestion_confidence, category_evidence, category_was_corrected, recorded_at, created_at, updated_at, deleted_at, categories(name)';
+
+const LEGACY_EXTENDED_TX_COLUMNS_WITH_CATEGORY =
   'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)';
 
 const CORE_TX_COLUMNS_NO_CATEGORY =
   'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at';
 
 const EXTENDED_TX_COLUMNS_NO_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, ingestion_source, parser_version, categorization_model_version, category_verified, categorization_method, category_suggestion_confidence, category_evidence, category_was_corrected, recorded_at, created_at, updated_at, deleted_at';
+
+const LEGACY_EXTENDED_TX_COLUMNS_NO_CATEGORY =
   'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at';
 
 /**
@@ -159,6 +181,7 @@ export class SupabaseTransactionService implements ITransactionService {
   constructor(private readonly config: AppConfig) {}
 
   private static schemaHasExtendedColumns: boolean | null = null;
+  private static schemaHasProvenanceColumns: boolean | null = null;
 
   private isMissingColumnError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -169,6 +192,10 @@ export class SupabaseTransactionService implements ITransactionService {
       msg.includes('account_id') ||
       msg.includes('import_batch_id') ||
       msg.includes('statement_reference') ||
+      msg.includes('ingestion_source') || msg.includes('parser_version') ||
+      msg.includes('categorization_model_version') || msg.includes('category_verified') ||
+      msg.includes('categorization_method') || msg.includes('category_suggestion_confidence') ||
+      msg.includes('category_evidence') || msg.includes('category_was_corrected') ||
       (msg.includes('column') && msg.includes('does not exist'))
     );
   }
@@ -177,7 +204,25 @@ export class SupabaseTransactionService implements ITransactionService {
     if (SupabaseTransactionService.schemaHasExtendedColumns === false) {
       return withCategory ? CORE_TX_COLUMNS_WITH_CATEGORY : CORE_TX_COLUMNS_NO_CATEGORY;
     }
+    if (SupabaseTransactionService.schemaHasProvenanceColumns === false) {
+      return withCategory ? LEGACY_EXTENDED_TX_COLUMNS_WITH_CATEGORY : LEGACY_EXTENDED_TX_COLUMNS_NO_CATEGORY;
+    }
     return withCategory ? EXTENDED_TX_COLUMNS_WITH_CATEGORY : EXTENDED_TX_COLUMNS_NO_CATEGORY;
+  }
+
+  private isMissingProvenanceColumnError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const value = err as { message?: string; details?: string };
+    const text = `${value.message || ''} ${value.details || ''}`.toLowerCase();
+    return ['ingestion_source', 'parser_version', 'categorization_model_version', 'category_verified', 'categorization_method', 'category_suggestion_confidence', 'category_evidence', 'category_was_corrected'].some((column) => text.includes(column));
+  }
+
+  private rememberMissingSchemaColumn(err: unknown): void {
+    if (this.isMissingProvenanceColumnError(err)) {
+      SupabaseTransactionService.schemaHasProvenanceColumns = false;
+    } else {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+    }
   }
 
   private getScopedClient(token?: string): SupabaseClient {
@@ -217,7 +262,7 @@ export class SupabaseTransactionService implements ITransactionService {
     let existingRes = await existingQuery;
 
     if (existingRes.error && this.isMissingColumnError(existingRes.error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      this.rememberMissingSchemaColumn(existingRes.error);
       existingRes = await client
         .from('transactions')
         .select(this.getSelectColumns(true))
@@ -312,6 +357,14 @@ export class SupabaseTransactionService implements ITransactionService {
       if (input.account_id !== undefined) insertPayload.account_id = input.account_id || null;
       if (input.import_batch_id !== undefined) insertPayload.import_batch_id = input.import_batch_id || null;
       if (input.statement_reference !== undefined) insertPayload.statement_reference = input.statement_reference || null;
+      if (input.ingestion_source !== undefined) insertPayload.ingestion_source = input.ingestion_source;
+      if (input.parser_version !== undefined) insertPayload.parser_version = input.parser_version || null;
+      if (input.categorization_model_version !== undefined) insertPayload.categorization_model_version = input.categorization_model_version || null;
+      if (input.category_verified !== undefined) insertPayload.category_verified = input.category_verified;
+      if (input.categorization_method !== undefined) insertPayload.categorization_method = input.categorization_method;
+      if (input.category_suggestion_confidence !== undefined) insertPayload.category_suggestion_confidence = input.category_suggestion_confidence;
+      if (input.category_evidence !== undefined) insertPayload.category_evidence = input.category_evidence;
+      if (input.category_was_corrected !== undefined) insertPayload.category_was_corrected = input.category_was_corrected;
     }
 
     let insertRes = await client
@@ -321,10 +374,22 @@ export class SupabaseTransactionService implements ITransactionService {
       .single();
 
     if (insertRes.error && this.isMissingColumnError(insertRes.error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
-      delete insertPayload.account_id;
-      delete insertPayload.import_batch_id;
-      delete insertPayload.statement_reference;
+      if (this.isMissingProvenanceColumnError(insertRes.error)) {
+        SupabaseTransactionService.schemaHasProvenanceColumns = false;
+        delete insertPayload.ingestion_source;
+        delete insertPayload.parser_version;
+        delete insertPayload.categorization_model_version;
+        delete insertPayload.category_verified;
+        delete insertPayload.categorization_method;
+        delete insertPayload.category_suggestion_confidence;
+        delete insertPayload.category_evidence;
+        delete insertPayload.category_was_corrected;
+      } else {
+        SupabaseTransactionService.schemaHasExtendedColumns = false;
+        delete insertPayload.account_id;
+        delete insertPayload.import_batch_id;
+        delete insertPayload.statement_reference;
+      }
       insertRes = await client
         .from('transactions')
         .insert(insertPayload)
@@ -352,7 +417,7 @@ export class SupabaseTransactionService implements ITransactionService {
           .maybeSingle();
 
         if (concurrentRes.error && this.isMissingColumnError(concurrentRes.error)) {
-          SupabaseTransactionService.schemaHasExtendedColumns = false;
+          this.rememberMissingSchemaColumn(concurrentRes.error);
           concurrentRes = await client
             .from('transactions')
             .select(this.getSelectColumns(true))
@@ -473,7 +538,7 @@ export class SupabaseTransactionService implements ITransactionService {
     let { data, count, error } = await executeListQuery(this.getSelectColumns(true));
 
     if (error && this.isMissingColumnError(error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      this.rememberMissingSchemaColumn(error);
       const retry = await executeListQuery(this.getSelectColumns(true));
       data = retry.data;
       count = retry.count;
@@ -559,7 +624,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .maybeSingle();
 
     if (existingRes.error && this.isMissingColumnError(existingRes.error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      this.rememberMissingSchemaColumn(existingRes.error);
       existingRes = await client
         .from('transactions')
         .select(this.getSelectColumns(true))
@@ -646,7 +711,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .single();
 
     if (updateRes.error && this.isMissingColumnError(updateRes.error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      this.rememberMissingSchemaColumn(updateRes.error);
       updateRes = await client
         .from('transactions')
         .update(updateData)
@@ -738,7 +803,7 @@ export class SupabaseTransactionService implements ITransactionService {
       .single();
 
     if (restoreRes.error && this.isMissingColumnError(restoreRes.error)) {
-      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      this.rememberMissingSchemaColumn(restoreRes.error);
       restoreRes = await client
         .from('transactions')
         .update({ deleted_at: null, updated_at: now })
