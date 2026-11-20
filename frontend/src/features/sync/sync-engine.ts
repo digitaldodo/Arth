@@ -20,6 +20,7 @@ import {
   removePendingMutation,
   updatePendingMutation,
   saveCachedTransaction,
+  getCachedTransactions,
   getCachedTransactionById,
   deleteCachedTransactionPermanently,
   getCachedBalances,
@@ -100,6 +101,7 @@ class SyncEngine {
         this.notify();
         if (this.currentUserId) {
           void this.processQueue(this.currentUserId);
+          void this.refreshAll(this.currentUserId);
         }
       });
 
@@ -111,8 +113,23 @@ class SyncEngine {
       window.addEventListener('focus', () => {
         if (this.isOnlineState && this.currentUserId) {
           void this.processQueue(this.currentUserId);
+          void this.refreshAll(this.currentUserId);
         }
       });
+
+      // Periodic background synchronization across active devices
+      setInterval(() => {
+        if (
+          typeof document !== 'undefined' &&
+          document.visibilityState === 'visible' &&
+          this.isOnlineState &&
+          this.currentUserId &&
+          !this.isSyncing
+        ) {
+          void this.processQueue(this.currentUserId);
+          void this.refreshAll(this.currentUserId);
+        }
+      }, 60000);
     }
   }
 
@@ -138,9 +155,10 @@ class SyncEngine {
         transactions: null,
       };
       if (userId) {
-        // Load initial sync metadata without restoring old error as active error
-        void getSyncMeta(userId).then((meta) => {
+        // Load initial sync metadata and local cache count without restoring old error as active error
+        void Promise.all([getSyncMeta(userId), getCachedTransactions(userId)]).then(([meta, cached]) => {
           this.lastSyncedAt = meta.lastSyncedAt;
+          this.syncedCount = cached.length;
           this.updatePendingCount(userId);
           this.notify();
         });
@@ -716,7 +734,13 @@ class SyncEngine {
     }
   }
 
-  private async reconcileServerState(userId: string): Promise<boolean> {
+  public async refreshAll(userId?: string): Promise<boolean> {
+    const targetUserId = userId || this.currentUserId;
+    if (!targetUserId) return false;
+    return this.reconcileServerState(targetUserId);
+  }
+
+  public async reconcileServerState(userId: string): Promise<boolean> {
     const failedResources: string[] = [];
 
     // 1. Refresh account balances
@@ -764,6 +788,7 @@ class SyncEngine {
         if (page > 1000) throw new Error('Transaction snapshot exceeded the safety page limit.');
       }
       await replaceCachedTransactions(all, userId);
+      this.syncedCount = all.length;
       await setSyncMeta(userId, { transactionsSnapshotComplete: true });
       this.resourceErrors.transactions = null;
     } catch (err) {

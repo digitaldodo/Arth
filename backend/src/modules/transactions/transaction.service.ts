@@ -103,11 +103,21 @@ export interface ITransactionService {
   ): Promise<CategoryListResponse>;
 }
 
+export type StoredTransactionRow = StoredTransactionRecord & {
+  categories?: { name?: string } | Array<{ name?: string }> | null;
+};
+
 function mapToTransactionDTO(
-  rec: StoredTransactionRecord,
+  rec: StoredTransactionRow,
   categoryName?: string
 ): TransactionDTO {
   const paise = rec.amount_paise;
+  const resolvedCategoryName =
+    categoryName ||
+    (Array.isArray(rec.categories) ? rec.categories[0]?.name : rec.categories?.name) ||
+    rec.category_name ||
+    undefined;
+
   return {
     id: rec.id,
     amount_paise: paise,
@@ -115,7 +125,7 @@ function mapToTransactionDTO(
     formatted_inr: formatPaiseToINR(paise),
     type: rec.type,
     category_id: rec.category_id,
-    category_name: categoryName || rec.category_name || undefined,
+    category_name: resolvedCategoryName,
     transaction_date: rec.transaction_date,
     payment_method: rec.payment_method,
     necessity: rec.necessity,
@@ -130,11 +140,45 @@ function mapToTransactionDTO(
   };
 }
 
+const CORE_TX_COLUMNS_WITH_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at, categories(name)';
+
+const EXTENDED_TX_COLUMNS_WITH_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)';
+
+const CORE_TX_COLUMNS_NO_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, recorded_at, created_at, updated_at, deleted_at';
+
+const EXTENDED_TX_COLUMNS_NO_CATEGORY =
+  'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at';
+
 /**
  * Production implementation using user-scoped Supabase client carrying the caller's JWT.
  */
 export class SupabaseTransactionService implements ITransactionService {
   constructor(private readonly config: AppConfig) {}
+
+  private static schemaHasExtendedColumns: boolean | null = null;
+
+  private isMissingColumnError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const errorObj = err as { code?: string; message?: string; details?: string };
+    if (errorObj.code === '42703') return true;
+    const msg = `${errorObj.message || ''} ${errorObj.details || ''}`.toLowerCase();
+    return (
+      msg.includes('account_id') ||
+      msg.includes('import_batch_id') ||
+      msg.includes('statement_reference') ||
+      (msg.includes('column') && msg.includes('does not exist'))
+    );
+  }
+
+  private getSelectColumns(withCategory = true): string {
+    if (SupabaseTransactionService.schemaHasExtendedColumns === false) {
+      return withCategory ? CORE_TX_COLUMNS_WITH_CATEGORY : CORE_TX_COLUMNS_NO_CATEGORY;
+    }
+    return withCategory ? EXTENDED_TX_COLUMNS_WITH_CATEGORY : EXTENDED_TX_COLUMNS_NO_CATEGORY;
+  }
 
   private getScopedClient(token?: string): SupabaseClient {
     if (!this.config.supabaseUrl || !this.config.supabaseAnonKey) {
@@ -164,11 +208,25 @@ export class SupabaseTransactionService implements ITransactionService {
     const client = this.getScopedClient(token);
 
     // 1. Check if transaction with this ID already exists
-    const { data: existing, error: existingErr } = await client
+    let existingQuery = client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select(this.getSelectColumns(true))
       .eq('id', input.id)
       .maybeSingle();
+
+    let existingRes = await existingQuery;
+
+    if (existingRes.error && this.isMissingColumnError(existingRes.error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      existingRes = await client
+        .from('transactions')
+        .select(this.getSelectColumns(true))
+        .eq('id', input.id)
+        .maybeSingle();
+    }
+
+    const existingErr = existingRes.error;
+    const existing = existingRes.data as unknown as StoredTransactionRow | null;
 
     if (existingErr && existingErr.code !== 'PGRST116') {
       throw new Error(`Database query error: ${existingErr.message}`);
@@ -197,7 +255,9 @@ export class SupabaseTransactionService implements ITransactionService {
         (existing.statement_reference ?? null) === (input.statement_reference ?? null);
 
       if (isMatch) {
-        const catName = (existing.categories as unknown as { name?: string } | null)?.name;
+        const catName = Array.isArray(existing.categories)
+          ? (existing.categories[0] as { name?: string })?.name
+          : (existing.categories as { name?: string })?.name;
         return {
           transaction: mapToTransactionDTO(existing as unknown as StoredTransactionRecord, catName),
           isReplay: true,
@@ -242,20 +302,38 @@ export class SupabaseTransactionService implements ITransactionService {
       necessity: input.necessity,
       description: input.description,
       notes: input.notes,
-      account_id: input.account_id || null,
-      import_batch_id: input.import_batch_id || null,
-      statement_reference: input.statement_reference || null,
       recorded_at: input.recorded_at,
     };
     if (input.created_at) {
       insertPayload.created_at = input.created_at;
     }
 
-    const { data: inserted, error: insertErr } = await client
+    if (SupabaseTransactionService.schemaHasExtendedColumns !== false) {
+      if (input.account_id !== undefined) insertPayload.account_id = input.account_id || null;
+      if (input.import_batch_id !== undefined) insertPayload.import_batch_id = input.import_batch_id || null;
+      if (input.statement_reference !== undefined) insertPayload.statement_reference = input.statement_reference || null;
+    }
+
+    let insertRes = await client
       .from('transactions')
       .insert(insertPayload)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at')
+      .select(this.getSelectColumns(false))
       .single();
+
+    if (insertRes.error && this.isMissingColumnError(insertRes.error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      delete insertPayload.account_id;
+      delete insertPayload.import_batch_id;
+      delete insertPayload.statement_reference;
+      insertRes = await client
+        .from('transactions')
+        .insert(insertPayload)
+        .select(this.getSelectColumns(false))
+        .single();
+    }
+
+    const inserted = insertRes.data as unknown as StoredTransactionRecord | null;
+    const insertErr = insertRes.error;
 
     if (insertErr || !inserted) {
       if (
@@ -267,11 +345,22 @@ export class SupabaseTransactionService implements ITransactionService {
       }
       if (insertErr?.code === '23505') {
         // Concurrent replay detected: another request inserted with this ID
-        const { data: concurrentExisting } = await client
+        let concurrentRes = await client
           .from('transactions')
-          .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+          .select(this.getSelectColumns(true))
           .eq('id', input.id)
           .maybeSingle();
+
+        if (concurrentRes.error && this.isMissingColumnError(concurrentRes.error)) {
+          SupabaseTransactionService.schemaHasExtendedColumns = false;
+          concurrentRes = await client
+            .from('transactions')
+            .select(this.getSelectColumns(true))
+            .eq('id', input.id)
+            .maybeSingle();
+        }
+
+        const concurrentExisting = concurrentRes.data as unknown as StoredTransactionRow | null;
 
         if (concurrentExisting) {
           if (concurrentExisting.deleted_at) {
@@ -294,7 +383,9 @@ export class SupabaseTransactionService implements ITransactionService {
             (concurrentExisting.statement_reference ?? null) === (input.statement_reference ?? null);
 
           if (isMatch) {
-            const catName = (concurrentExisting.categories as unknown as { name?: string } | null)?.name;
+            const catName = Array.isArray(concurrentExisting.categories)
+              ? (concurrentExisting.categories[0] as { name?: string })?.name
+              : (concurrentExisting.categories as { name?: string })?.name;
             return {
               transaction: mapToTransactionDTO(concurrentExisting as unknown as StoredTransactionRecord, catName),
               isReplay: true,
@@ -322,73 +413,86 @@ export class SupabaseTransactionService implements ITransactionService {
   ): Promise<TransactionListResponse> {
     const client = this.getScopedClient(token);
 
-    let qb = client
-      .from('transactions')
-      .select(
-        'id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)',
-        { count: 'exact' }
-      )
-      .is('deleted_at', null);
+    const executeListQuery = async (columns: string) => {
+      let qb = client
+        .from('transactions')
+        .select(columns, { count: 'exact' })
+        .is('deleted_at', null);
 
-    if (query.sort_by === 'date_asc') {
-      qb = qb
-        .order('transaction_date', { ascending: true })
-        .order('recorded_at', { ascending: true })
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true });
-    } else if (query.sort_by === 'amount_desc') {
-      qb = qb
-        .order('amount_paise', { ascending: false })
-        .order('transaction_date', { ascending: false })
-        .order('recorded_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-    } else if (query.sort_by === 'amount_asc') {
-      qb = qb
-        .order('amount_paise', { ascending: true })
-        .order('transaction_date', { ascending: false })
-        .order('recorded_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-    } else {
-      // Default: date_desc (Newest First)
-      qb = qb
-        .order('transaction_date', { ascending: false })
-        .order('recorded_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-    }
+      if (query.sort_by === 'date_asc') {
+        qb = qb
+          .order('transaction_date', { ascending: true })
+          .order('recorded_at', { ascending: true })
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
+      } else if (query.sort_by === 'amount_desc') {
+        qb = qb
+          .order('amount_paise', { ascending: false })
+          .order('transaction_date', { ascending: false })
+          .order('recorded_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
+      } else if (query.sort_by === 'amount_asc') {
+        qb = qb
+          .order('amount_paise', { ascending: true })
+          .order('transaction_date', { ascending: false })
+          .order('recorded_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
+      } else {
+        // Default: date_desc (Newest First)
+        qb = qb
+          .order('transaction_date', { ascending: false })
+          .order('recorded_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
+      }
 
-    if (query.type) {
-      qb = qb.eq('type', query.type);
-    }
-    if (query.category_id) {
-      qb = qb.eq('category_id', query.category_id);
-    }
-    if (query.necessity) {
-      qb = qb.eq('necessity', query.necessity);
-    }
-    if (query.start_date) {
-      qb = qb.gte('transaction_date', query.start_date);
-    }
-    if (query.end_date) {
-      qb = qb.lte('transaction_date', query.end_date);
-    }
+      if (query.type) {
+        qb = qb.eq('type', query.type);
+      }
+      if (query.category_id) {
+        qb = qb.eq('category_id', query.category_id);
+      }
+      if (query.necessity) {
+        qb = qb.eq('necessity', query.necessity);
+      }
+      if (query.start_date) {
+        qb = qb.gte('transaction_date', query.start_date);
+      }
+      if (query.end_date) {
+        qb = qb.lte('transaction_date', query.end_date);
+      }
 
-    const from = (query.page - 1) * query.page_size;
-    const to = from + query.page_size - 1;
+      const from = (query.page - 1) * query.page_size;
+      const to = from + query.page_size - 1;
 
-    const { data, count, error } = await qb.range(from, to);
+      return await qb.range(from, to);
+    };
+
+    let { data, count, error } = await executeListQuery(this.getSelectColumns(true));
+
+    if (error && this.isMissingColumnError(error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      const retry = await executeListQuery(this.getSelectColumns(true));
+      data = retry.data;
+      count = retry.count;
+      error = retry.error;
+    }
 
     if (error) {
       throw new Error(`Failed to list transactions: ${error.message}`);
     }
 
-    const items = (data || []).map((row) => {
-      const catName = (row.categories as unknown as { name?: string } | null)?.name;
-      return mapToTransactionDTO(row as unknown as StoredTransactionRecord, catName);
+    const rows = (data || []) as unknown as StoredTransactionRow[];
+    const items = rows.map((row) => {
+      const catName = Array.isArray(row.categories)
+        ? (row.categories[0] as { name?: string })?.name
+        : (row.categories as { name?: string })?.name;
+      return mapToTransactionDTO(row, catName);
     });
 
+    const from = (query.page - 1) * query.page_size;
     const totalCount = count ?? items.length;
     const hasMore = from + items.length < totalCount;
 
@@ -448,11 +552,23 @@ export class SupabaseTransactionService implements ITransactionService {
     const client = this.getScopedClient(token);
 
     // 1. Fetch existing transaction belonging to caller
-    const { data: existing, error: fetchErr } = await client
+    let existingRes = await client
       .from('transactions')
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select(this.getSelectColumns(true))
       .eq('id', id)
       .maybeSingle();
+
+    if (existingRes.error && this.isMissingColumnError(existingRes.error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      existingRes = await client
+        .from('transactions')
+        .select(this.getSelectColumns(true))
+        .eq('id', id)
+        .maybeSingle();
+    }
+
+    const existing = existingRes.data as unknown as StoredTransactionRow | null;
+    const fetchErr = existingRes.error;
 
     if (fetchErr || !existing || existing.deleted_at !== null) {
       throw new NotFoundError('Transaction not found or has been deleted');
@@ -522,12 +638,25 @@ export class SupabaseTransactionService implements ITransactionService {
       updateData.notes = input.notes;
     }
 
-    const { data: updated, error: updateErr } = await client
+    let updateRes = await client
       .from('transactions')
       .update(updateData)
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select(this.getSelectColumns(true))
       .single();
+
+    if (updateRes.error && this.isMissingColumnError(updateRes.error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      updateRes = await client
+        .from('transactions')
+        .update(updateData)
+        .eq('id', id)
+        .select(this.getSelectColumns(true))
+        .single();
+    }
+
+    const updated = updateRes.data as unknown as StoredTransactionRow | null;
+    const updateErr = updateRes.error;
 
     if (updateErr || !updated) {
       if (
@@ -540,7 +669,9 @@ export class SupabaseTransactionService implements ITransactionService {
       throw new Error(`Failed to update transaction: ${updateErr?.message || 'Unknown error'}`);
     }
 
-    const catName = (updated.categories as unknown as { name?: string } | null)?.name || category.name;
+    const catName = Array.isArray(updated.categories)
+      ? (updated.categories[0] as { name?: string })?.name
+      : (updated.categories as { name?: string })?.name || category.name;
     return mapToTransactionDTO(updated as unknown as StoredTransactionRecord, catName);
   }
 
@@ -599,18 +730,33 @@ export class SupabaseTransactionService implements ITransactionService {
     }
 
     const now = new Date().toISOString();
-    const { data: restored, error: updateErr } = await client
+    let restoreRes = await client
       .from('transactions')
       .update({ deleted_at: null, updated_at: now })
       .eq('id', id)
-      .select('id, user_id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, account_id, import_batch_id, statement_reference, recorded_at, created_at, updated_at, deleted_at, categories(name)')
+      .select(this.getSelectColumns(true))
       .single();
+
+    if (restoreRes.error && this.isMissingColumnError(restoreRes.error)) {
+      SupabaseTransactionService.schemaHasExtendedColumns = false;
+      restoreRes = await client
+        .from('transactions')
+        .update({ deleted_at: null, updated_at: now })
+        .eq('id', id)
+        .select(this.getSelectColumns(true))
+        .single();
+    }
+
+    const restored = restoreRes.data as unknown as StoredTransactionRow | null;
+    const updateErr = restoreRes.error;
 
     if (updateErr || !restored) {
       throw new Error(`Failed to restore transaction: ${updateErr?.message || 'Unknown error'}`);
     }
 
-    const catName = (restored.categories as unknown as { name?: string } | null)?.name;
+    const catName = Array.isArray(restored.categories)
+      ? (restored.categories[0] as { name?: string })?.name
+      : (restored.categories as { name?: string })?.name;
     return mapToTransactionDTO(restored as unknown as StoredTransactionRecord, catName);
   }
 }

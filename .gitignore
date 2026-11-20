@@ -61,3 +61,8 @@ scratch/
 
 # Generated export files
 *.pdf
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo

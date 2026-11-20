@@ -32,6 +32,9 @@ import { useBackHandler } from '@/features/navigation';
 import { useMobileStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import type { PasswordStatus } from '@/lib/auth/password-status';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
+import { FeatureComingSoon } from '@/features/scaffold/FeatureComingSoon';
+import { HeaderSyncIndicator } from '@/features/sync/HeaderSyncIndicator';
+import { DataSyncSettings } from '@/features/settings/DataSyncSettings';
 
 interface TransactionAppShellProps {
   user: {
@@ -44,7 +47,19 @@ interface TransactionAppShellProps {
   } | null;
 }
 
-export type AppView = 'home' | 'ledger' | 'people' | 'categories' | 'documents' | 'more';
+export type AppView =
+  | 'home'
+  | 'ledger'
+  | 'people'
+  | 'categories'
+  | 'documents'
+  | 'safe-to-spend'
+  | 'emi-planner'
+  | 'goal-planner'
+  | 'fire-planning'
+  | 'insights'
+  | 'data-sync'
+  | 'more';
 
 function ViewLoading({ label }: { label: string }) {
   return <div role="status" aria-live="polite" className="min-h-40 animate-pulse rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 text-sm text-[var(--text-muted)]">Opening {label}…</div>;
@@ -111,6 +126,20 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const [shellBalances, setShellBalances] = useState<AccountBalancesDTO | null>(null);
   const [moreSubView, setMoreSubView] = useState<'hub' | 'settings' | 'appearance' | 'security'>('hub');
   const [openedCategoriesFromMore, setOpenedCategoriesFromMore] = useState<boolean>(false);
+  const [isPlanningMenuOpen, setIsPlanningMenuOpen] = useState<boolean>(false);
+  const planningMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (planningMenuRef.current && !planningMenuRef.current.contains(event.target as Node)) {
+        setIsPlanningMenuOpen(false);
+      }
+    }
+    if (isPlanningMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isPlanningMenuOpen]);
 
   // Priority 3: Main navigation tab back handler returns to Dashboard
   useBackHandler({
@@ -119,6 +148,8 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     enabled:
       activeView !== 'home' &&
       (!openedCategoriesFromMore || activeView !== 'categories') &&
+      activeView !== 'data-sync' &&
+      !['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView) &&
       (activeView !== 'more' || moreSubView === 'hub'),
     onBack: () => {
       navigateToView('home');
@@ -130,9 +161,31 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   useBackHandler({
     id: 'subscreen-categories-from-more',
     priority: 'subscreen',
-    enabled: activeView === 'categories' && openedCategoriesFromMore,
+    enabled: activeView === 'categories',
     onBack: () => {
       setOpenedCategoriesFromMore(false);
+      navigateToView('more');
+      return true;
+    },
+  });
+
+  // Priority 2: Planning intelligence tools back handler returns to Dashboard
+  useBackHandler({
+    id: 'subscreen-planning',
+    priority: 'subscreen',
+    enabled: ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView),
+    onBack: () => {
+      navigateToView('home');
+      return true;
+    },
+  });
+
+  // Priority 2: Data & Sync subscreen back handler returns to More/Settings
+  useBackHandler({
+    id: 'subscreen-data-sync',
+    priority: 'subscreen',
+    enabled: activeView === 'data-sync',
+    onBack: () => {
       navigateToView('more');
       return true;
     },
@@ -326,7 +379,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('home')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'home'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -337,7 +390,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('ledger')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'ledger'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -347,8 +400,108 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
+                  onClick={() => navigateToView('documents')}
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                    activeView === 'documents'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Documents &amp; Tax
+                </button>
+
+                {/* Planning & Intelligence Tools Dropdown */}
+                <div className="relative" ref={planningMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsPlanningMenuOpen((prev) => !prev)}
+                    className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
+                      ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
+                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span>Planning</span>
+                    <span className="text-[10px] opacity-60">▾</span>
+                  </button>
+
+                  {isPlanningMenuOpen && (
+                    <div className="absolute top-full left-0 mt-1.5 w-52 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-lg z-50 divide-y divide-[var(--border-hairline)]">
+                      <div className="py-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToView('safe-to-spend');
+                            setIsPlanningMenuOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
+                            activeView === 'safe-to-spend' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <span>🛡️</span>
+                          <span>Safe to Spend</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToView('emi-planner');
+                            setIsPlanningMenuOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
+                            activeView === 'emi-planner' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <span>📊</span>
+                          <span>EMI Stress Test</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToView('goal-planner');
+                            setIsPlanningMenuOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
+                            activeView === 'goal-planner' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <span>🎯</span>
+                          <span>Goal Planner</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToView('fire-planning');
+                            setIsPlanningMenuOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
+                            activeView === 'fire-planning' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <span>🔥</span>
+                          <span>FIRE Planning</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToView('insights');
+                            setIsPlanningMenuOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
+                            activeView === 'insights' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          <span>📈</span>
+                          <span>Financial Insights</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
                   onClick={() => navigateToView('people')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
                     activeView === 'people'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -358,31 +511,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigateToView('categories')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
-                    activeView === 'categories'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Categories
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigateToView('documents')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
-                    activeView === 'documents'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Documents
-                </button>
-                <button
-                  type="button"
                   onClick={() => navigateToView('more')}
-                  className={`px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
-                    activeView === 'more'
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                    activeView === 'more' || activeView === 'data-sync' || activeView === 'categories'
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
@@ -393,7 +524,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {user && (
+              <HeaderSyncIndicator onOpenSyncSettings={() => navigateToView('data-sync')} />
+            )}
             {user ? (
               <div className="hidden sm:flex items-center gap-3">
                 <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
@@ -511,6 +645,100 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             {visitedViews.has('documents') && <div className={activeView === 'documents' ? 'view-enter' : 'hidden'}>
               <DocumentsTaxCentre userId={user.id} />
               <StatementImport userId={user.id} onImported={() => setRefreshTrigger((prev) => prev + 1)} />
+            </div>}
+
+            {visitedViews.has('data-sync') && <div className={activeView === 'data-sync' ? 'view-enter' : 'hidden'}>
+              <DataSyncSettings userId={user.id} onBack={() => navigateToView('more')} />
+            </div>}
+
+            {visitedViews.has('safe-to-spend') && <div className={activeView === 'safe-to-spend' ? 'view-enter' : 'hidden'}>
+              <FeatureComingSoon
+                title="Safe to Spend"
+                subtitle="Real-Time Discretionary Headroom & Dynamic Daily Allowance"
+                moduleName="safe_to_spend"
+                phase="Design & Integration"
+                description="Real-time discretionary spending limit calculated from fixed obligations, planned savings, and active debt amortizations without simulating false AI models."
+                plannedCapabilities={[
+                  "Real-time recurring bill and loan deduction from current cash balances",
+                  "Configurable buffer reserve margin before discretionary spending",
+                  "Daily and weekly discretionary pace indicators",
+                  "Non-destructive projections honoring integer-paise math"
+                ]}
+                ownerNote="This module requires live recurring commitment synchronization from People and Debt registers before active calculations are unlocked."
+                onBack={() => navigateToView('home')}
+              />
+            </div>}
+
+            {visitedViews.has('emi-planner') && <div className={activeView === 'emi-planner' ? 'view-enter' : 'hidden'}>
+              <FeatureComingSoon
+                title="EMI Stress Test & Prepayment Planner"
+                subtitle="Amortization Sensitivity & Optimal Prepayment vs SIP Sequencing"
+                moduleName="emi_planner"
+                phase="Design & Modeling"
+                description="Amortization stress testing, repo rate sensitivity modeling, and optimal loan prepayment sequencing adapted to Indian lending conditions."
+                plannedCapabilities={[
+                  "Floating vs fixed rate interest sensitivity curves (RBI Repo Rate indexing)",
+                  "Prepayment vs SIP investment opportunity cost calculator",
+                  "Principal reduction timeline acceleration analysis",
+                  "Unified integration with active liabilities from People and Debt registers"
+                ]}
+                ownerNote="Deterministic financial math based on reducing-balance interest formulas will power this calculator without mocked server endpoints."
+                onBack={() => navigateToView('home')}
+              />
+            </div>}
+
+            {visitedViews.has('goal-planner') && <div className={activeView === 'goal-planner' ? 'view-enter' : 'hidden'}>
+              <FeatureComingSoon
+                title="Financial Goal Planner"
+                subtitle="Milestone Accumulation & Target Savings Allocation"
+                moduleName="goal_planner"
+                phase="Architecture & UI Design"
+                description="Targeted savings goals, timeline tracking, and auto-allocated monthly contribution targets grounded in authentic ledger cash flow."
+                plannedCapabilities={[
+                  "Categorized milestones (Emergency Fund, Down Payment, Higher Education, Travel)",
+                  "Inflation-adjusted target requirement estimates",
+                  "Target progress tracking with milestone notifications",
+                  "Automatic allocation from monthly net surplus"
+                ]}
+                ownerNote="Under active development by the product team. Will integrate directly with goal-tagged transaction rules."
+                onBack={() => navigateToView('home')}
+              />
+            </div>}
+
+            {visitedViews.has('fire-planning') && <div className={activeView === 'fire-planning' ? 'view-enter' : 'hidden'}>
+              <FeatureComingSoon
+                title="FIRE Planning & Independence Tracker"
+                subtitle="Safe Withdrawal Rate & Corpus Milestone Modeling for India"
+                moduleName="fire_planning"
+                phase="Research & Actuarial Modeling"
+                description="Financial Independence, Retire Early modeling adapted to Indian tax, inflation, and investment parameters with zero fake projections."
+                plannedCapabilities={[
+                  "LeanFIRE, Standard FIRE, and FatFIRE withdrawal rate simulations (SWR: 3.0% - 4.5%)",
+                  "Indian long-term capital gains (LTCG) tax drag estimation",
+                  "Healthcare and lifestyle inflation adjustment sliders",
+                  "Corpus accumulation milestone tracker against current net worth"
+                ]}
+                ownerNote="Actuarial parameters and tax brackets are being validated against the Income Tax Act to ensure reliable projection numbers."
+                onBack={() => navigateToView('home')}
+              />
+            </div>}
+
+            {visitedViews.has('insights') && <div className={activeView === 'insights' ? 'view-enter' : 'hidden'}>
+              <FeatureComingSoon
+                title="Spending Insights & Behavioral Analytics"
+                subtitle="Deterministic Expense Breakdown & Anomaly Detection"
+                moduleName="insights"
+                phase="Specification & Architecture"
+                description="Deterministic spending patterns, discretionary ratio trends, and expense anomaly detection without black-box AI."
+                plannedCapabilities={[
+                  "Needs vs Wants vs Investments allocation breakdowns (50/30/20 heuristic)",
+                  "Merchant recurring subscription creep detection",
+                  "Month-over-month category variance analysis",
+                  "Deterministic rule-based spending alerts"
+                ]}
+                ownerNote="We strictly avoid generative AI hallucinations for financial insights; all heuristics are transparent, rule-based, and auditable."
+                onBack={() => navigateToView('home')}
+              />
             </div>}
 
             {visitedViews.has('more') && <div className={activeView === 'more' ? 'view-enter' : 'hidden'}>
@@ -788,6 +1016,26 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
                       </button>
 
+                      {/* Data & Synchronization Card */}
+                      <button
+                        type="button"
+                        onClick={() => navigateToView('data-sync')}
+                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">🔄</span>
+                          <div>
+                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                              Data &amp; Synchronization
+                            </h3>
+                            <p className="text-[11px] text-[var(--text-muted)]">
+                              IndexedDB offline storage, sync engine status, and multi-device refresh
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
+                      </button>
+
                       {/* Settings Navigation Card */}
                       <button
                         type="button"
@@ -830,6 +1078,75 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         </div>
                         <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
                       </button>
+                    </div>
+
+                    {/* Planning & Intelligence Tools Section */}
+                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-3">
+                      <div>
+                        <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                          Planning &amp; Financial Tools
+                        </h3>
+                        <p className="text-[11px] text-[var(--text-muted)]">
+                          Calculators, stress tests, and financial trajectory planning
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => navigateToView('safe-to-spend')}
+                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
+                        >
+                          <span className="text-base">🛡️</span>
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-primary)] block">Safe to Spend</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">Real-time discretionary headroom</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigateToView('emi-planner')}
+                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
+                        >
+                          <span className="text-base">📊</span>
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-primary)] block">EMI Stress Test</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">Prepayment vs SIP calculator</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigateToView('goal-planner')}
+                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
+                        >
+                          <span className="text-base">🎯</span>
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-primary)] block">Goal Planner</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">Targeted savings &amp; milestones</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigateToView('fire-planning')}
+                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
+                        >
+                          <span className="text-base">🔥</span>
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-primary)] block">FIRE Planning</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">Financial independence simulator</span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigateToView('insights')}
+                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5 sm:col-span-2"
+                        >
+                          <span className="text-base">📈</span>
+                          <div>
+                            <span className="text-xs font-medium text-[var(--text-primary)] block">Financial Insights</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">Deterministic behavioral analysis &amp; 50/30/20</span>
+                          </div>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Integrated Theme Toggle shortcut */}
@@ -981,7 +1298,8 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             type="button"
             onClick={() => navigateToView('more')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
-              activeView === 'more' || activeView === 'categories'
+              activeView === 'more' ||
+              ['categories', 'data-sync', 'documents', 'safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
                 ? 'text-[var(--text-primary)] font-bold'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}

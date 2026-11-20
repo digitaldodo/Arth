@@ -19,10 +19,16 @@ import { TransactionDetailDrawer } from './TransactionDetailDrawer';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
-import { getCachedTransactions, getCachedCategories, setCachedCategories, getSyncMeta } from '@/lib/offline-db';
+import {
+  getCachedTransactions,
+  getCachedCategories,
+  setCachedCategories,
+  replaceCachedTransactions,
+} from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { useBackHandler } from '@/features/navigation';
+import { StatusBanner } from '@/components/ui/StatusBanner';
 
 export type LedgerDatePreset = 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
 export type LedgerSortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
@@ -163,6 +169,7 @@ export function TransactionLedger({
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isStale, setIsStale] = useState<boolean>(false);
   const [snapshotComplete, setSnapshotComplete] = useState(false);
 
   // Filters
@@ -241,17 +248,18 @@ export function TransactionLedger({
   // Sequence ref and AbortController to cancel obsolete in-flight requests and prevent race conditions
   const querySeqRef = useRef<number>(0);
 
-  // Categories and transactions are read from the signed-in user's local database first.
+  // Categories are read from the signed-in user's local database first (both Desktop and PWA).
   useEffect(() => {
     let isMounted = true;
     if (!userId) return;
-    if (isPwa) getCachedCategories(userId).then((cached) => { if (isMounted && cached.length) setCategories(cached); });
+    getCachedCategories(userId).then((cached) => {
+      if (isMounted && cached.length) setCategories(cached);
+    });
     fetchCategories()
       .then((catRes) => {
-        if (isMounted) {
-          setCategories(catRes.categories || []);
-          if (userId) void setCachedCategories(catRes.categories || [], userId);
-          // Refreshes are owned by the sync engine; never query from a filter interaction.
+        if (isMounted && catRes.categories) {
+          setCategories(catRes.categories);
+          if (userId) void setCachedCategories(catRes.categories, userId);
         }
       })
       .catch((err) => {
@@ -261,7 +269,7 @@ export function TransactionLedger({
     return () => {
       isMounted = false;
     };
-  }, [refreshTrigger, userId, isPwa]);
+  }, [refreshTrigger, userId]);
 
   // Compute active date range based on preset
   const activeDateRange = useMemo(() => {
@@ -284,14 +292,30 @@ export function TransactionLedger({
     setDateRangeOverride({ startDate: asDate(start), endDate: asDate(end) });
   };
 
-  // Installed PWAs query the durable local snapshot; desktop web queries the authenticated API.
+  // Shared authoritative transaction loader:
+  // 1. Instantly hydrates from local IndexedDB cache (both Desktop and PWA)
+  // 2. Fetches fresh authoritative server transactions
+  // 3. Handles Condition A (empty), Condition B (cached with stale alert), Condition C (server failure, no cache)
   const loadTransactions = useCallback(() => {
     querySeqRef.current += 1;
     const currentSeq = querySeqRef.current;
     if (!userId) return;
+
+    // Fast-path local read-through
+    getCachedTransactions(userId)
+      .then((cached) => {
+        if (querySeqRef.current !== currentSeq) return;
+        if (cached && cached.length > 0) {
+          setTransactions((current) => (current.length === 0 ? cached : current));
+          setIsInitialLoading(false);
+        }
+      })
+      .catch(() => {});
+
+    setIsRefreshing(true);
+    setError(null);
+
     if (!isPwa) {
-      setIsRefreshing(true);
-      setError(null);
       void fetchTransactions({
         type: selectedType === 'all' ? undefined : selectedType,
         category_id: selectedCategory === 'all' ? undefined : selectedCategory,
@@ -300,29 +324,64 @@ export function TransactionLedger({
         end_date: activeDateRange.endDate,
         sort_by: sortBy,
         page_size: 50,
-      }).then((result) => {
+      })
+        .then(async (result) => {
+          if (querySeqRef.current !== currentSeq) return;
+          const items = result.items || [];
+          setTransactions(items);
+          setSnapshotComplete(true);
+          setIsStale(false);
+          setError(null);
+          setIsInitialLoading(false);
+          setIsRefreshing(false);
+          // Persist fresh server records into durable IndexedDB cache
+          if (
+            items.length > 0 ||
+            (selectedType === 'all' && selectedCategory === 'all' && !activeDateRange.startDate && !activeDateRange.endDate)
+          ) {
+            await replaceCachedTransactions(items, userId).catch(() => {});
+          }
+        })
+        .catch(async (err: unknown) => {
+          if (querySeqRef.current !== currentSeq) return;
+          const sanitized = sanitizeUserFacingError(err, 'Could not retrieve transactions from server.');
+          setError(sanitized);
+
+          // Check if cached records are available
+          const cached = await getCachedTransactions(userId).catch(() => []);
+          if (querySeqRef.current !== currentSeq) return;
+
+          if (cached && cached.length > 0) {
+            // Condition B: Server failed, but cached records exist.
+            // Retain cached records and show subtle stale indicator. Never wipe to [].
+            setTransactions(cached);
+            setIsStale(true);
+          } else {
+            // Condition C: Server failed and no cached records exist.
+            setTransactions([]);
+            setIsStale(false);
+          }
+          setIsInitialLoading(false);
+          setIsRefreshing(false);
+        });
+      return;
+    }
+
+    // Installed PWA mode: query local IndexedDB snapshot
+    void getCachedTransactions(userId)
+      .then((cached) => {
         if (querySeqRef.current !== currentSeq) return;
-        setTransactions(result.items || []);
-        setSnapshotComplete(false);
+        setTransactions(cached || []);
+        setSnapshotComplete(true);
         setIsInitialLoading(false);
         setIsRefreshing(false);
-      }).catch((err: unknown) => {
+      })
+      .catch((err) => {
         if (querySeqRef.current !== currentSeq) return;
-        setError(sanitizeUserFacingError(err, 'Could not load transactions. Check your connection.'));
-        setTransactions([]);
+        setError(err instanceof Error ? err.message : 'Failed to read local transactions');
         setIsInitialLoading(false);
         setIsRefreshing(false);
       });
-      return;
-    }
-    void Promise.resolve().then(() => Promise.all([getCachedTransactions(userId), getSyncMeta(userId)])).then(([items, meta]) => {
-      if (querySeqRef.current !== currentSeq) return;
-      setTransactions(items);
-      setSnapshotComplete(meta.transactionsSnapshotComplete);
-      setError(null);
-      setIsInitialLoading(false);
-      setIsRefreshing(false);
-    });
   }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, activeDateRange, sortBy]);
 
   // Clear query cache on external data mutations
@@ -517,17 +576,57 @@ export function TransactionLedger({
 
   return (
     <div className="space-y-5">
-      {initialFilter && (
-        <div className="flex flex-col gap-1 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">{initialFilter.label} transactions</h2>
-            <p className="text-xs text-[var(--text-muted)]">Filtered from {initialFilter.startDate} to {initialFilter.endDate}</p>
+      {/* Condition C — Server request failed and no cached records exist on this device */}
+      {error && transactions.length === 0 && !isInitialLoading ? (
+        <div className="p-8 text-center bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl shadow-xs space-y-4 max-w-lg mx-auto my-8">
+          <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl font-bold select-none">
+            !
           </div>
-          <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">{formatPaiseToINR(initialFilter.amountPaise)}</div>
+          <div className="space-y-1.5">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">
+              Unable to Retrieve Transaction Ledger
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              {error}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              No offline copy of your transaction history has been downloaded to this device yet.
+            </p>
+          </div>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={loadTransactions}
+              className="px-4 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
+            >
+              Retry Connection
+            </button>
+          </div>
         </div>
-      )}
-      {/* 1. Net Cash Flow & Summary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl shadow-xs transition-colors">
+      ) : (
+        <>
+          {/* Condition B — Stale data notice when displaying cached records */}
+          {(error || isStale) && transactions.length > 0 && (
+            <StatusBanner
+              variant="warning"
+              title={isStale ? "Showing saved local copy" : "Showing cached ledger"}
+              action={{ label: 'Retry', onClick: loadTransactions }}
+            >
+              {error ? `${error} • Displaying your saved local transaction history while reconnecting to the server.` : 'Displaying your saved local transaction history while reconnecting to the server.'}
+            </StatusBanner>
+          )}
+
+          {initialFilter && (
+            <div className="flex flex-col gap-1 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">{initialFilter.label} transactions</h2>
+                <p className="text-xs text-[var(--text-muted)]">Filtered from {initialFilter.startDate} to {initialFilter.endDate}</p>
+              </div>
+              <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">{formatPaiseToINR(initialFilter.amountPaise)}</div>
+            </div>
+          )}
+          {/* 1. Net Cash Flow & Summary Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl shadow-xs transition-colors">
         <div>
           <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium">
             Net Cash Flow
@@ -814,19 +913,6 @@ export function TransactionLedger({
       </div>
 
       {/* 4. Transaction Items / Table View */}
-      {error && (
-        <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 rounded-md flex items-center justify-between gap-2">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadTransactions}
-            className="text-xs font-semibold underline hover:no-underline cursor-pointer"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
       {isInitialLoading && transactions.length === 0 ? (
         <div className="space-y-2 py-2">
           {[1, 2, 3, 4].map((i) => (
@@ -840,7 +926,7 @@ export function TransactionLedger({
         <div className="text-center py-12 px-4 border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--bg-surface)]">
           <div className="text-2xl mb-2">📋</div>
           <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
-            {isAnyFilterActive ? 'No matching transactions found' : snapshotComplete ? 'No transactions recorded in the downloaded ledger' : 'No offline copy of this transaction history is available yet'}
+            {isAnyFilterActive ? 'No matching transactions found' : snapshotComplete ? 'No transactions recorded in your ledger' : 'No transactions recorded yet'}
           </h3>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
             {isAnyFilterActive
@@ -1016,6 +1102,8 @@ export function TransactionLedger({
             })}
           </div>
         </div>
+      )}
+        </>
       )}
 
       {/* Interactive Transaction Details Drawer */}
