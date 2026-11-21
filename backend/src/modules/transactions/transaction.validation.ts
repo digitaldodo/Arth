@@ -51,7 +51,7 @@ export interface ValidatedCreateTransactionInput {
   id: string;
   amount_paise: bigint;
   type: TransactionType;
-  category_id: string;
+  category_id: string | null;
   transaction_date: string;
   payment_method: PaymentMethod;
   necessity: NecessityClass | null;
@@ -120,9 +120,13 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     throw new ValidationError(msg);
   }
 
-  // 4. Validate Category ID
-  if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
-    throw new ValidationError('Category ID must be a valid UUID');
+  // 4. Validate Category ID (optional / nullable for frictionless ingestion and statement import)
+  let category_id: string | null = null;
+  if (payload.category_id !== undefined && payload.category_id !== null && payload.category_id !== '') {
+    if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
+      throw new ValidationError('Category ID must be a valid UUID');
+    }
+    category_id = payload.category_id.toLowerCase();
   }
 
   // 5. Validate Transaction Date
@@ -146,19 +150,23 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
   }
   const payment_method: PaymentMethod = payload.payment_method;
 
-  // 7. Validate Necessity
+  // 7. Validate Necessity (optional for expenses, strictly null for income)
   let necessity: NecessityClass | null = null;
   if (type === 'expense') {
-    if (
-      payload.necessity !== 'essential' &&
-      payload.necessity !== 'optional' &&
-      payload.necessity !== 'luxury'
-    ) {
-      throw new ValidationError(
-        "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
-      );
+    if (payload.necessity !== undefined && payload.necessity !== null && payload.necessity !== '') {
+      if (
+        payload.necessity !== 'essential' &&
+        payload.necessity !== 'optional' &&
+        payload.necessity !== 'luxury'
+      ) {
+        throw new ValidationError(
+          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury') when provided"
+        );
+      }
+      necessity = payload.necessity;
+    } else {
+      necessity = null;
     }
-    necessity = payload.necessity;
   } else {
     // Income transactions must NOT have necessity
     if (payload.necessity !== undefined && payload.necessity !== null && payload.necessity !== '') {
@@ -258,7 +266,7 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
     id: (payload.id as string).toLowerCase(),
     amount_paise,
     type,
-    category_id: (payload.category_id as string).toLowerCase(),
+    category_id,
     transaction_date: payload.transaction_date as string,
     payment_method,
     necessity,
@@ -401,7 +409,7 @@ export interface ValidatedUpdateTransactionInput {
   user_id?: string;
   amount_paise?: bigint;
   type?: TransactionType;
-  category_id?: string;
+  category_id?: string | null;
   transaction_date?: string;
   payment_method?: PaymentMethod;
   necessity?: NecessityClass | null;
@@ -444,10 +452,13 @@ export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdate
   }
 
   if (payload.category_id !== undefined) {
-    if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
+    if (payload.category_id === null || payload.category_id === '') {
+      result.category_id = null;
+    } else if (typeof payload.category_id !== 'string' || !UUID_REGEX.test(payload.category_id)) {
       throw new ValidationError('Category ID must be a valid UUID');
+    } else {
+      result.category_id = payload.category_id.toLowerCase();
     }
-    result.category_id = payload.category_id.toLowerCase();
   }
 
   if (payload.transaction_date !== undefined) {
@@ -476,16 +487,19 @@ export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdate
 
   if (payload.necessity !== undefined) {
     if (result.type === 'expense' || payload.type === 'expense') {
-      if (
+      if (payload.necessity === null || payload.necessity === '') {
+        result.necessity = null;
+      } else if (
         payload.necessity !== 'essential' &&
         payload.necessity !== 'optional' &&
         payload.necessity !== 'luxury'
       ) {
         throw new ValidationError(
-          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
+          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury') when provided"
         );
+      } else {
+        result.necessity = payload.necessity;
       }
-      result.necessity = payload.necessity;
     } else if (result.type === 'income' || payload.type === 'income') {
       if (payload.necessity !== null && payload.necessity !== '') {
         throw new ValidationError('Income transactions must not have a necessity value');
@@ -494,13 +508,14 @@ export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdate
     } else {
       if (
         payload.necessity !== null &&
+        payload.necessity !== '' &&
         payload.necessity !== 'essential' &&
         payload.necessity !== 'optional' &&
         payload.necessity !== 'luxury'
       ) {
         throw new ValidationError('Invalid necessity value');
       }
-      result.necessity = payload.necessity as NecessityClass | null;
+      result.necessity = (payload.necessity === '' || payload.necessity === null) ? null : payload.necessity as NecessityClass;
     }
   }
 

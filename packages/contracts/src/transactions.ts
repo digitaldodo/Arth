@@ -10,10 +10,10 @@ export interface CreateTransactionRequest {
   id: string; // Client-generated UUID v7
   amount: string; // Exact decimal string in INR (e.g. "250.00", "150.5")
   type: TransactionType;
-  category_id: string; // Category UUID belonging to caller and matching type
+  category_id?: string | null; // Optional category UUID belonging to caller and matching type; null if uncategorized
   transaction_date: string; // YYYY-MM-DD
   payment_method: PaymentMethod;
-  necessity?: NecessityClass | null; // Required if type is 'expense'; strictly null/absent if 'income'
+  necessity?: NecessityClass | null; // Optional for expense (unclassified if null/absent); strictly null/absent if 'income'
   description?: string | null;
   notes?: string | null;
   account_id?: string | null;
@@ -37,7 +37,7 @@ export interface TransactionDTO {
   amount_decimal: string;
   formatted_inr: string;
   type: TransactionType;
-  category_id: string;
+  category_id?: string | null;
   category_name?: string;
   transaction_date: string; // YYYY-MM-DD
   payment_method: PaymentMethod;

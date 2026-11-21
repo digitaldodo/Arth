@@ -309,15 +309,16 @@ export class InMemoryDashboardService implements IDashboardService {
         } else if (nec === 'luxury') {
           luxuryPaise += amount;
         }
-        const cat = allCategories.find((c) => c.id === t.category_id);
-        const existing = categoryTotalsMap.get(t.category_id) || {
+        const catKey = t.category_id || 'uncategorized';
+        const cat = t.category_id ? allCategories.find((c) => c.id === t.category_id) : undefined;
+        const existing = categoryTotalsMap.get(catKey) || {
           name: cat?.name || t.category_name || 'Uncategorized',
           color: cat?.color || null,
           icon: cat?.icon || null,
           amountPaise: 0n,
         };
         existing.amountPaise += amount;
-        categoryTotalsMap.set(t.category_id, existing);
+        categoryTotalsMap.set(catKey, existing);
       }
     }
 

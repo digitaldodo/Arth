@@ -64,7 +64,7 @@ export function generateTransactionsCSV(
   const lines: string[] = [headers.join(',')];
 
   for (const tx of transactions) {
-    const categoryName = tx.category_name || categoryMap.get(tx.category_id) || '';
+    const categoryName = tx.category_name || (tx.category_id ? categoryMap.get(tx.category_id) : '') || '';
     const amountInr = (Number(tx.amount_paise) / 100).toFixed(2);
     const status = (tx as unknown as { deleted_at?: string | null }).deleted_at
       ? 'DELETED'

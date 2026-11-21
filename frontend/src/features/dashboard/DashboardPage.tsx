@@ -189,7 +189,8 @@ export function DashboardPage({
         const necessity = new Map<string, number>();
 
         for (const t of expenses) {
-          composition.set(t.category_id, (composition.get(t.category_id) || 0) + t.amount_paise);
+          const catKey = t.category_id || 'uncategorized';
+          composition.set(catKey, (composition.get(catKey) || 0) + t.amount_paise);
           if (t.necessity) necessity.set(t.necessity, (necessity.get(t.necessity) || 0) + t.amount_paise);
         }
 
@@ -206,7 +207,7 @@ export function DashboardPage({
             const category = categories.find((item) => item.id === id);
             return {
               category_id: id,
-              category_name: category?.name || expenses.find((t) => t.category_id === id)?.category_name || 'Uncategorized',
+              category_name: category?.name || expenses.find((t) => (t.category_id || 'uncategorized') === id)?.category_name || 'Uncategorized',
               category_color: category?.color || null,
               category_icon: category?.icon || null,
               amount_paise: amount,

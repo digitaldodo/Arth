@@ -78,13 +78,13 @@ test('4. Statement Extraction & Normalization with Necessity Field', () => {
   const parsed = normalizeStatementTable(parseCsv(csvContent), 'HDFC Bank Statement');
   assert.equal(parsed.rows.length, 3);
 
-  // Expense row normalization & necessity initialization
+  // Expense row normalization & optional necessity initialization (unclassified by default)
   const swiggyRow = parsed.rows[0];
   assert.equal(swiggyRow.date, '2026-11-15');
   assert.equal(swiggyRow.amount, '450.00');
   assert.equal(swiggyRow.amountPaise, 45000);
   assert.equal(swiggyRow.type, 'expense');
-  assert.equal(swiggyRow.necessity, 'essential', 'Expense row must default to essential necessity');
+  assert.equal(swiggyRow.necessity, null, 'Expense row defaults to null (unclassified) necessity');
   assert.equal(swiggyRow.reference, 'UPI-12345678');
 
   // Refund row normalization

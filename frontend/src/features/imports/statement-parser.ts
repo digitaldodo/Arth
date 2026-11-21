@@ -247,6 +247,114 @@ export function computeStatementSummary(
   };
 }
 
+export const STATEMENT_METADATA_REGEX =
+  /^(?:opening\s*bal(?:ance)?|closing\s*bal(?:ance)?|balance\s*b\/?f|balance\s*c\/?f|brought\s*forward|carried\s*forward|available\s*balance|running\s*balance|balance\s*summary|total\s*withdrawal[s]?|total\s*deposit[s]?|total\s*debit[s]?|total\s*credit[s]?|statement\s*summary|account\s*summary|od\s*limit|overdraft\s*limit|statement\s*of\s*account|account\s*statement|customer\s*id|account\s*no|nomination\s*registered|page\s*\d+\s*(?:of|\/)\s*\d+|computer\s*generated|registered\s*office|gstin|ifsc|micr|branch\s*details|end\s*of\s*(?:statement|personal))/i;
+
+export function isStatementMetadataOrSummary(text: string): boolean {
+  const clean = text.trim();
+  if (!clean) return false;
+  return STATEMENT_METADATA_REGEX.test(clean) ||
+    /^(?:page\s*\d+|statement\s*period|generated\s*on|downloaded\s*on|rtgs\/neft\s*ifsc)/i.test(clean);
+}
+
+export interface PdfTextItem {
+  text: string;
+  x: number;
+  y: number;
+  width?: number;
+}
+
+/**
+ * Spatial table extractor that maps PDF text items into columns using header bounding boxes.
+ * Ensures empty cells (e.g. empty withdrawal on deposit, or empty deposit on withdrawal)
+ * do not cause rightward columns (like Closing Balance) to shift into amount columns.
+ */
+export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
+  const table: string[][] = [];
+  let columnBoundaries: number[] = [];
+  let numColumns = 0;
+
+  for (const pageItems of pages) {
+    if (!pageItems.length) continue;
+
+    // Group items into lines by Y coordinate (within 3pt clustering tolerance)
+    const lineMap = new Map<number, PdfTextItem[]>();
+    for (const item of pageItems) {
+      if (!item.text || !item.text.trim()) continue;
+      const roundedY = Math.round(item.y / 3) * 3;
+      const list = lineMap.get(roundedY) || [];
+      list.push(item);
+      lineMap.set(roundedY, list);
+    }
+
+    // Sort lines top to bottom (descending Y coordinate)
+    const sortedY = [...lineMap.keys()].sort((a, b) => b - a);
+
+    for (const y of sortedY) {
+      const items = lineMap.get(y)!.sort((a, b) => a.x - b.x);
+      const lineText = items.map((it) => it.text).join(' ').trim();
+      if (!lineText) continue;
+
+      const lower = lineText.toLowerCase();
+      const hasDateHeader = /(?:txn\s*date|trans(?:action)?\s*date|\bdate\b)/i.test(lower);
+      const hasDescHeader = /(?:narration|description|particulars|details)/i.test(lower);
+      const hasAmountOrBalHeader = /(?:withdrawal|deposit|debit|credit|balance|amount)/i.test(lower);
+
+      if (hasDateHeader && hasDescHeader && hasAmountOrBalHeader && items.length >= 3) {
+        // Merge items that belong to the same header label (e.g. "Withdrawal" + "Amt.")
+        const mergedHeaderItems: Array<{ x: number; endX: number; text: string }> = [];
+        for (const it of items) {
+          const width = it.width || (it.text.length * 6);
+          const endX = it.x + width;
+          const prev = mergedHeaderItems.at(-1);
+          if (prev && it.x - prev.endX <= 8) {
+            prev.text = `${prev.text} ${it.text}`;
+            prev.endX = Math.max(prev.endX, endX);
+          } else {
+            mergedHeaderItems.push({ x: it.x, endX, text: it.text });
+          }
+        }
+
+        numColumns = mergedHeaderItems.length;
+        columnBoundaries = [];
+        for (let i = 0; i < mergedHeaderItems.length - 1; i++) {
+          const current = mergedHeaderItems[i];
+          const next = mergedHeaderItems[i + 1];
+          columnBoundaries.push((current.endX + next.x) / 2);
+        }
+
+        table.push(mergedHeaderItems.map((h) => h.text.trim()));
+        continue;
+      }
+
+      // Map line items into established column boundaries
+      if (columnBoundaries.length > 0 && numColumns > 0) {
+        if (isStatementMetadataOrSummary(lineText) && items.length <= 2) {
+          table.push([lineText]);
+          continue;
+        }
+
+        const rowCells: string[] = Array(numColumns).fill('');
+        for (const it of items) {
+          const midX = it.x + ((it.width || 0) / 2);
+          let colIdx = 0;
+          while (colIdx < columnBoundaries.length && midX > columnBoundaries[colIdx]) {
+            colIdx++;
+          }
+          if (colIdx < numColumns) {
+            rowCells[colIdx] = rowCells[colIdx] ? `${rowCells[colIdx]} ${it.text}` : it.text;
+          }
+        }
+        table.push(rowCells.map((c) => c.trim()));
+      } else {
+        table.push(lineText.split(/\s{2,}/).map((v) => v.trim()));
+      }
+    }
+  }
+
+  return table;
+}
+
 export function normalizeStatementTable(
   table: unknown[][],
   fullText = '',
@@ -300,17 +408,65 @@ export function normalizeStatementTable(
   if (debitCol < 0 && creditCol < 0 && amountCol < 0) warnings.push('No debit, credit, or amount column was found. Rows will need manual review.');
   const rows: ParsedStatementRow[] = [];
   let prior: ParsedStatementRow | null = null;
+  let explicitOpeningBalancePaise: string | null = null;
+  let explicitClosingBalancePaise: string | null = null;
+
   for (let index = headerIndex + 1; index < normalizedTable.length; index++) {
     const values = normalizedTable[index];
     if (!values.some(Boolean)) continue;
+
     // Check if this row is a repeated table header row
     if (values.reduce((matches, value, column) => matches + Number(Boolean(value && keyText(value) === headers[column])), 0) >= 2) continue;
-    const rawDate = values[dateCol] || '';
-    if (!rawDate && prior && values.some(Boolean)) {
-      prior.description = `${prior.description} ${values.filter(Boolean).join(' ')}`.trim();
-      prior.confidence = 'medium';
+
+    const fullRowText = values.filter(Boolean).join(' ').trim();
+    const rawDescription = (descCol >= 0 ? values[descCol] : '').trim();
+    const isMetadata = isStatementMetadataOrSummary(fullRowText) || isStatementMetadataOrSummary(rawDescription);
+
+    // If row contains opening or closing balance metadata, extract statement-level balances and never import as transaction
+    if (isMetadata) {
+      if (/opening\s*bal|brought\s*forward|balance\s*b\/?f/i.test(fullRowText)) {
+        for (const cell of values) {
+          try {
+            const parsed = parseIndianAmount(cell);
+            if (parsed.amountPaise > 0) {
+              explicitOpeningBalancePaise = parsed.amountPaise.toString();
+              break;
+            }
+          } catch {}
+        }
+      }
+      if (/closing\s*bal|carried\s*forward|balance\s*c\/?f/i.test(fullRowText)) {
+        for (const cell of values) {
+          try {
+            const parsed = parseIndianAmount(cell);
+            if (parsed.amountPaise > 0) {
+              explicitClosingBalancePaise = parsed.amountPaise.toString();
+              break;
+            }
+          } catch {}
+        }
+      }
+      // Never treat summary / metadata / balance rows as transactions or continuation lines
       continue;
     }
+
+    const rawDate = values[dateCol] || '';
+
+    // Multi-line continuation: row has no date but follows an active transaction
+    if (!rawDate && prior) {
+      const continuationText = values.filter(Boolean).join(' ').trim();
+      if (continuationText && !isStatementMetadataOrSummary(continuationText)) {
+        prior.description = `${prior.description} ${continuationText}`.trim();
+        prior.confidence = 'medium';
+        // Extract reference/UTR from continuation text if prior row is missing reference
+        if (!prior.reference) {
+          const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(continuationText);
+          if (refMatch) prior.reference = refMatch[1];
+        }
+      }
+      continue;
+    }
+
     try {
       const date = parseIndianDate(rawDate);
       let valueDate: string | null = null;
@@ -319,25 +475,81 @@ export function normalizeStatementTable(
         try { valueDate = parseIndianDate(values[valueDateCol]); }
         catch { valueDateProblem = true; warnings.push(`Row ${index + 1}: value date could not be read; the transaction is flagged for review.`); }
       }
-      const description = values[descCol] || '';
+
+      const description = rawDescription || values.filter((_, i) => i !== dateCol && i !== balanceCol).join(' ').trim();
+      if (!description || isStatementMetadataOrSummary(description)) {
+        // Not a genuine transaction description (summary or empty)
+        continue;
+      }
+
       const debit = debitCol >= 0 ? values[debitCol] : '';
       const credit = creditCol >= 0 ? values[creditCol] : '';
-      const debitPresent = Boolean(debit && !/^[-—]$/.test(debit) && parseIndianAmount(debit).amountPaise > 0);
-      const creditPresent = Boolean(credit && !/^[-—]$/.test(credit) && parseIndianAmount(credit).amountPaise > 0);
-      const conflictingColumns = debitPresent && creditPresent;
-      let rawAmount = creditPresent ? credit : debitPresent ? debit : '';
-      let type: StatementKind = creditPresent ? 'income' : 'expense';
-      if (!rawAmount && amountCol >= 0) {
-        rawAmount = values[amountCol];
-        if (typeCol >= 0 && /credit|deposit|cr/i.test(values[typeCol])) type = 'income';
-        else if (typeCol >= 0 && /debit|withdrawal|dr/i.test(values[typeCol])) type = 'expense';
-        else if (/[+-]/.test(rawAmount)) type = rawAmount.trim().startsWith('-') ? 'expense' : 'income';
-        else { type = /salary|interest|refund|cashback|dividend/i.test(description) ? 'income' : 'expense'; }
+
+      let debitPresent = false;
+      let creditPresent = false;
+      let debitAmount = { amount: '', amountPaise: 0 };
+      let creditAmount = { amount: '', amountPaise: 0 };
+
+      if (debit && !/^[-—]$/.test(debit)) {
+        try {
+          const d = parseIndianAmount(debit);
+          if (d.amountPaise > 0) {
+            debitPresent = true;
+            debitAmount = d;
+          }
+        } catch {}
       }
-      if (!description || !rawAmount || /^[-—]$/.test(rawAmount)) throw new Error('Narration or amount is missing');
-      const parsed = parseIndianAmount(rawAmount);
-      const signed = parsed.amount.startsWith('-') ? 'expense' : type;
-      if (parsed.amountPaise === 0) throw new Error('Transaction amount must be greater than zero');
+
+      if (credit && !/^[-—]$/.test(credit)) {
+        try {
+          const c = parseIndianAmount(credit);
+          if (c.amountPaise > 0) {
+            creditPresent = true;
+            creditAmount = c;
+          }
+        } catch {}
+      }
+
+      const conflictingColumns = debitPresent && creditPresent;
+      let rawAmount = '';
+      let type: StatementKind = 'expense';
+      let parsedAmountPaise = 0;
+
+      if (conflictingColumns) {
+        // Both columns populated: flag for user review
+        rawAmount = debitAmount.amount || creditAmount.amount;
+        parsedAmountPaise = debitAmount.amountPaise || creditAmount.amountPaise;
+        type = 'expense';
+      } else if (creditPresent) {
+        rawAmount = creditAmount.amount;
+        parsedAmountPaise = creditAmount.amountPaise;
+        type = 'income';
+      } else if (debitPresent) {
+        rawAmount = debitAmount.amount;
+        parsedAmountPaise = debitAmount.amountPaise;
+        type = 'expense';
+      } else if (amountCol >= 0 && amountCol !== balanceCol && values[amountCol]) {
+        // Single signed amount column (never closing balance)
+        const candidate = values[amountCol];
+        if (candidate && !/^[-—]$/.test(candidate)) {
+          const parsed = parseIndianAmount(candidate);
+          if (parsed.amountPaise > 0) {
+            rawAmount = parsed.amount;
+            parsedAmountPaise = parsed.amountPaise;
+            if (typeCol >= 0 && /credit|deposit|cr/i.test(values[typeCol])) type = 'income';
+            else if (typeCol >= 0 && /debit|withdrawal|dr/i.test(values[typeCol])) type = 'expense';
+            else if (/[+-]/.test(rawAmount)) type = rawAmount.trim().startsWith('-') ? 'expense' : 'income';
+            else { type = /salary|interest|refund|cashback|dividend/i.test(description) ? 'income' : 'expense'; }
+          }
+        }
+      }
+
+      // If both debit and credit are empty/zero (or no transaction amount), this is NOT a transaction! Skip it!
+      if (!rawAmount || parsedAmountPaise === 0) {
+        continue;
+      }
+
+      const signed = rawAmount.startsWith('-') ? 'expense' : type;
       const isCardSettlement = /CREDIT CARD PAYMENT|CARD PAYMENT|CC PAYMENT|CREDIT CARD BILL/i.test(description);
       const isReversal = /REVERSAL|CHARGEBACK/i.test(description);
       const isRefund = /REFUND|CASHBACK/i.test(description) && !isReversal;
@@ -391,23 +603,32 @@ export function normalizeStatementTable(
         shouldSelect = true;
       }
 
+      // Check if reference is present in reference column or description
+      let reference: string | null = refCol >= 0 && values[refCol] ? values[refCol] : null;
+      if (!reference) {
+        const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(description);
+        if (refMatch) reference = refMatch[1];
+      }
+
+      const balanceValue = balanceCol >= 0 && values[balanceCol] ? values[balanceCol] : null;
+
       const row: ParsedStatementRow = {
-        key: `${index}-${date}-${parsed.amountPaise}`,
+        key: `${index}-${date}-${parsedAmountPaise}`,
         date,
         valueDate,
         description,
-        amount: parsed.amount.replace(/^-/, ''),
-        amountPaise: parsed.amountPaise,
+        amount: rawAmount.replace(/^-/, ''),
+        amountPaise: parsedAmountPaise,
         type: signed,
         paymentMethod: 'online',
-        reference: refCol >= 0 ? values[refCol] || null : null,
-        balance: balanceCol >= 0 ? values[balanceCol] || null : null,
+        reference,
+        balance: balanceValue,
         state,
         classification,
         confidence: debitCol >= 0 || creditCol >= 0 ? 'high' : 'medium',
         selected: shouldSelect,
         categoryId: '',
-        necessity: signed === 'expense' ? 'essential' : null,
+        necessity: null,
         ...(warning ? { warning } : {}),
         ...(exclusionReason ? { exclusionReason } : {}),
       };
@@ -450,18 +671,22 @@ export function normalizeStatementTable(
     }
   }
 
-  let openingBalancePaise: string | null = null;
-  let closingBalancePaise: string | null = null;
+  let openingBalancePaise: string | null = explicitOpeningBalancePaise;
+  let closingBalancePaise: string | null = explicitClosingBalancePaise;
   const balanceRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => row.balance).sort((a, b) => a.row.date.localeCompare(b.row.date) || a.index - b.index);
   if (balanceRows.length) {
     try {
       const oldest = balanceRows[0].row;
       const newest = balanceRows.at(-1)!.row;
-      const balanceBeforeFirstRow = isCreditCard
-        ? BigInt(parseIndianAmount(oldest.balance).amountPaise) - (oldest.type === 'expense' ? BigInt(oldest.amountPaise) : -BigInt(oldest.amountPaise))
-        : BigInt(parseIndianAmount(oldest.balance).amountPaise) - (oldest.type === 'income' ? BigInt(oldest.amountPaise) : -BigInt(oldest.amountPaise));
-      openingBalancePaise = balanceBeforeFirstRow.toString();
-      closingBalancePaise = BigInt(parseIndianAmount(newest.balance).amountPaise).toString();
+      if (!openingBalancePaise) {
+        const balanceBeforeFirstRow = isCreditCard
+          ? BigInt(parseIndianAmount(oldest.balance).amountPaise) - (oldest.type === 'expense' ? BigInt(oldest.amountPaise) : -BigInt(oldest.amountPaise))
+          : BigInt(parseIndianAmount(oldest.balance).amountPaise) - (oldest.type === 'income' ? BigInt(oldest.amountPaise) : -BigInt(oldest.amountPaise));
+        openingBalancePaise = balanceBeforeFirstRow.toString();
+      }
+      if (!closingBalancePaise) {
+        closingBalancePaise = BigInt(parseIndianAmount(newest.balance).amountPaise).toString();
+      }
     } catch {
       warnings.push('Statement opening/closing balances could not be derived from the running balance column.');
     }

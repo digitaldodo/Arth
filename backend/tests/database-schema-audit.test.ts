@@ -48,7 +48,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0033_statement_skipped_rows.sql',
       '0034_username_uniqueness_and_identity_hardening.sql',
       '0035_transaction_ingestion_provenance.sql',
-      '0036_expand_ingestion_sources.sql'
+      '0036_expand_ingestion_sources.sql',
+      '0037_optional_category_and_necessity.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');

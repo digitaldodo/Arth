@@ -181,9 +181,9 @@ describe('Backend Transactions & Categories API', () => {
     assert.match(res.json().message, /valid calendar date/);
   });
 
-  test('requires necessity for expense transactions', async () => {
+  test('allows optional/null necessity for expense transactions, and rejects invalid strings', async () => {
     const cat = service.categories.find((c) => c.user_id === userA.userId && c.type === 'expense')!;
-    const res = await app.inject({
+    const resValid = await app.inject({
       method: 'POST',
       url: '/api/v1/transactions',
       headers: { authorization: 'Bearer user-a-token' },
@@ -194,11 +194,47 @@ describe('Backend Transactions & Categories API', () => {
         category_id: cat.id,
         transaction_date: '2026-10-25',
         payment_method: 'online',
-        necessity: null, // invalid for expense
+        necessity: null, // valid unclassified expense
       },
     });
-    assert.equal(res.statusCode, 400);
-    assert.match(res.json().message, /require a valid necessity/);
+    assert.equal(resValid.statusCode, 201);
+    assert.equal(resValid.json().transaction.necessity, null);
+
+    const resInvalid = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: uuidv7(),
+        amount: '250.00',
+        type: 'expense',
+        category_id: cat.id,
+        transaction_date: '2026-10-25',
+        payment_method: 'online',
+        necessity: 'invalid_tier',
+      },
+    });
+    assert.equal(resInvalid.statusCode, 400);
+    assert.match(resInvalid.json().message, /require a valid necessity/);
+  });
+
+  test('allows optional/null category_id for unclassified statement transactions', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions',
+      headers: { authorization: 'Bearer user-a-token' },
+      payload: {
+        id: uuidv7(),
+        amount: '300.00',
+        type: 'expense',
+        category_id: null,
+        transaction_date: '2026-10-25',
+        payment_method: 'online',
+        necessity: null,
+      },
+    });
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.json().transaction.category_id, null);
   });
 
   test('rejects necessity for income transactions', async () => {

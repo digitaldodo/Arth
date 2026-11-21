@@ -138,7 +138,7 @@ export function QuickAddModal({
       if (editingTransaction) {
         setType(editingTransaction.type);
         setAmount(editingTransaction.amount_decimal);
-        setCategoryId(editingTransaction.category_id);
+        setCategoryId(editingTransaction.category_id || '');
         setTransactionDate(editingTransaction.transaction_date);
         setPaymentMethod(editingTransaction.payment_method);
         setNecessity(editingTransaction.necessity || null);
@@ -191,7 +191,7 @@ export function QuickAddModal({
         setCategories(cats);
         setCategoryId((prev) => {
           if (prev && cats.some((c) => c.id === prev)) return prev;
-          if (editingTransaction?.type === type && cats.some((c) => c.id === editingTransaction.category_id)) return editingTransaction.category_id;
+          if (editingTransaction?.type === type && cats.some((c) => c.id === editingTransaction.category_id)) return editingTransaction.category_id || '';
           const saved = typeof window !== 'undefined' ? localStorage.getItem(`arth_last_category_${type}`) : null;
           return saved && cats.some((c) => c.id === saved) ? saved : (cats[0]?.id || '');
         });

@@ -25,7 +25,7 @@ export interface StoredTransactionRecord {
   user_id: string;
   amount_paise: number;
   type: TransactionType;
-  category_id: string;
+  category_id: string | null;
   category_name?: string;
   transaction_date: string;
   payment_method: 'online' | 'cash';
@@ -289,7 +289,7 @@ export class SupabaseTransactionService implements ITransactionService {
       const isMatch =
         Number(existing.amount_paise) === Number(input.amount_paise) &&
         existing.type === input.type &&
-        existing.category_id === input.category_id &&
+        (existing.category_id ?? null) === (input.category_id ?? null) &&
         existing.transaction_date === input.transaction_date &&
         existing.payment_method === input.payment_method &&
         (existing.necessity ?? null) === input.necessity &&
@@ -315,24 +315,28 @@ export class SupabaseTransactionService implements ITransactionService {
       );
     }
 
-    // 2. Validate category belongs to user and matches transaction type
-    const { data: category, error: catErr } = await client
-      .from('categories')
-      .select('id, name, type')
-      .eq('id', input.category_id)
-      .is('archived_at', null)
-      .maybeSingle();
+    // 2. Validate category belongs to user and matches transaction type (if category_id is provided)
+    let categoryName: string | undefined = undefined;
+    if (input.category_id) {
+      const { data: category, error: catErr } = await client
+        .from('categories')
+        .select('id, name, type')
+        .eq('id', input.category_id)
+        .is('archived_at', null)
+        .maybeSingle();
 
-    if (catErr || !category) {
-      throw new ValidationError(
-        'Selected category does not exist or does not belong to the user'
-      );
-    }
+      if (catErr || !category) {
+        throw new ValidationError(
+          'Selected category does not exist or does not belong to the user'
+        );
+      }
 
-    if (category.type !== input.type) {
-      throw new ValidationError(
-        `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
-      );
+      if (category.type !== input.type) {
+        throw new ValidationError(
+          `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
+        );
+      }
+      categoryName = category.name;
     }
 
     // 3. Insert transaction. Note: RLS verifies user_id = auth.uid()
@@ -341,7 +345,7 @@ export class SupabaseTransactionService implements ITransactionService {
       user_id: userId,
       amount_paise: Number(input.amount_paise),
       type: input.type,
-      category_id: input.category_id,
+      category_id: input.category_id || null,
       transaction_date: input.transaction_date,
       payment_method: input.payment_method,
       necessity: input.necessity,
@@ -466,7 +470,7 @@ export class SupabaseTransactionService implements ITransactionService {
     }
 
     return {
-      transaction: mapToTransactionDTO(inserted as unknown as StoredTransactionRecord, category.name),
+      transaction: mapToTransactionDTO(inserted as unknown as StoredTransactionRecord, categoryName || 'Uncategorized'),
       isReplay: false,
     };
   }
@@ -919,7 +923,7 @@ export class InMemoryTransactionService implements ITransactionService {
         const isMatch =
           existing.amount_paise === Number(input.amount_paise) &&
           existing.type === input.type &&
-          existing.category_id === input.category_id &&
+          (existing.category_id ?? null) === (input.category_id ?? null) &&
           existing.transaction_date === input.transaction_date &&
           existing.payment_method === input.payment_method &&
           (existing.necessity ?? null) === input.necessity &&
@@ -930,7 +934,7 @@ export class InMemoryTransactionService implements ITransactionService {
           (existing.statement_reference ?? null) === (input.statement_reference ?? null);
 
         if (isMatch) {
-          const cat = this.categories.find((c) => c.id === existing.category_id);
+          const cat = existing.category_id ? this.categories.find((c) => c.id === existing.category_id) : undefined;
           return {
             transaction: mapToTransactionDTO(existing, cat?.name),
             isReplay: true,
@@ -940,19 +944,23 @@ export class InMemoryTransactionService implements ITransactionService {
         throw new ConflictError('A transaction with this ID already exists with different payload attributes');
       }
 
-      // 2. Validate category ownership and type match
-      const category = this.categories.find(
-        (c) => c.id === input.category_id && c.user_id === userId && c.archived_at === null
-      );
-
-      if (!category) {
-        throw new ValidationError('Selected category does not exist or does not belong to the user');
-      }
-
-      if (category.type !== input.type) {
-        throw new ValidationError(
-          `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
+      // 2. Validate category ownership and type match (when category_id is provided)
+      let categoryName: string | undefined = undefined;
+      if (input.category_id) {
+        const category = this.categories.find(
+          (c) => c.id === input.category_id && c.user_id === userId && c.archived_at === null
         );
+
+        if (!category) {
+          throw new ValidationError('Selected category does not exist or does not belong to the user');
+        }
+
+        if (category.type !== input.type) {
+          throw new ValidationError(
+            `Category '${category.name}' is of type '${category.type}', but transaction is '${input.type}'`
+          );
+        }
+        categoryName = category.name;
       }
 
       let nowMs = Date.now();
@@ -983,8 +991,8 @@ export class InMemoryTransactionService implements ITransactionService {
         user_id: userId,
         amount_paise: Number(input.amount_paise),
         type: input.type,
-        category_id: input.category_id,
-        category_name: category.name,
+        category_id: input.category_id ?? null,
+        category_name: categoryName || 'Uncategorized',
         transaction_date: input.transaction_date,
         payment_method: input.payment_method,
         necessity: input.necessity,
@@ -1014,7 +1022,7 @@ export class InMemoryTransactionService implements ITransactionService {
       });
 
       return {
-        transaction: mapToTransactionDTO(newRecord, category.name),
+        transaction: mapToTransactionDTO(newRecord, categoryName),
         isReplay: false,
       };
     });
@@ -1153,20 +1161,24 @@ export class InMemoryTransactionService implements ITransactionService {
     }
 
     const finalType = input.type ?? existing.type;
-    const finalCategoryId = input.category_id ?? existing.category_id;
+    const finalCategoryId = input.category_id !== undefined ? input.category_id : existing.category_id;
+    let categoryName: string | undefined = undefined;
 
-    const category = this.categories.find(
-      (c) => c.id === finalCategoryId && c.user_id === userId && c.archived_at === null
-    );
-
-    if (!category) {
-      throw new ValidationError('Selected category does not exist or does not belong to the user');
-    }
-
-    if (category.type !== finalType) {
-      throw new ValidationError(
-        `Category '${category.name}' is of type '${category.type}', but transaction is '${finalType}'`
+    if (finalCategoryId) {
+      const category = this.categories.find(
+        (c) => c.id === finalCategoryId && c.user_id === userId && c.archived_at === null
       );
+
+      if (!category) {
+        throw new ValidationError('Selected category does not exist or does not belong to the user');
+      }
+
+      if (category.type !== finalType) {
+        throw new ValidationError(
+          `Category '${category.name}' is of type '${category.type}', but transaction is '${finalType}'`
+        );
+      }
+      categoryName = category.name;
     }
 
     let finalNecessity: 'essential' | 'optional' | 'luxury' | null;
@@ -1174,11 +1186,6 @@ export class InMemoryTransactionService implements ITransactionService {
       finalNecessity = null;
     } else {
       finalNecessity = input.necessity !== undefined ? input.necessity : existing.necessity;
-      if (!finalNecessity) {
-        throw new ValidationError(
-          "Expense transactions require a valid necessity ('essential', 'optional', or 'luxury')"
-        );
-      }
     }
 
     if (finalType === 'expense' && this.balanceService && existing.account_id == null) {
@@ -1203,7 +1210,7 @@ export class InMemoryTransactionService implements ITransactionService {
     if (input.amount_paise !== undefined) existing.amount_paise = Number(input.amount_paise);
     existing.type = finalType;
     existing.category_id = finalCategoryId;
-    existing.category_name = category.name;
+    existing.category_name = categoryName || 'Uncategorized';
     existing.necessity = finalNecessity;
     if (input.transaction_date !== undefined) existing.transaction_date = input.transaction_date;
     if (input.payment_method !== undefined) existing.payment_method = input.payment_method;
@@ -1222,7 +1229,7 @@ export class InMemoryTransactionService implements ITransactionService {
       created_at: now,
     });
 
-    return mapToTransactionDTO(existing, category.name);
+    return mapToTransactionDTO(existing, categoryName);
   }
 
   async deleteTransaction(
