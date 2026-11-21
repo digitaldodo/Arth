@@ -78,6 +78,7 @@ export interface ValidatedTransactionListQuery {
   type?: TransactionType;
   category_id?: string;
   necessity?: NecessityClass;
+  payment_method?: PaymentMethod;
   start_date?: string;
   end_date?: string;
   sort_by?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
@@ -340,6 +341,14 @@ export function validateTransactionListQuery(
     necessity = query.necessity as NecessityClass;
   }
 
+  let payment_method: PaymentMethod | undefined = undefined;
+  if (query.payment_method !== undefined && query.payment_method !== 'all' && query.payment_method !== '') {
+    if (query.payment_method !== 'upi' && query.payment_method !== 'online' && query.payment_method !== 'cash') {
+      throw new ValidationError("Query payment_method must be 'upi', 'online', or 'cash'");
+    }
+    payment_method = query.payment_method as PaymentMethod;
+  }
+
   let start_date: string | undefined = undefined;
   if (query.start_date !== undefined) {
     if (typeof query.start_date !== 'string' || !DATE_REGEX.test(query.start_date)) {
@@ -375,6 +384,7 @@ export function validateTransactionListQuery(
     type,
     category_id,
     necessity,
+    payment_method,
     start_date,
     end_date,
     sort_by,

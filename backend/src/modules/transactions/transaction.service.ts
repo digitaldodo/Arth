@@ -578,6 +578,9 @@ export class SupabaseTransactionService implements ITransactionService {
       if (query.necessity) {
         qb = qb.eq('necessity', query.necessity);
       }
+      if (query.payment_method) {
+        qb = qb.eq('payment_method', query.payment_method);
+      }
       if (query.start_date) {
         qb = qb.gte('transaction_date', query.start_date);
       }
@@ -1096,6 +1099,9 @@ export class InMemoryTransactionService implements ITransactionService {
     }
     if (query.necessity) {
       filtered = filtered.filter((t) => t.necessity === query.necessity);
+    }
+    if (query.payment_method) {
+      filtered = filtered.filter((t) => t.payment_method === query.payment_method);
     }
     if (query.start_date) {
       filtered = filtered.filter((t) => t.transaction_date >= query.start_date!);

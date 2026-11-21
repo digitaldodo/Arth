@@ -1,6 +1,7 @@
 import { getTodayIST, formatDateHuman } from '@/lib/format';
 
 export type DateRangePreset =
+  | 'all'
   | 'this_month'
   | 'today'
   | 'yesterday'
@@ -33,6 +34,9 @@ export function computePresetDateRange(
   const [year, month, day] = todayStr.split('-').map(Number);
 
   switch (preset) {
+    case 'all':
+      return { startDate: '', endDate: '' };
+
     case 'today':
       return { startDate: todayStr, endDate: todayStr };
 
@@ -85,12 +89,8 @@ export function computePresetDateRange(
     }
 
     case 'custom':
-    default: {
-      const start = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      return { startDate: start, endDate: end };
-    }
+    default:
+      return { startDate: '', endDate: '' };
   }
 }
 

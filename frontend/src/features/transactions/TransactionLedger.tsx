@@ -26,6 +26,7 @@ import {
   getCachedCategories,
   setCachedCategories,
   replaceCachedTransactions,
+  saveCachedTransactions,
 } from '@/lib/offline-db';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
@@ -179,6 +180,13 @@ export function TransactionLedger({
   const [isStale, setIsStale] = useState<boolean>(false);
   const [snapshotComplete, setSnapshotComplete] = useState(false);
 
+  // Pagination & infinite scroll state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   // Filters
   const [selectedType, setSelectedType] = useState<TransactionType | 'all'>(initialFilter ? 'expense' : 'all');
   const [selectedCategory, setSelectedCategory] = useState<string>(initialFilter?.categoryId || 'all');
@@ -316,9 +324,11 @@ export function TransactionLedger({
     if (selectedDatePreset === 'custom' && initialFilter) {
       return { startDate: initialFilter.startDate, endDate: initialFilter.endDate };
     }
-    if (selectedDatePreset === 'all' || selectedDatePreset === 'custom') return { startDate: undefined, endDate: undefined };
+    if (selectedDatePreset === 'all' || selectedDatePreset === 'custom') {
+      return { startDate: undefined, endDate: undefined };
+    }
     const range = computePresetDateRange(selectedDatePreset);
-    return { startDate: range.startDate, endDate: range.endDate };
+    return { startDate: range.startDate || undefined, endDate: range.endDate || undefined };
   }, [selectedDatePreset, dateRangeOverride, initialFilter]);
 
   const moveMonth = (offset: number) => {
@@ -333,7 +343,7 @@ export function TransactionLedger({
 
   // Shared authoritative transaction loader:
   // 1. Instantly hydrates from local IndexedDB cache (both Desktop and PWA)
-  // 2. Fetches fresh authoritative server transactions
+  // 2. Fetches fresh authoritative server transactions with deterministic ordering and pagination support
   // 3. Handles Condition A (empty), Condition B (cached with stale alert), Condition C (server failure, no cache)
   const loadTransactions = useCallback(() => {
     querySeqRef.current += 1;
@@ -353,15 +363,18 @@ export function TransactionLedger({
 
     setIsRefreshing(true);
     setError(null);
+    setCurrentPage(1);
 
     if (!isPwa) {
       void fetchTransactions({
         type: selectedType === 'all' ? undefined : selectedType,
         category_id: selectedCategory === 'all' ? undefined : selectedCategory,
         necessity: selectedType === 'income' || selectedNecessity === 'all' ? undefined : selectedNecessity,
+        payment_method: selectedPaymentMethod === 'all' ? undefined : selectedPaymentMethod,
         start_date: activeDateRange.startDate,
         end_date: activeDateRange.endDate,
         sort_by: sortBy,
+        page: 1,
         page_size: 50,
       })
         .then(async (result) => {
@@ -383,17 +396,17 @@ export function TransactionLedger({
           }
           const merged = Array.from(itemMap.values());
           setTransactions(merged);
+          setTotalCount(typeof result.total_count === 'number' ? result.total_count : merged.length);
+          setHasMore(Boolean(result.has_more));
+          setCurrentPage(1);
           setSnapshotComplete(true);
           setIsStale(false);
           setError(null);
           setIsInitialLoading(false);
           setIsRefreshing(false);
-          // Persist fresh server records into durable IndexedDB cache
-          if (
-            items.length > 0 ||
-            (selectedType === 'all' && selectedCategory === 'all' && !activeDateRange.startDate && !activeDateRange.endDate)
-          ) {
-            await replaceCachedTransactions(items, userId).catch(() => {});
+          // Persist fresh server records into durable IndexedDB cache (upsert without wiping older records)
+          if (items.length > 0) {
+            await saveCachedTransactions(items, userId).catch(() => {});
           }
         })
         .catch(async (err: unknown) => {
@@ -409,10 +422,14 @@ export function TransactionLedger({
             // Condition B: Server failed, but cached records exist.
             // Retain cached records and show subtle stale indicator. Never wipe to [].
             setTransactions(cached);
+            setTotalCount(cached.length);
+            setHasMore(false);
             setIsStale(true);
           } else {
             // Condition C: Server failed and no cached records exist.
             setTransactions([]);
+            setTotalCount(0);
+            setHasMore(false);
             setIsStale(false);
           }
           setIsInitialLoading(false);
@@ -426,6 +443,8 @@ export function TransactionLedger({
       .then((cached) => {
         if (querySeqRef.current !== currentSeq) return;
         setTransactions(cached || []);
+        setTotalCount(cached ? cached.length : 0);
+        setHasMore(false);
         setSnapshotComplete(true);
         setIsInitialLoading(false);
         setIsRefreshing(false);
@@ -436,7 +455,114 @@ export function TransactionLedger({
         setIsInitialLoading(false);
         setIsRefreshing(false);
       });
-  }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, activeDateRange, sortBy]);
+  }, [userId, isPwa, selectedType, selectedCategory, selectedNecessity, selectedPaymentMethod, activeDateRange, sortBy]);
+
+  // Load next page of older transactions
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore || isPwa || !userId) return;
+    setIsLoadingMore(true);
+    const nextPage = currentPage + 1;
+
+    try {
+      const result = await fetchTransactions({
+        type: selectedType === 'all' ? undefined : selectedType,
+        category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+        necessity: selectedType === 'income' || selectedNecessity === 'all' ? undefined : selectedNecessity,
+        payment_method: selectedPaymentMethod === 'all' ? undefined : selectedPaymentMethod,
+        start_date: activeDateRange.startDate,
+        end_date: activeDateRange.endDate,
+        sort_by: sortBy,
+        page: nextPage,
+        page_size: 50,
+      });
+
+      const newItems = result.items || [];
+      if (newItems.length > 0) {
+        setTransactions((prev) => {
+          const map = new Map(prev.map((t) => [t.id, t]));
+          for (const item of newItems) {
+            map.set(item.id, item);
+          }
+          return Array.from(map.values());
+        });
+        await saveCachedTransactions(newItems, userId).catch(() => {});
+      }
+      setCurrentPage(nextPage);
+      setHasMore(Boolean(result.has_more));
+      if (typeof result.total_count === 'number') {
+        setTotalCount(result.total_count);
+      }
+    } catch (err) {
+      console.warn('[Ledger] Failed to load older transactions page:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, isPwa, userId, currentPage, selectedType, selectedCategory, selectedNecessity, selectedPaymentMethod, activeDateRange, sortBy]);
+
+  // Load all remaining pages of transactions for All Time / full view
+  const handleLoadAll = useCallback(async () => {
+    if (isLoadingMore || !hasMore || isPwa || !userId) return;
+    setIsLoadingMore(true);
+
+    try {
+      let pageToFetch = currentPage + 1;
+      let keepFetching = true;
+      const allNew: TransactionDTO[] = [];
+
+      while (keepFetching && pageToFetch <= 100) {
+        const result = await fetchTransactions({
+          type: selectedType === 'all' ? undefined : selectedType,
+          category_id: selectedCategory === 'all' ? undefined : selectedCategory,
+          necessity: selectedType === 'income' || selectedNecessity === 'all' ? undefined : selectedNecessity,
+          payment_method: selectedPaymentMethod === 'all' ? undefined : selectedPaymentMethod,
+          start_date: activeDateRange.startDate,
+          end_date: activeDateRange.endDate,
+          sort_by: sortBy,
+          page: pageToFetch,
+          page_size: 50,
+        });
+
+        const batch = result.items || [];
+        allNew.push(...batch);
+        keepFetching = Boolean(result.has_more);
+        pageToFetch += 1;
+      }
+
+      if (allNew.length > 0) {
+        setTransactions((prev) => {
+          const map = new Map(prev.map((t) => [t.id, t]));
+          for (const item of allNew) {
+            map.set(item.id, item);
+          }
+          return Array.from(map.values());
+        });
+        await saveCachedTransactions(allNew, userId).catch(() => {});
+      }
+      setHasMore(false);
+      setCurrentPage(pageToFetch - 1);
+    } catch (err) {
+      console.warn('[Ledger] Failed to load all transactions:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, isPwa, userId, currentPage, selectedType, selectedCategory, selectedNecessity, selectedPaymentMethod, activeDateRange, sortBy]);
+
+  // Proactive infinite scrolling: loads older records when user scrolls near the bottom of the list
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore || isLoadingMore || isInitialLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, isInitialLoading, handleLoadMore]);
 
   // Clear query cache on external data mutations
   useEffect(() => {
@@ -672,6 +798,7 @@ export function TransactionLedger({
       const target = deletingTransaction;
       clearLedgerQueryCache();
       setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+      setTotalCount((c) => (typeof c === 'number' ? Math.max(0, c - 1) : null));
       if (expandedTxnId === target.id) {
         setExpandedTxnId(null);
       }
@@ -709,6 +836,7 @@ export function TransactionLedger({
         if (prev.some((t) => t.id === res.transaction.id)) return prev;
         return [res.transaction, ...prev];
       });
+      setTotalCount((c) => (typeof c === 'number' ? c + 1 : null));
 
       // Notify parent to refresh dashboard totals
       onTransactionMutated?.();
@@ -817,7 +945,9 @@ export function TransactionLedger({
             {netFormatted}
           </div>
           <span className="text-[10px] text-[var(--text-muted)]">
-            Computed from current view
+            {hasMore && totalCount !== null && totalCount > filteredTransactions.length
+              ? `Computed from loaded records (${filteredTransactions.length} of ${totalCount})`
+              : 'Computed from current view'}
           </span>
         </div>
 
@@ -1034,8 +1164,15 @@ export function TransactionLedger({
                 </span>
               ) : (
                 <span>
-                  {filteredTransactions.length}{' '}
-                  {filteredTransactions.length === 1 ? 'record' : 'records'}
+                  {totalCount !== null && totalCount > filteredTransactions.length ? (
+                    searchQuery.trim() ? (
+                      `Showing ${filteredTransactions.length} matching (of ${totalCount} total)`
+                    ) : (
+                      `Showing ${filteredTransactions.length} of ${totalCount} records`
+                    )
+                  ) : (
+                    `Showing all ${filteredTransactions.length} records`
+                  )}
                   {isAnyFilterActive && (
                     <button
                       type="button"
@@ -1673,6 +1810,58 @@ export function TransactionLedger({
               );
             })}
           </div>
+
+          {/* Pagination Controls & Older Records Loader */}
+          {hasMore && (
+            <div className="mt-4 p-4 border border-[var(--border-hairline)] bg-[var(--bg-surface)] rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div>
+                <p className="font-semibold text-[var(--text-primary)]">
+                  Showing {filteredTransactions.length} of {totalCount} records
+                </p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Scroll down or click below to load older statement records from previous months.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] font-semibold text-xs hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer disabled:opacity-50"
+                  aria-label="Load older transactions"
+                >
+                  {isLoadingMore ? 'Loading older records…' : 'Load older transactions'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadAll}
+                  disabled={isLoadingMore}
+                  className="flex-1 sm:flex-none px-3.5 py-2 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] font-medium text-xs hover:bg-[var(--bg-surface)] transition-colors cursor-pointer disabled:opacity-50"
+                  aria-label="Load all remaining transactions"
+                >
+                  Load all {totalCount && totalCount > filteredTransactions.length ? `(${totalCount - filteredTransactions.length} remaining)` : ''}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Proactive infinite scrolling sentinel */}
+          {hasMore && <div ref={sentinelRef} className="h-6 w-full" aria-hidden="true" />}
+
+          {/* Loading more state indicator */}
+          {isLoadingMore && (
+            <div className="py-3 flex items-center justify-center gap-2 text-xs text-[var(--text-secondary)] font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              <span>Loading older transactions from previous months…</span>
+            </div>
+          )}
+
+          {/* End of ledger history notice */}
+          {!hasMore && totalCount !== null && totalCount > 50 && (
+            <div className="py-4 text-center text-xs text-[var(--text-muted)]">
+              — End of transaction history · All {filteredTransactions.length} records loaded —
+            </div>
+          )}
         </div>
       )}
         </>

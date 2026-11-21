@@ -98,6 +98,7 @@ export interface TransactionListQuery {
   type?: TransactionType;
   category_id?: string;
   necessity?: NecessityClass;
+  payment_method?: PaymentMethod;
   start_date?: string; // YYYY-MM-DD
   end_date?: string; // YYYY-MM-DD
   sort_by?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';

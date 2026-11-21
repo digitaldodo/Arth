@@ -246,7 +246,7 @@ export async function GET(req: NextRequest) {
     // Safely forward only permitted query parameters
     const searchParams = req.nextUrl.searchParams;
     const permittedParams = new URLSearchParams();
-    const allowedKeys = ['page', 'page_size', 'type', 'category_id', 'necessity', 'start_date', 'end_date', 'sort_by'];
+    const allowedKeys = ['page', 'page_size', 'type', 'category_id', 'necessity', 'start_date', 'end_date', 'sort_by', 'payment_method'];
 
     for (const key of allowedKeys) {
       const val = searchParams.get(key);
@@ -330,6 +330,11 @@ export async function GET(req: NextRequest) {
 
         const necessityFilter = searchParams.get('necessity');
         if (necessityFilter) qb = qb.eq('necessity', necessityFilter);
+
+        const paymentMethodFilter = searchParams.get('payment_method');
+        if (paymentMethodFilter && paymentMethodFilter !== 'all') {
+          qb = qb.eq('payment_method', paymentMethodFilter);
+        }
 
         const startDate = searchParams.get('start_date');
         if (startDate) qb = qb.gte('transaction_date', startDate);
