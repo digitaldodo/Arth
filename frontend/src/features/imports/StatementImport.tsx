@@ -215,13 +215,13 @@ export function StatementImport({ userId, onImported }: Props) {
       list = list.filter((r) => r.state === 'needs_review' || r.state === 'ambiguous');
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    const q = typeof searchQuery === 'string' ? searchQuery.toLowerCase().trim() : '';
+    if (q) {
       list = list.filter((r) =>
-        r.description.toLowerCase().includes(q) ||
-        r.amount.includes(q) ||
-        r.date.includes(q) ||
-        (r.reference && r.reference.toLowerCase().includes(q))
+        (r.description || '').toLowerCase().includes(q) ||
+        (r.amount || '').includes(q) ||
+        (r.date || '').includes(q) ||
+        (r.reference && String(r.reference).toLowerCase().includes(q))
       );
     }
 
@@ -419,7 +419,7 @@ export function StatementImport({ userId, onImported }: Props) {
       const content = await page.getTextContent();
       const pageItems: PdfTextItem[] = [];
       for (const item of content.items) {
-        if (!('str' in item) || !item.str.trim()) continue;
+        if (!item || !('str' in item) || typeof item.str !== 'string' || !item.str.trim()) continue;
         const [, , , , x, y] = item.transform;
         pageItems.push({
           text: item.str,
@@ -750,7 +750,7 @@ export function StatementImport({ userId, onImported }: Props) {
           transaction_date: row.date,
           payment_method: row.paymentMethod,
           necessity,
-          description: row.description.slice(0, 500),
+          description: (row.description || 'Unspecified Transaction').slice(0, 500),
           notes: `Statement import · ${result.bank}${row.reference ? ` · ref ${row.reference}` : ''} · batch ${batchId.slice(0, 8)}`,
           account_id: null,
           import_batch_id: batchId,
@@ -1354,7 +1354,7 @@ export function StatementImport({ userId, onImported }: Props) {
                                   type="checkbox"
                                   checked={row.selected}
                                   onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
-                                  aria-label={`Select ${row.description}`}
+                                  aria-label={`Select ${row.description || 'transaction'}`}
                                   className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
                                 />
                               </td>
@@ -1362,8 +1362,8 @@ export function StatementImport({ userId, onImported }: Props) {
                                 {row.date}
                               </td>
                               <td className="py-2.5 px-3 align-top min-w-0 max-w-sm lg:max-w-md xl:max-w-lg">
-                                <div className="font-medium text-[var(--text-primary)] line-clamp-2" title={row.description}>
-                                  {row.description}
+                                <div className="font-medium text-[var(--text-primary)] line-clamp-2" title={row.description || 'Unspecified Transaction'}>
+                                  {row.description || 'Unspecified Transaction'}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
                                   {row.reference && (
@@ -1433,7 +1433,7 @@ export function StatementImport({ userId, onImported }: Props) {
                                         Description
                                         <input
                                           className={`${inputClass} mt-0.5`}
-                                          value={row.description}
+                                          value={row.description || ''}
                                           onChange={(event) => updateRow(row.key, { description: event.target.value })}
                                         />
                                       </label>
@@ -1442,7 +1442,7 @@ export function StatementImport({ userId, onImported }: Props) {
                                         <input
                                           className={`${inputClass} mt-0.5 font-mono`}
                                           inputMode="decimal"
-                                          value={row.amount}
+                                          value={row.amount || ''}
                                           onChange={(event) => {
                                             const value = event.target.value;
                                             try {
@@ -1567,13 +1567,13 @@ export function StatementImport({ userId, onImported }: Props) {
                             type="checkbox"
                             checked={row.selected}
                             onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
-                            aria-label={`Select ${row.description}`}
+                            aria-label={`Select ${row.description || 'transaction'}`}
                             className="mt-1 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer shrink-0"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <p className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-snug">
-                                {row.description}
+                                {row.description || 'Unspecified Transaction'}
                               </p>
                               <span className={`font-mono font-bold text-xs shrink-0 ${
                                 row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
@@ -1653,7 +1653,7 @@ export function StatementImport({ userId, onImported }: Props) {
                                 Description
                                 <input
                                   className={`${inputClass} mt-0.5`}
-                                  value={row.description}
+                                  value={row.description || ''}
                                   onChange={(event) => updateRow(row.key, { description: event.target.value })}
                                 />
                               </label>

@@ -99,6 +99,13 @@ const normal = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' 
 const keyText = (value: unknown) => normal(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function parseIndianAmount(value: unknown): { amount: string; amountPaise: number } {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const isNegative = value < 0;
+    const absVal = Math.abs(value);
+    const fixed = absVal.toFixed(2);
+    const paise = Math.round(absVal * 100);
+    return { amount: `${isNegative ? '-' : ''}${fixed}`, amountPaise: paise };
+  }
   let text = normal(value).replace(/₹|Rs\.?/gi, '').replace(/\s/g, '');
   const negative = /^\(.*\)$/.test(text) || text.startsWith('-');
   text = text.replace(/[(),]/g, '').replace(/^-/, '');
@@ -107,19 +114,24 @@ export function parseIndianAmount(value: unknown): { amount: string; amountPaise
   const exactPaise = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
   const paise = Number(exactPaise);
   if (!Number.isSafeInteger(paise)) throw new Error('Amount is outside the safe paise range');
-  return { amount: `${negative ? '-' : ''}${text}`, amountPaise: paise };
+  const normalizedAmount = `${whole}.${fraction.padEnd(2, '0')}`;
+  return { amount: `${negative ? '-' : ''}${normalizedAmount}`, amountPaise: paise };
 }
 
 export function parseIndianDate(value: unknown): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return validDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+  }
   const text = normal(value);
-  const iso = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(text);
+  if (!text) throw new Error('Date value is missing or empty');
+  const iso = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/.exec(text);
   if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
-  const numeric = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(text);
+  const numeric = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})(?!\d)/.exec(text);
   if (numeric) {
     const year = Number(numeric[3]) < 100 ? 2000 + Number(numeric[3]) : Number(numeric[3]);
     return validDate(year, Number(numeric[2]), Number(numeric[1]));
   }
-  const named = /^(\d{1,2})[-\s/]([A-Za-z]{3,})[-\s/](\d{2}|\d{4})$/.exec(text);
+  const named = /^(\d{1,2})[-\s/]([A-Za-z]{3,})[-\s/](\d{4}|\d{2})(?!\d)/.exec(text);
   if (named) {
     const month = new Date(`${named[2].slice(0, 3)} 1, 2000`).getMonth() + 1;
     if (!Number.isFinite(month)) throw new Error('Date month is invalid');
@@ -135,25 +147,31 @@ function validDate(year: number, month: number, day: number): string {
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
 }
 
-export function parseCsv(text: string): string[][] {
-  const delimiter = [',', '\t', ';'].sort((a, b) => (text.split('\n')[0].split(b).length - text.split('\n')[0].split(a).length))[0];
+export function parseCsv(text: unknown): string[][] {
+  const content = typeof text === 'string' ? text : String(text ?? '');
+  if (!content.trim()) return [];
+  const firstLine = content.split('\n')[0] || '';
+  const delimiter = [',', '\t', ';'].sort((a, b) => (firstLine.split(b).length - firstLine.split(a).length))[0];
   const rows: string[][] = [];
   let row: string[] = [], cell = '', quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
     if (char === '"') {
-      if (quoted && text[i + 1] === '"') { cell += '"'; i++; }
+      if (quoted && content[i + 1] === '"') { cell += '"'; i++; }
       else quoted = !quoted;
     } else if (!quoted && char === delimiter) { row.push(cell); cell = ''; }
     else if (!quoted && (char === '\n' || char === '\r')) {
-      if (char === '\r' && text[i + 1] === '\n') i++;
+      if (char === '\r' && content[i + 1] === '\n') i++;
       row.push(cell); cell = '';
-      if (row.some((v) => v.trim())) rows.push(row);
+      if (row.some((v) => Boolean(v && typeof v === 'string' && v.trim()))) rows.push(row);
       row = [];
     } else cell += char;
   }
   if (quoted) throw new Error('CSV file has an unmatched quotation mark. Export the statement again and retry.');
-  if (cell || row.length) { row.push(cell); if (row.some((v) => v.trim())) rows.push(row); }
+  if (cell || row.length) {
+    row.push(cell);
+    if (row.some((v) => Boolean(v && typeof v === 'string' && v.trim()))) rows.push(row);
+  }
   return rows;
 }
 
@@ -250,8 +268,9 @@ export function computeStatementSummary(
 export const STATEMENT_METADATA_REGEX =
   /^(?:opening\s*bal(?:ance)?|closing\s*bal(?:ance)?|balance\s*b\/?f|balance\s*c\/?f|brought\s*forward|carried\s*forward|available\s*balance|running\s*balance|balance\s*summary|total\s*withdrawal[s]?|total\s*deposit[s]?|total\s*debit[s]?|total\s*credit[s]?|statement\s*summary|account\s*summary|od\s*limit|overdraft\s*limit|statement\s*of\s*account|account\s*statement|customer\s*id|account\s*no|nomination\s*registered|page\s*\d+\s*(?:of|\/)\s*\d+|computer\s*generated|registered\s*office|gstin|ifsc|micr|branch\s*details|end\s*of\s*(?:statement|personal))/i;
 
-export function isStatementMetadataOrSummary(text: string): boolean {
-  const clean = text.trim();
+export function isStatementMetadataOrSummary(text: unknown): boolean {
+  if (text == null) return false;
+  const clean = String(text).trim();
   if (!clean) return false;
   return STATEMENT_METADATA_REGEX.test(clean) ||
     /^(?:page\s*\d+|statement\s*period|generated\s*on|downloaded\s*on|rtgs\/neft\s*ifsc)/i.test(clean);
@@ -275,12 +294,14 @@ export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
   let numColumns = 0;
 
   for (const pageItems of pages) {
-    if (!pageItems.length) continue;
+    if (!pageItems || !pageItems.length) continue;
 
     // Group items into lines by Y coordinate (within 3pt clustering tolerance)
     const lineMap = new Map<number, PdfTextItem[]>();
     for (const item of pageItems) {
-      if (!item.text || !item.text.trim()) continue;
+      if (!item || !item.text) continue;
+      const itemText = String(item.text).trim();
+      if (!itemText) continue;
       const roundedY = Math.round(item.y / 3) * 3;
       const list = lineMap.get(roundedY) || [];
       list.push(item);
@@ -292,7 +313,7 @@ export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
 
     for (const y of sortedY) {
       const items = lineMap.get(y)!.sort((a, b) => a.x - b.x);
-      const lineText = items.map((it) => it.text).join(' ').trim();
+      const lineText = items.map((it) => String(it.text ?? '').trim()).filter(Boolean).join(' ');
       if (!lineText) continue;
 
       const lower = lineText.toLowerCase();
@@ -304,14 +325,15 @@ export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
         // Merge items that belong to the same header label (e.g. "Withdrawal" + "Amt.")
         const mergedHeaderItems: Array<{ x: number; endX: number; text: string }> = [];
         for (const it of items) {
-          const width = it.width || (it.text.length * 6);
+          const itText = String(it.text ?? '').trim();
+          const width = it.width || (itText.length * 6);
           const endX = it.x + width;
           const prev = mergedHeaderItems.at(-1);
           if (prev && it.x - prev.endX <= 8) {
-            prev.text = `${prev.text} ${it.text}`;
+            prev.text = `${prev.text} ${itText}`;
             prev.endX = Math.max(prev.endX, endX);
           } else {
-            mergedHeaderItems.push({ x: it.x, endX, text: it.text });
+            mergedHeaderItems.push({ x: it.x, endX, text: itText });
           }
         }
 
@@ -323,7 +345,7 @@ export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
           columnBoundaries.push((current.endX + next.x) / 2);
         }
 
-        table.push(mergedHeaderItems.map((h) => h.text.trim()));
+        table.push(mergedHeaderItems.map((h) => String(h.text ?? '').trim()));
         continue;
       }
 
@@ -336,18 +358,19 @@ export function extractTableFromPdfItems(pages: PdfTextItem[][]): string[][] {
 
         const rowCells: string[] = Array(numColumns).fill('');
         for (const it of items) {
+          const itText = String(it.text ?? '').trim();
           const midX = it.x + ((it.width || 0) / 2);
           let colIdx = 0;
           while (colIdx < columnBoundaries.length && midX > columnBoundaries[colIdx]) {
             colIdx++;
           }
           if (colIdx < numColumns) {
-            rowCells[colIdx] = rowCells[colIdx] ? `${rowCells[colIdx]} ${it.text}` : it.text;
+            rowCells[colIdx] = rowCells[colIdx] ? `${rowCells[colIdx]} ${itText}` : itText;
           }
         }
-        table.push(rowCells.map((c) => c.trim()));
+        table.push(rowCells.map((c) => String(c ?? '').trim()));
       } else {
-        table.push(lineText.split(/\s{2,}/).map((v) => v.trim()));
+        table.push(lineText.split(/\s{2,}/).map((v) => String(v ?? '').trim()));
       }
     }
   }
@@ -360,20 +383,22 @@ export function normalizeStatementTable(
   fullText = '',
   mapping?: StatementColumnMapping,
 ): StatementParseResult {
-  const normalizedTable = table.map((row) => row.map(normal));
-  const adapter = detectStatementAdapter(`${fullText} ${normalizedTable.slice(0, 12).flat().join(' ')}`);
+  const safeTable = (Array.isArray(table) ? table : [])
+    .filter((row): row is unknown[] => Array.isArray(row))
+    .map((row) => Array.from(row).map(normal));
+  const adapter = detectStatementAdapter(`${fullText} ${safeTable.slice(0, 12).flat().join(' ')}`);
   const bank = adapter.label;
   const warnings: string[] = [];
   if (adapter.id === 'generic') warnings.push('Bank format was not identified. Rows use generic statement column matching; review each row.');
   if (adapter.validation !== 'fixture_verified' && adapter.validation !== 'synthetic_fixture') {
     warnings.push('This format has no verified fixture validation. Check every extracted field before importing.');
   }
-  const detectedHeaderIndex = normalizedTable.findIndex((row) => {
+  const detectedHeaderIndex = safeTable.findIndex((row) => {
     const headers = row.map(keyText);
     return findHeaderColumn(headers, adapter.dateHeaders) >= 0 && findHeaderColumn(headers, adapter.descriptionHeaders) >= 0;
   });
   const headerIndex = mapping?.headerIndex ?? detectedHeaderIndex;
-  if (headerIndex < 0) {
+  if (headerIndex < 0 || headerIndex >= safeTable.length) {
     return {
       rows: [],
       bank,
@@ -382,10 +407,10 @@ export function normalizeStatementTable(
       warnings: [...warnings, 'Could not find a transaction date and narration header row. Try a CSV export or map columns manually.'],
       period: null,
       mappingRequired: true,
-      sourceTable: normalizedTable,
+      sourceTable: safeTable,
     };
   }
-  const headers = normalizedTable[headerIndex].map(keyText);
+  const headers = safeTable[headerIndex].map(keyText);
   const col = (candidates: string[]) => findHeaderColumn(headers, candidates);
   const mapped = (key: keyof StatementColumnMapping, fallback: number) => mapping ? mapping[key] as number | null : fallback;
   const dateCol = mapped('date', col(adapter.dateHeaders)) ?? -1, valueDateCol = mapped('valueDate', col(['value date', 'value dt', 'val date'])) ?? -1;
@@ -405,7 +430,7 @@ export function normalizeStatementTable(
       warnings: [...warnings, 'Choose both transaction date and description columns before parsing.'],
       period: null,
       mappingRequired: true,
-      sourceTable: normalizedTable,
+      sourceTable: safeTable,
     };
   }
   if (debitCol < 0 && creditCol < 0 && amountCol < 0) warnings.push('No debit, credit, or amount column was found. Rows will need manual review.');
@@ -414,16 +439,22 @@ export function normalizeStatementTable(
   let explicitOpeningBalancePaise: string | null = null;
   let explicitClosingBalancePaise: string | null = null;
 
-  for (let index = headerIndex + 1; index < normalizedTable.length; index++) {
-    const values = normalizedTable[index];
-    if (!values.some(Boolean)) continue;
+  for (let index = headerIndex + 1; index < safeTable.length; index++) {
+    const values = safeTable[index];
+    if (!values || !Array.isArray(values) || !values.some(Boolean)) continue;
 
     // Check if this row is a repeated table header row
-    if (values.reduce((matches, value, column) => matches + Number(Boolean(value && keyText(value) === headers[column])), 0) >= 2) continue;
+    if (values.reduce((matches, value, column) => matches + Number(Boolean(value && column < headers.length && keyText(value) === headers[column])), 0) >= 2) continue;
 
-    const fullRowText = values.filter(Boolean).join(' ').trim();
-    const rawDescription = (descCol >= 0 ? values[descCol] : '').trim();
-    const isMetadata = isStatementMetadataOrSummary(fullRowText) || isStatementMetadataOrSummary(rawDescription);
+    const cellStr = (col: number): string => {
+      if (col < 0 || col >= values.length) return '';
+      const v = values[col];
+      return v != null ? String(v).trim() : '';
+    };
+
+    const fullRowText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
+    const rawDescription = cellStr(descCol);
+    const isMetadata = isStatementMetadataOrSummary(fullRowText) || (rawDescription ? isStatementMetadataOrSummary(rawDescription) : false);
 
     // If row contains opening or closing balance metadata, extract statement-level balances and never import as transaction
     if (isMetadata) {
@@ -453,13 +484,13 @@ export function normalizeStatementTable(
       continue;
     }
 
-    const rawDate = values[dateCol] || '';
+    const rawDate = cellStr(dateCol);
 
     // Multi-line continuation: row has no date but follows an active transaction
     if (!rawDate && prior) {
-      const continuationText = values.filter(Boolean).join(' ').trim();
+      const continuationText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
       if (continuationText && !isStatementMetadataOrSummary(continuationText)) {
-        prior.description = `${prior.description} ${continuationText}`.trim();
+        prior.description = `${prior.description || ''} ${continuationText}`.trim();
         prior.confidence = 'medium';
         // Extract reference/UTR from continuation text if prior row is missing reference
         if (!prior.reference) {
@@ -474,19 +505,32 @@ export function normalizeStatementTable(
       const date = parseIndianDate(rawDate);
       let valueDate: string | null = null;
       let valueDateProblem = false;
-      if (valueDateCol >= 0 && values[valueDateCol]) {
-        try { valueDate = parseIndianDate(values[valueDateCol]); }
+      const rawValueDate = cellStr(valueDateCol);
+      if (rawValueDate) {
+        try { valueDate = parseIndianDate(rawValueDate); }
         catch { valueDateProblem = true; warnings.push(`Row ${index + 1}: value date could not be read; the transaction is flagged for review.`); }
       }
 
-      const description = rawDescription || values.filter((_, i) => i !== dateCol && i !== balanceCol).join(' ').trim();
-      if (!description || isStatementMetadataOrSummary(description)) {
+      let description = rawDescription;
+      if (!description) {
+        description = values
+          .filter((_, i) => i !== dateCol && i !== balanceCol && i !== debitCol && i !== creditCol && i !== amountCol && i !== refCol && i !== valueDateCol)
+          .filter(Boolean)
+          .map((v) => String(v).trim())
+          .filter(Boolean)
+          .join(' ');
+      }
+      let missingDescription = false;
+      if (!description) {
+        description = 'Unspecified Transaction';
+        missingDescription = true;
+      } else if (isStatementMetadataOrSummary(description)) {
         // Not a genuine transaction description (summary or empty)
         continue;
       }
 
-      const debit = debitCol >= 0 ? values[debitCol] : '';
-      const credit = creditCol >= 0 ? values[creditCol] : '';
+      const debit = cellStr(debitCol);
+      const credit = cellStr(creditCol);
 
       let debitPresent = false;
       let creditPresent = false;
@@ -544,23 +588,24 @@ export function normalizeStatementTable(
         } else {
           type = 'expense';
         }
-      } else if (amountCol >= 0 && amountCol !== balanceCol && values[amountCol]) {
+      } else if (amountCol >= 0 && amountCol !== balanceCol) {
         // Single signed amount column (never closing balance)
-        const candidate = values[amountCol];
+        const candidate = cellStr(amountCol);
         if (candidate && !/^[-—]$/.test(candidate)) {
           const parsed = parseIndianAmount(candidate);
           if (parsed.amountPaise > 0) {
             rawAmount = parsed.amount;
             parsedAmountPaise = parsed.amountPaise;
-            const isNegative = rawAmount.trim().startsWith('-');
-            if (typeCol >= 0 && /credit|deposit|income|cr/i.test(values[typeCol])) {
+            const isNegative = String(rawAmount || '').trim().startsWith('-');
+            const typeVal = cellStr(typeCol);
+            if (typeCol >= 0 && /credit|deposit|income|cr/i.test(typeVal)) {
               if (isNegative) {
                 type = 'expense';
                 isReversalEntry = true;
               } else {
                 type = 'income';
               }
-            } else if (typeCol >= 0 && /debit|withdrawal|expense|dr/i.test(values[typeCol])) {
+            } else if (typeCol >= 0 && /debit|withdrawal|expense|dr/i.test(typeVal)) {
               if (isNegative) {
                 type = 'income';
                 isReversalEntry = true;
@@ -592,7 +637,13 @@ export function normalizeStatementTable(
       let exclusionReason: string | undefined;
       let shouldSelect = true;
 
-      if (valueDateProblem) {
+      if (missingDescription) {
+        classification = 'needs_review';
+        state = 'needs_review';
+        warning = 'Transaction narration is missing in statement row. Verify details before importing.';
+        exclusionReason = 'Missing transaction description';
+        shouldSelect = false;
+      } else if (valueDateProblem) {
         classification = 'needs_review';
         state = 'needs_review';
         warning = 'Value date could not be parsed. Verify it before importing.';
@@ -637,25 +688,25 @@ export function normalizeStatementTable(
       }
 
       // Check if reference is present in reference column or description
-      let reference: string | null = refCol >= 0 && values[refCol] ? values[refCol] : null;
+      let reference: string | null = cellStr(refCol) || null;
       if (!reference) {
         const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(description);
         if (refMatch) reference = refMatch[1];
       }
 
-      const balanceValue = balanceCol >= 0 && values[balanceCol] ? values[balanceCol] : null;
-      const rawNecessity = necessityCol >= 0 && values[necessityCol] ? values[necessityCol].trim().toLowerCase() : '';
+      const balanceValue = cellStr(balanceCol) || null;
+      const rawNecessity = cellStr(necessityCol).toLowerCase();
       const parsedNecessity = type === 'expense' && (rawNecessity === 'essential' || rawNecessity === 'optional' || rawNecessity === 'luxury')
         ? rawNecessity
         : null;
-      const rawCategory = categoryCol >= 0 && values[categoryCol] ? values[categoryCol].trim() : '';
+      const rawCategory = cellStr(categoryCol);
 
       const row: ParsedStatementRow = {
         key: `${index}-${date}-${parsedAmountPaise}`,
         date,
         valueDate,
         description,
-        amount: rawAmount.replace(/^-/, ''),
+        amount: String(rawAmount || '').replace(/^-/, ''),
         amountPaise: parsedAmountPaise,
         type,
         paymentMethod: 'online',
@@ -745,7 +796,7 @@ export function normalizeStatementTable(
     reconciliationDifferencePaise: summary.reconciliationDifferencePaise,
     isReconciled: summary.isReconciled,
     summary,
-    ...(rows.length === 0 ? { mappingRequired: true, sourceTable: normalizedTable } : {}),
+    ...(rows.length === 0 ? { mappingRequired: true, sourceTable: safeTable } : {}),
   };
 }
 
@@ -761,11 +812,11 @@ export function tagDuplicates(
   }>,
   accountId: string | null = null,
 ): ParsedStatementRow[] {
-  const normalizeDescription = (value: string) => keyText(value).replace(/\b(?:upi|neft|imps|rtgs)\b/g, '').trim();
+  const normalizeDescription = (value: unknown) => keyText(value).replace(/\b(?:upi|neft|imps|rtgs)\b/g, '').trim();
   const duplicateIndexes = new Set<number>();
   const referenceGroup = new Map<string, number[]>();
   const exactGroup = new Map<string, Array<{ index: number; reference: string }>>();
-  const identity = (date: string, amount: number, type: string, description: string) =>
+  const identity = (date: string, amount: number, type: string, description: unknown) =>
     JSON.stringify([date, amount, type, normalizeDescription(description)]);
   const append = <T,>(map: Map<string, T[]>, key: string, value: T) => {
     const group = map.get(key);
@@ -774,7 +825,7 @@ export function tagDuplicates(
   };
 
   rows.forEach((row, index) => {
-    const reference = row.reference?.trim().toLowerCase() || '';
+    const reference = typeof row.reference === 'string' ? row.reference.trim().toLowerCase() : '';
     if (reference) {
       const key = JSON.stringify([reference, row.amountPaise, row.type]);
       append(referenceGroup, key, index);
@@ -818,7 +869,7 @@ export function tagDuplicates(
   };
 
   return rows.map((row, rowIndex) => {
-    const rowReference = row.reference?.trim().toLowerCase() || '';
+    const rowReference = typeof row.reference === 'string' ? row.reference.trim().toLowerCase() : '';
     const ledgerAssessment = assessPossibleDuplicate({
       date: row.date, amountPaise: row.amountPaise, type: row.type,
       description: row.description, accountId, reference: rowReference || null,

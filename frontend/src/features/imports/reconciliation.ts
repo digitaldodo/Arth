@@ -18,7 +18,7 @@ export function findReconciliationCandidates(
 ): ReconciliationCandidate[] {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const rows = transactions.filter((row) => row.account_id && !linkedTransactionIds.has(row.id)
-    && (TRANSFER_HINT.test(row.description || '') || Boolean(row.statement_reference?.trim())));
+    && (TRANSFER_HINT.test(row.description || '') || Boolean(typeof row.statement_reference === 'string' && row.statement_reference.trim())));
   const candidates: ReconciliationCandidate[] = [];
   const seen = new Set<string>();
   // Index by amount, direction and day so a large account history does not require
@@ -44,8 +44,8 @@ export function findReconciliationCandidates(
     if (!byDay) continue;
     for (let offset = -2; offset <= 2; offset++) for (const second of byDay.get(day + offset) || []) {
     if (first.account_id === second.account_id) continue;
-    const firstRef = first.statement_reference?.trim().toLowerCase();
-    const secondRef = second.statement_reference?.trim().toLowerCase();
+    const firstRef = typeof first.statement_reference === 'string' ? first.statement_reference.trim().toLowerCase() : undefined;
+    const secondRef = typeof second.statement_reference === 'string' ? second.statement_reference.trim().toLowerCase() : undefined;
     const sameReference = Boolean(firstRef && secondRef && firstRef === secondRef);
     if (firstRef && secondRef && !sameReference) continue;
     const bothNarrationsTransferLike = TRANSFER_HINT.test(first.description || '') && TRANSFER_HINT.test(second.description || '');

@@ -43,8 +43,8 @@ const transactionContexts: ReadonlyArray<readonly [RegExp, string]> = [
   [/\b(?:interest credited|dividend|cashback credited)\b/i, 'Other income'],
 ];
 
-export function normalizeNarration(raw: string): string {
-  return raw
+export function normalizeNarration(raw: unknown): string {
+  return String(raw ?? '')
     .normalize('NFKC')
     .toLocaleLowerCase('en-IN')
     .replace(/\b(?:upi\s*)?(?:ref|reference|utr|rrn|txn(?:\s*id)?)\s*[:#-]?\s*[a-z0-9-]{6,30}\b/gi, ' ')
@@ -103,7 +103,7 @@ export function suggestCategory(
   const confidence = sourceCount < 2 ? 0.5 : count / votes.length;
   if ((sourceCount >= 2 && confidence < 0.67) || (ranked[1]?.[1] === count)) return null;
 
-  const category = categories.find((item) => item.type === type && item.name.trim().toLocaleLowerCase('en-IN') === label.toLocaleLowerCase('en-IN'));
+  const category = categories.find((item) => item.type === type && (item.name ? item.name.trim().toLocaleLowerCase('en-IN') : '') === label.toLocaleLowerCase('en-IN'));
   if (!category) return null;
   return {
     category,
@@ -150,6 +150,6 @@ export async function findCategoryCorrection(userId: string, merchantKey: string
   }
 }
 
-export function merchantFingerprint(narration: string): string {
+export function merchantFingerprint(narration: unknown): string {
   return normalizeNarration(narration).split(' ').filter((token) => !/^\d+$/.test(token)).slice(0, 5).join(' ');
 }

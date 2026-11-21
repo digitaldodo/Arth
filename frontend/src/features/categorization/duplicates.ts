@@ -22,7 +22,7 @@ export interface DuplicateAssessment {
   evidence: string[];
 }
 
-const normalizedNarration = (value: string | null | undefined) => (value || '')
+const normalizedNarration = (value: unknown) => String(value ?? '')
   .normalize('NFKC').toLocaleLowerCase('en-IN')
   .replace(/\b(?:upi|neft|imps|rtgs|pos|card)\b/g, ' ')
   .replace(/\b(?:utr|rrn|ref(?:erence)?|txn(?:\s*id)?)\s*[:#-]?\s*[a-z0-9-]{6,30}\b/g, ' ')
@@ -33,17 +33,17 @@ export function assessPossibleDuplicate(
   candidate: TransactionDuplicateCandidate,
   existing: readonly ExistingTransactionIdentity[],
 ): DuplicateAssessment {
-  const candidateReference = candidate.reference?.trim().toLowerCase();
+  const candidateReference = typeof candidate.reference === 'string' ? candidate.reference.trim().toLowerCase() : undefined;
   for (const item of existing) {
-    const sameReference = Boolean(candidateReference && item.statement_reference?.trim().toLowerCase() === candidateReference);
+    const existingRef = typeof item.statement_reference === 'string' ? item.statement_reference.trim().toLowerCase() : undefined;
+    const sameReference = Boolean(candidateReference && existingRef && candidateReference === existingRef);
     const sameAccount = Boolean(candidate.accountId && item.account_id && candidate.accountId === item.account_id);
     const sameDate = item.transaction_date === candidate.date;
     const sameAmount = item.amount_paise === candidate.amountPaise;
     const sameType = item.type === candidate.type;
     const candidateNarration = normalizedNarration(candidate.description);
     const sameNarration = Boolean(candidateNarration && candidateNarration === normalizedNarration(item.description));
-    const existingReference = item.statement_reference?.trim().toLowerCase();
-    const conflictingReferences = Boolean(candidateReference && existingReference && candidateReference !== existingReference);
+    const conflictingReferences = Boolean(candidateReference && existingRef && candidateReference !== existingRef);
     const accountMatches = candidate.accountId && item.account_id ? sameAccount : true;
     if (sameReference && sameAmount && sameType && accountMatches) {
       return { possibleDuplicate: true, confidence: 'high', evidence: ['same reference', 'same amount', 'same direction'] };
