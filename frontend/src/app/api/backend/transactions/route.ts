@@ -28,28 +28,198 @@ export async function POST(req: NextRequest) {
     const backendBaseUrl = getBackendBaseUrl();
     const body = await req.json();
 
-    const backendRes = await fetch(`${backendBaseUrl}/api/v1/transactions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    });
+    let backendRes: Response | null = null;
+    let data: unknown = null;
 
-    const data = await backendRes.json();
-
-    // Event-driven near-real-time synchronization:
-    // If transaction write was committed to PostgreSQL, asynchronously trigger outbox drain
-    if (backendRes.ok && userId) {
-      drainUserOutbox(userId).catch((syncErr) => {
-        console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+    try {
+      backendRes = await fetch(`${backendBaseUrl}/api/v1/transactions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        cache: 'no-store',
       });
+      data = await backendRes.json().catch(() => null);
+    } catch {
+      // Backend service unreachable, proceed to Supabase fallback
     }
 
-    return NextResponse.json(data, { status: backendRes.status });
+    if (backendRes && backendRes.ok) {
+      if (userId) {
+        drainUserOutbox(userId).catch((syncErr) => {
+          console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+        });
+      }
+      return NextResponse.json(data, { status: backendRes.status });
+    }
+
+    // Client-side 4xx errors from backend should be returned directly
+    if (backendRes && backendRes.status < 500) {
+      return NextResponse.json(data, { status: backendRes.status });
+    }
+
+    // Direct Supabase Fallback when backend is unreachable or returns 5xx
+    try {
+      const supabase = await createClient();
+
+      // 1. Idempotency: Does a transaction with this ID already exist?
+      const { data: existing } = await supabase
+        .from('transactions')
+        .select('id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, categories(name)')
+        .eq('id', body.id)
+        .maybeSingle();
+
+      if (existing) {
+        const paise = Number(existing.amount_paise);
+        const catObj = existing.categories as { name?: string } | Array<{ name?: string }> | null;
+        const catName = Array.isArray(catObj) ? catObj[0]?.name : catObj?.name;
+        return NextResponse.json({
+          transaction: {
+            id: existing.id,
+            amount_paise: paise,
+            amount_decimal: paiseToDecimal(paise),
+            formatted_inr: formatPaiseToINR(paise),
+            type: existing.type,
+            category_id: existing.category_id,
+            category_name: catName,
+            transaction_date: existing.transaction_date,
+            payment_method: existing.payment_method,
+            necessity: existing.necessity,
+            description: existing.description,
+            notes: existing.notes,
+          },
+          isReplay: true,
+        }, { status: 200 });
+      }
+
+      // 2. Duplicate detection for statement imports
+      if (body.statement_reference && userId) {
+        const { data: dupRef } = await supabase
+          .from('transactions')
+          .select('id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, categories(name)')
+          .eq('user_id', userId)
+          .eq('statement_reference', body.statement_reference)
+          .eq('amount_paise', body.amount_paise)
+          .eq('type', body.type)
+          .is('deleted_at', null)
+          .maybeSingle();
+
+        if (dupRef) {
+          const paise = Number(dupRef.amount_paise);
+          const catObj = dupRef.categories as { name?: string } | Array<{ name?: string }> | null;
+          const catName = Array.isArray(catObj) ? catObj[0]?.name : catObj?.name;
+          return NextResponse.json({
+            transaction: {
+              id: dupRef.id,
+              amount_paise: paise,
+              amount_decimal: paiseToDecimal(paise),
+              formatted_inr: formatPaiseToINR(paise),
+              type: dupRef.type,
+              category_id: dupRef.category_id,
+              category_name: catName,
+              transaction_date: dupRef.transaction_date,
+              payment_method: dupRef.payment_method,
+              necessity: dupRef.necessity,
+              description: dupRef.description,
+              notes: dupRef.notes,
+            },
+            isReplay: true,
+          }, { status: 200 });
+        }
+      }
+
+      // 3. Ensure statement_import_batches entry exists if import_batch_id is specified
+      if (body.import_batch_id && userId) {
+        const { data: batchExists } = await supabase
+          .from('statement_import_batches')
+          .select('id')
+          .eq('id', body.import_batch_id)
+          .maybeSingle();
+
+        if (!batchExists) {
+          await supabase
+            .from('statement_import_batches')
+            .insert({
+              id: body.import_batch_id,
+              user_id: userId,
+              source_name: 'Statement Import',
+              source_format: 'pdf',
+              parser_id: body.parser_version ? body.parser_version.split(':')[0] : 'generic',
+              parser_version: '1',
+              status: 'processing',
+              detected_count: 1,
+              imported_count: 0,
+              skipped_count: 0,
+            });
+        }
+      }
+
+      // 4. Insert transaction directly into Supabase
+      const insertPayload: Record<string, unknown> = {
+        id: body.id,
+        user_id: userId,
+        amount_paise: body.amount_paise,
+        type: body.type,
+        category_id: body.category_id || null,
+        transaction_date: body.transaction_date,
+        payment_method: body.payment_method,
+        necessity: body.type === 'expense' ? (body.necessity || null) : null,
+        description: body.description || null,
+        notes: body.notes || null,
+        account_id: body.account_id || null,
+        import_batch_id: body.import_batch_id || null,
+        statement_reference: body.statement_reference || null,
+        ingestion_source: body.ingestion_source || 'manual',
+      };
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('transactions')
+        .insert(insertPayload)
+        .select('id, amount_paise, type, category_id, transaction_date, payment_method, necessity, description, notes, categories(name)')
+        .single();
+
+      if (insertErr) {
+        return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+
+      if (userId) {
+        drainUserOutbox(userId).catch((syncErr) => {
+          console.warn('[TransactionsRoute] Asynchronous outbox drain non-fatal error:', syncErr);
+        });
+      }
+
+      const paise = Number(inserted.amount_paise);
+      const catObj = inserted.categories as { name?: string } | Array<{ name?: string }> | null;
+      const catName = Array.isArray(catObj) ? catObj[0]?.name : catObj?.name;
+
+      return NextResponse.json({
+        transaction: {
+          id: inserted.id,
+          amount_paise: paise,
+          amount_decimal: paiseToDecimal(paise),
+          formatted_inr: formatPaiseToINR(paise),
+          type: inserted.type,
+          category_id: inserted.category_id,
+          category_name: catName,
+          transaction_date: inserted.transaction_date,
+          payment_method: inserted.payment_method,
+          necessity: inserted.necessity,
+          description: inserted.description,
+          notes: inserted.notes,
+        },
+        isReplay: false,
+      }, { status: 201 });
+    } catch (fallbackErr) {
+      console.error('[TransactionsRoute] Direct Supabase POST fallback error:', fallbackErr);
+    }
+
+    if (backendRes) {
+      return NextResponse.json(data, { status: backendRes.status });
+    }
+    return safeBackendErrorResponse(new Error('Backend service unreachable and database fallback failed'), 'POST /api/backend/transactions');
   } catch (err: unknown) {
     return safeBackendErrorResponse(err, 'POST /api/backend/transactions');
   }

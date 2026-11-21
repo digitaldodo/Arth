@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, Fragment, type DragEvent, type Fo
 import { v7 as uuidv7 } from 'uuid';
 import { formatPaiseToINR, parseINRToPaise, type CategoryDTO, type CreateTransactionResponse } from '@arth/contracts';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
-import { getCachedCategories, getCachedTransactions, getPendingMutations, getStatementImportBatches, saveStatementImportBatch, type StatementImportBatch } from '@/lib/offline-db';
+import { getCachedCategories, getCachedTransactions, getPendingMutations, getStatementImportBatches, removePendingMutation, saveStatementImportBatch, type StatementImportBatch } from '@/lib/offline-db';
 import { fetchCategories, fetchTransactions } from '@/lib/api-client';
 import { syncEngine } from '@/features/sync/sync-engine';
 import {
@@ -93,6 +93,7 @@ export function StatementImport({ userId, onImported }: Props) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<StatementImportBatch[]>([]);
+  const [pendingCountByBatch, setPendingCountByBatch] = useState<Record<string, number>>({});
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
   const [retryingBatchId, setRetryingBatchId] = useState<string | null>(null);
   const [showCompatibility, setShowCompatibility] = useState(false);
@@ -102,6 +103,18 @@ export function StatementImport({ userId, onImported }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pdfTask = useRef<{ destroy: () => Promise<void> } | null>(null);
   const parseVersion = useRef(0);
+
+  const refreshPendingCounts = async (batchList: StatementImportBatch[]) => {
+    try {
+      const pending = await getPendingMutations(userId);
+      const counts: Record<string, number> = {};
+      for (const batch of batchList) {
+        const idSet = new Set(batch.imported_ids);
+        counts[batch.id] = pending.filter((m) => idSet.has(m.entityId)).length;
+      }
+      setPendingCountByBatch(counts);
+    } catch {}
+  };
 
   function toggleRowExpand(key: string) {
     setExpandedRowKeys((current) => {
@@ -122,6 +135,7 @@ export function StatementImport({ userId, onImported }: Props) {
       setCategories(cached);
       const recoverable = imports.map((item) => item.status === 'processing' ? { ...item, status: 'partial' as const } : item);
       setHistory(recoverable);
+      void refreshPendingCounts(recoverable);
       for (const item of recoverable) {
         if (item.status === 'partial' && imports.find((old) => old.id === item.id)?.status === 'processing') {
           void saveStatementImportBatch(item);
@@ -162,7 +176,9 @@ export function StatementImport({ userId, onImported }: Props) {
             const local = localById.get(item.id);
             localById.set(item.id, local ? { ...item, ...local, status: item.status, imported_ids: [...new Set([...local.imported_ids, ...item.imported_ids])] } : item);
           }
-          return [...localById.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+          const merged = [...localById.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+          void refreshPendingCounts(merged);
+          return merged;
         });
       } catch {
         /* Keep browser history available when persistent metadata is offline */
@@ -282,6 +298,15 @@ export function StatementImport({ userId, onImported }: Props) {
         return;
       }
 
+      const fileHash = file ? await hashFile(file) : null;
+      if (fileHash) {
+        const existingBatch = history.find((b) => b.source_sha256 === fileHash);
+        if (existingBatch) {
+          const dateStr = new Date(existingBatch.created_at).toLocaleDateString('en-IN');
+          parsed.warnings.push(`This statement file has already been imported on ${dateStr} (Batch ${existingBatch.id.slice(0, 8)}). All rows are verified against your ledger to prevent duplicate entries.`);
+        }
+      }
+
       const ledger = await getExistingTransactions(userId);
       parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
       if (!ledger.complete) {
@@ -356,6 +381,15 @@ export function StatementImport({ userId, onImported }: Props) {
         setError(parsed.warnings[0] || 'No rows matched those column mappings. Please adjust and retry.');
         return;
       }
+      const fileHash = file ? await hashFile(file) : null;
+      if (fileHash) {
+        const existingBatch = history.find((b) => b.source_sha256 === fileHash);
+        if (existingBatch) {
+          const dateStr = new Date(existingBatch.created_at).toLocaleDateString('en-IN');
+          parsed.warnings.push(`This statement file has already been imported on ${dateStr} (Batch ${existingBatch.id.slice(0, 8)}). All rows are verified against your ledger to prevent duplicate entries.`);
+        }
+      }
+
       const ledger = await getExistingTransactions(userId);
       parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
       if (!ledger.complete) {
@@ -565,6 +599,15 @@ export function StatementImport({ userId, onImported }: Props) {
         return { ...row, ocrConfidence: confidence, confidence: confidence >= 85 ? 'medium' : 'low', warning: detail };
       });
 
+      const fileHash = file ? await hashFile(file) : null;
+      if (fileHash) {
+        const existingBatch = history.find((b) => b.source_sha256 === fileHash);
+        if (existingBatch) {
+          const dateStr = new Date(existingBatch.created_at).toLocaleDateString('en-IN');
+          parsed.warnings.push(`This statement file has already been imported on ${dateStr} (Batch ${existingBatch.id.slice(0, 8)}). All rows are verified against your ledger to prevent duplicate entries.`);
+        }
+      }
+
       const ledger = await getExistingTransactions(userId);
       parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
       if (!ledger.complete) {
@@ -679,16 +722,22 @@ export function StatementImport({ userId, onImported }: Props) {
     setRetryingBatchId(target.id);
     setError('');
     try {
+      if (target.source_format && target.parser_id) {
+        await persistRemoteBatch(target, target.source_format, target.parser_id, target.source_sha256 || null, target.imported_ids.length).catch(() => {});
+      }
+      await syncEngine.retryFailedMutations(userId);
       await syncEngine.processQueue(userId);
       const pending = (await getPendingMutations(userId)).filter((mutation) => target.imported_ids.includes(mutation.entityId));
-      const updated = { ...target, status: pending.length ? 'partial' as const : 'completed' as const };
+      const updated = { ...target };
       await saveStatementImportBatch(updated);
       const syncedCount = Math.max(0, target.imported_ids.length - pending.length);
       if (updated.source_format && updated.parser_id) {
         await persistRemoteBatch(updated, updated.source_format, updated.parser_id, updated.source_sha256 || null, syncedCount).catch(() => {});
       }
-      setHistory((current) => current.map((item) => item.id === target.id ? updated : item));
-      setMessage(pending.length ? `${pending.length} transaction${pending.length === 1 ? '' : 's'} still pending synchronization.` : 'All rows in this batch are synchronized.');
+      const updatedHistory = history.map((item) => item.id === target.id ? updated : item);
+      setHistory(updatedHistory);
+      void refreshPendingCounts(updatedHistory);
+      setMessage(pending.length ? `${syncedCount} of ${target.imported_ids.length} synced; ${pending.length} transaction${pending.length === 1 ? '' : 's'} still pending synchronization.` : 'All rows in this batch are synchronized to cloud.');
     } catch (cause) {
       setError(sanitizeUserFacingError(cause, 'Could not synchronize statement batch.'));
     } finally {
@@ -726,7 +775,7 @@ export function StatementImport({ userId, onImported }: Props) {
       source_sha256: sourceHash,
       duplicate_count: result.rows.filter((row) => row.state === 'possible_duplicate').length,
       discrepancy_count: result.rows.filter((row) => row.state === 'needs_review').length,
-      skipped_rows: skippedRowsForImport(result.rows),
+      skipped_rows: [],
     };
 
     try {
@@ -776,26 +825,34 @@ export function StatementImport({ userId, onImported }: Props) {
         await saveStatementImportBatch(batchRecord);
       }
 
+      batchRecord.imported_ids = [...importedIds];
+      batchRecord.skipped_rows = skippedRowsForImport(result.rows, importedRowKeys);
+      await saveStatementImportBatch(batchRecord);
+
       await syncEngine.processQueue(userId);
       const pendingForBatch = (await getPendingMutations(userId)).filter((mutation) => importedIds.includes(mutation.entityId));
-      const syncedCount = importedIds.length - pendingForBatch.length;
-      batchRecord.status = pendingForBatch.length ? 'partial' : 'completed';
+      const syncedCount = Math.max(0, importedIds.length - pendingForBatch.length);
+      batchRecord.status = 'completed';
       await saveStatementImportBatch(batchRecord);
       await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, syncedCount).catch(() => {});
 
-      setHistory((current) => [batchRecord, ...current.filter((item) => item.id !== batchId)]);
+      const updatedHistory = [batchRecord, ...history.filter((item) => item.id !== batchId)];
+      setHistory(updatedHistory);
+      void refreshPendingCounts(updatedHistory);
       setMessage(pendingForBatch.length
-        ? `${syncedCount} rows synced; ${pendingForBatch.length} saved locally and queued for synchronization. Batch ${batchId.slice(0, 8)}.`
+        ? `${syncedCount} of ${importedIds.length} transactions synced; ${pendingForBatch.length} saved locally and queued for cloud sync. Batch ${batchId.slice(0, 8)}.`
         : `Successfully imported ${importedIds.length} transactions into your consolidated ledger. Batch ${batchId.slice(0, 8)}.`);
       onImported(importedIds.length);
     } catch {
       setError(`${importedIds.length} of ${selectedRows.length} transactions were added before an interruption. Successfully added rows remain in your ledger.`);
-      batchRecord.status = 'partial';
+      batchRecord.status = importedIds.length > 0 ? 'completed' : 'partial';
       batchRecord.imported_ids = [...importedIds];
       batchRecord.skipped_rows = skippedRowsForImport(result.rows, importedRowKeys);
       await saveStatementImportBatch(batchRecord);
       await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, importedIds.length).catch(() => {});
-      setHistory((current) => [batchRecord, ...current.filter((item) => item.id !== batchId)]);
+      const updatedHistory = [batchRecord, ...history.filter((item) => item.id !== batchId)];
+      setHistory(updatedHistory);
+      void refreshPendingCounts(updatedHistory);
     } finally {
       setImporting(false);
     }
@@ -811,13 +868,24 @@ export function StatementImport({ userId, onImported }: Props) {
       const response = await fetch(`/api/backend/financial/import-batches/${target.id}/undo`, { method: 'POST' });
       const data = await response.json() as { success?: boolean; removed_count?: number; error?: string };
       if (!response.ok || !data.success) throw new Error(data.error || 'The statement batch could not be undone.');
+
+      // Remove any pending create mutations for this batch before local deletion
+      const pending = await getPendingMutations(userId);
+      for (const mutation of pending) {
+        if (target.imported_ids.includes(mutation.entityId)) {
+          await removePendingMutation(mutation.id).catch(() => {});
+        }
+      }
+
       for (const id of target.imported_ids) {
         try { await syncEngine.deleteTransactionLocalFirst(id, userId); } catch { /* Local deletion fallback */ }
       }
       await syncEngine.processQueue(userId);
       const updated = { ...target, status: 'undone' as const };
       await saveStatementImportBatch(updated);
-      setHistory((current) => current.map((item) => item.id === target.id ? updated : item));
+      const updatedHistory = history.map((item) => item.id === target.id ? updated : item);
+      setHistory(updatedHistory);
+      void refreshPendingCounts(updatedHistory);
       setConfirmUndoId(null);
       setMessage(`${data.removed_count || target.imported_ids.length} transactions were removed from your ledger.`);
       onImported(data.removed_count || target.imported_ids.length);
@@ -1756,86 +1824,112 @@ export function StatementImport({ userId, onImported }: Props) {
           </div>
 
           <div className="space-y-2">
-            {history.slice(0, 5).map((item) => (
-              <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] pt-3 text-xs">
-                <div className="min-w-[240px] flex-1">
-                  <div className="flex items-center gap-2">
-                    <strong className="text-sm font-medium text-[var(--text-primary)]">{item.source}</strong>
-                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      item.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : item.status === 'undone'
-                          ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                    }`}>
-                      {item.status}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                    {new Date(item.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} · {item.imported_ids.length} of {item.detected_count} transactions imported · Batch {item.id.slice(0, 8)}
-                  </p>
+            {history.slice(0, 5).map((item) => {
+              const pendingCount = pendingCountByBatch[item.id] ?? (item.status === 'partial' ? 1 : 0);
+              const isUndone = item.status === 'undone';
+              const isRetrying = retryingBatchId === item.id;
+              const syncedCount = Math.max(0, item.imported_ids.length - pendingCount);
+              const skippedCount = item.skipped_rows?.length ?? Math.max(0, item.detected_count - item.imported_ids.length);
 
-                  {(item.skipped_rows?.length || 0) > 0 && (
-                    <details className="mt-1.5 text-xs">
-                      <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-                        {item.skipped_rows!.length} skipped rows · view reasons
-                      </summary>
-                      <ul className="mt-1.5 space-y-1 pl-4 text-[11px] text-[var(--text-muted)]">
-                        {item.skipped_rows!.map((row, index) => (
-                          <li key={`${row.transaction_date}-${index}`}>
-                            {row.transaction_date} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-
-                  {confirmUndoId === item.id && (
-                    <div className="mt-2.5 flex items-center gap-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-xs">
-                      <span className="text-rose-700 dark:text-rose-300">
-                        Remove all {item.imported_ids.length} transactions in this batch from your active ledger?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void undoBatchFor(item)}
-                        className="rounded-md bg-rose-700 hover:bg-rose-800 text-white px-2.5 py-1 font-medium cursor-pointer"
-                      >
-                        Confirm Undo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmUndoId(null)}
-                        className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[var(--text-secondary)] cursor-pointer"
-                      >
-                        Cancel
-                      </button>
+              return (
+                <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] pt-3 text-xs">
+                  <div className="min-w-[240px] flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong className="text-sm font-medium text-[var(--text-primary)]">{item.source}</strong>
+                      {isUndone ? (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                          Undone
+                        </span>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Imported
+                          </span>
+                          {pendingCount === 0 ? (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                              Synced ({item.imported_ids.length}/{item.imported_ids.length})
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                              {syncedCount} of {item.imported_ids.length} Synced · {pendingCount} Pending Sync
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {new Date(item.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} · Batch <span className="font-mono text-[var(--text-primary)]">{item.id.slice(0, 8)}</span>
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
+                      <span>Detected: <strong className="text-[var(--text-primary)]">{item.detected_count}</strong></span>
+                      <span>·</span>
+                      <span>Imported to Ledger: <strong className="text-emerald-600 dark:text-emerald-400">{item.imported_ids.length}</strong></span>
+                      <span>·</span>
+                      <span>Skipped: <strong className="text-[var(--text-primary)]">{skippedCount}</strong></span>
+                    </div>
 
-                <div className="flex items-center gap-2">
-                  {(item.status === 'partial' || item.status === 'processing') && (
-                    <button
-                      type="button"
-                      disabled={retryingBatchId === item.id}
-                      onClick={() => void retryBatchSync(item)}
-                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50"
-                    >
-                      {retryingBatchId === item.id ? 'Syncing…' : 'Retry Sync'}
-                    </button>
-                  )}
-                  {(item.status === 'completed' || item.status === 'partial') && confirmUndoId !== item.id && (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmUndoId(item.id)}
-                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
-                    >
-                      Undo Batch
-                    </button>
-                  )}
+                    {(item.skipped_rows?.length || 0) > 0 && (
+                      <details className="mt-1.5 text-xs">
+                        <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+                          {item.skipped_rows!.length} skipped rows · view reasons
+                        </summary>
+                        <ul className="mt-1.5 space-y-1 pl-4 text-[11px] text-[var(--text-muted)]">
+                          {item.skipped_rows!.map((row, index) => (
+                            <li key={`${row.transaction_date}-${index}`}>
+                              {row.transaction_date} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+
+                    {confirmUndoId === item.id && (
+                      <div className="mt-2.5 flex items-center gap-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-xs">
+                        <span className="text-rose-700 dark:text-rose-300">
+                          Remove all {item.imported_ids.length} transactions in this batch from your active ledger?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void undoBatchFor(item)}
+                          className="rounded-md bg-rose-700 hover:bg-rose-800 text-white px-2.5 py-1 font-medium cursor-pointer"
+                        >
+                          Confirm Undo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmUndoId(null)}
+                          className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[var(--text-secondary)] cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {!isUndone && pendingCount > 0 && (
+                      <button
+                        type="button"
+                        disabled={isRetrying}
+                        onClick={() => void retryBatchSync(item)}
+                        className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 text-xs font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-100 cursor-pointer disabled:opacity-50"
+                      >
+                        {isRetrying ? 'Syncing…' : 'Retry Sync'}
+                      </button>
+                    )}
+                    {!isUndone && item.imported_ids.length > 0 && confirmUndoId !== item.id && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmUndoId(item.id)}
+                        className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
+                      >
+                        Undo Batch
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </aside>
       )}
@@ -1910,19 +2004,34 @@ function skipReasonLabel(reason: NonNullable<StatementImportBatch['skipped_rows'
 }
 
 async function getExistingTransactions(userId: string): Promise<{ rows: ExistingLedgerRow[]; complete: boolean }> {
-  const rows: ExistingLedgerRow[] = [];
+  const transactionMap = new Map<string, ExistingLedgerRow>();
+
+  // 1. Load from local IndexedDB cache first
+  try {
+    const cached = await getCachedTransactions(userId);
+    for (const tx of cached) {
+      if (tx && tx.id) transactionMap.set(tx.id, tx);
+    }
+  } catch {}
+
+  // 2. Fetch from server and merge
+  let serverComplete = false;
   try {
     for (let page = 1; page <= 100; page++) {
       const response = await fetchTransactions({ page, page_size: 100, sort_by: 'date_desc' });
-      rows.push(...response.items);
-      if (!response.has_more) return { rows, complete: true };
+      for (const item of response.items) {
+        if (item && item.id) transactionMap.set(item.id, item);
+      }
+      if (!response.has_more) {
+        serverComplete = true;
+        break;
+      }
     }
-    return { rows, complete: false };
   } catch {
-    /* Offline operation uses device local cache */
+    /* Offline or backend unreachable; local device cache is retained */
   }
-  if (rows.length) return { rows, complete: false };
-  return { rows: await getCachedTransactions(userId), complete: false };
+
+  return { rows: Array.from(transactionMap.values()), complete: serverComplete };
 }
 
 function safeSourceName(name: string) {

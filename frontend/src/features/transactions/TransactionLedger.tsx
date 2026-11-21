@@ -333,7 +333,22 @@ export function TransactionLedger({
         .then(async (result) => {
           if (querySeqRef.current !== currentSeq) return;
           const items = result.items || [];
-          setTransactions(items);
+
+          // Merge un-synced local transactions from IndexedDB so freshly imported rows are immediately visible
+          const cached = await getCachedTransactions(userId).catch(() => []);
+          const pendingLocals = cached.filter((c) => c.sync_status === 'pending' || (c as { sync_status?: string }).sync_status === 'failed');
+
+          const itemMap = new Map<string, TransactionDTO>();
+          for (const item of items) {
+            itemMap.set(item.id, item);
+          }
+          for (const local of pendingLocals) {
+            if (!itemMap.has(local.id)) {
+              itemMap.set(local.id, local);
+            }
+          }
+          const merged = Array.from(itemMap.values());
+          setTransactions(merged);
           setSnapshotComplete(true);
           setIsStale(false);
           setError(null);

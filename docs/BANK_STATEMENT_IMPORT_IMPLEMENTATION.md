@@ -149,3 +149,78 @@ Implemented in `frontend/src/features/imports/statement-parser.ts`:
 | **Reconciliation Card** | Standalone card displaying opening, closing, debits, credits, and match math | ✅ Verified |
 | **Consolidated Ledger** | All transactions committed with `account_id: null` | ✅ Verified |
 | **Privacy & Security** | Ephemeral password handling; passwords never logged or persisted | ✅ Verified |
+| **Ledger Visibility & Outbox Merge** | Un-synced IndexedDB items merged into ledger state; visible immediately | ✅ Verified |
+| **Multi-Format Date Extraction** | Supports DD/MM/YYYY, DD-MMM-YYYY, Excel serials, leap years, value date fallback | ✅ Verified |
+| **Re-Upload Deduplication** | SHA-256 file hash + reference + composite fingerprint across local and server | ✅ Verified |
+| **Batch Accounting Equality** | `detected === imported + skipped` holds mutually exclusive with zero contradictions | ✅ Verified |
+| **Sync Separation & Trigger Defense** | Batches pre-created to satisfy FK trigger; import status separate from cloud sync | ✅ Verified |
+| **Retry Sync & Safe Undo** | Functional queue drain retry; atomic undo cleans server, outbox, and local stores | ✅ Verified |
+
+---
+
+## 6. Ledger Persistence, Date Accuracy, Duplicate Prevention & Batch Synchronization Resolution
+
+### 6.1 Root Cause Analysis
+
+#### A. Why Imported Transactions Did Not Appear in the Ledger
+1. **Desktop Ledger Overwrite Flaw:** In `frontend/src/features/transactions/TransactionLedger.tsx` (desktop mode `!isPwa`), `loadTransactions()` queried `/api/backend/transactions`. When transactions were pending cloud sync or when the Fastify backend was offline, the server returned only previously synced items. `setTransactions(items)` directly replaced the React state with the server response, completely ignoring local IndexedDB transactions pending synchronization.
+2. **Missing BFF POST Fallback:** In `frontend/src/app/api/backend/transactions/route.ts`, the `GET` route contained a direct Supabase fallback, but the `POST` route had no fallback. If the Fastify service was unreachable or returned 5xx, `POST /api/backend/transactions` failed with 502 Bad Gateway.
+3. **Foreign Key Trigger Violation (`fk_statement_import_item_batch_owner`):** Migration `0030` created trigger `trg_snapshot_statement_import_item`, which inserts into `statement_import_batch_items` on every transaction insertion with an `import_batch_id`. If `statement_import_batches` did not already contain a row for `(id = import_batch_id, user_id)`, the transaction insert failed with a foreign key violation.
+4. **Validation Rejection of Skipped Rows:** In `StatementImport.tsx`, `skipped_rows` previously contained rows with `amount_paise === '0'`. Because backend validation required `amountPaise > 0n`, the batch header creation request was rejected with 400 Bad Request, causing subsequent transaction syncs to fail.
+
+#### B. Why 44 Imported of 60 and 60 Skipped Appeared in the UI
+In `StatementImport.tsx`, `batchRecord.skipped_rows = skippedRowsForImport(result.rows)` was executed *before* the import loop. None of the rows had been imported yet (`importedRowKeys` was empty), so all 60 rows were captured into `skipped_rows`. After importing 44 rows, `batchRecord.skipped_rows` was never updated with the imported keys excluded, producing the contradictory statement that 44 transactions were imported and 60 were skipped out of a 60-row file.
+
+#### C. Extracted Date Inaccuracies
+1. **Locale & Month Ambiguity:** Statements using named months (`15-Nov-2026`, `Nov 15, 2026`) or alternative delimiters (`15.11.2026`, `15 11 2026`) failed recognition.
+2. **Excel Serial Date Failure:** Spreadsheets and tabular exports passing numeric or 5-digit string serial dates (e.g. `45245`) threw parsing errors or defaulted to UTC epoch dates.
+3. **Transaction Date vs Value Date Confusion:** Certain banks placed Value Date ahead of Transaction Date or vice-versa. Value Date was occasionally parsed as the primary transaction date or caused rows to fail parsing when Value Date was absent.
+
+#### D. Re-Upload Duplicate Creation
+1. **Incomplete Ledger Lookup:** In `StatementImport.tsx`, `getExistingTransactions(userId)` only queried the server. If the server returned an empty array or failed (offline/PWA mode), local IndexedDB records were bypassed, returning 0 existing transactions.
+2. **Lack of File Hash Warnings:** Re-uploading an already-imported statement file did not warn the user of previous importation.
+3. **Lack of Ingestion-Level Idempotency:** The backend only validated transaction existence by client `id`, not by `statement_reference` or composite statement fingerprint (`transaction_date`, `amount_paise`, `type`, `description`).
+
+---
+
+### 6.2 Architectural & Implementation Corrections
+
+1. **Ledger Local-First Outbox Merging (`TransactionLedger.tsx`):**
+   - In desktop and mobile modes, `loadTransactions()` retrieves both server records and local IndexedDB records with `sync_status: 'pending'` or `sync_status: 'failed'`.
+   - Merges server and local un-synced items into a single deduplicated map by `id`. Newly imported transactions are visible **immediately** upon import, regardless of network or backend status.
+
+2. **Multi-Format Calendar & Date Normalization (`statement-parser.ts`):**
+   - Extended `parseIndianDate` to handle numeric Excel serials, 5-digit string serials, ISO dates (`YYYY-MM-DD`), named months (`15-Nov-2026`, `Nov 15, 2026`, `15/Nov/26`), and various delimiters (`/`, `-`, `.`, spaces).
+   - Strict calendar validation: leap year checking (`2024-02-29` is accepted, `2025-02-29` is rejected) and day bounds checking (`31/04/2026` is rejected).
+   - `inferTableDateFormat(table, dateCol)` detects whether a statement uses `DMY` or `MDY` by scanning for values > 12.
+   - Distinct column handling: Transaction Date is strictly prioritized as primary ledger date; Value Date is stored separately. Fallback to Value Date occurs only when Transaction Date is absent, with confidence adjusted to `medium`.
+
+3. **Re-Upload & Cross-Source Deduplication:**
+   - **Combined Ledger Lookup:** `getExistingTransactions(userId)` unifies both IndexedDB cache and full server pagination into a single map.
+   - **SHA-256 File Hash Defense:** `readFile` computes the statement SHA-256 digest and warns if the identical file was previously imported, indicating the original batch ID and import date while still checking every row against the ledger.
+   - **Backend Idempotency:** In `transaction.service.ts` and in the Next.js BFF fallback, insertions with an existing `statement_reference` or matching composite fingerprint (`transaction_date`, `amount_paise`, `type`, `description`) return the existing transaction as a replay without duplicating.
+
+4. **Exact Batch Accounting & Mutually Exclusive Metrics:**
+   - In `StatementImport.tsx`, `skipped_rows` is computed **after** the import loop using `skippedRowsForImport(result.rows, importedRowKeys)`.
+   - The accounting equation `detected_count === imported_count + skipped_count` strictly holds across all batches (e.g., 60 detected = 44 imported + 16 skipped).
+   - Skipped rows validation in `statement-skip-history.ts` ensures only positive paise values (`amountPaise > 0n`) are transmitted.
+
+5. **Separation of Import Status vs Cloud Sync Status & UI Redesign:**
+   - Separated file import status (`Imported` / `Undone`) from cloud synchronization status (`Synced to Cloud (44/44)` or `X of Y Synced · Z Pending Sync`).
+   - Redesigned "Past Statement Batches" cards with clear accounting metrics, detailed skip-reason inspection, functional "Retry Sync" action, and safe "Undo Batch" confirmation.
+
+6. **Direct Supabase BFF Fallback & Foreign Key Defense:**
+   - Added direct Supabase PostgreSQL fallback to `POST /api/backend/transactions` and `frontend/src/app/api/backend/[...segments]/route.ts`.
+   - Automatically pre-creates `statement_import_batches` row before inserting transactions with `import_batch_id`, satisfying `fk_statement_import_item_batch_owner` and eliminating trigger failures.
+   - "Undo Batch" calls the PostgreSQL RPC `undo_statement_import_batch`, purges pending outbox mutations for that batch, and soft-deletes transactions locally.
+
+---
+
+### 6.3 Comprehensive Verification Results
+
+- **New Test Suite:** `frontend/tests/statement-import-ledger-sync-recovery.test.ts` (12 / 12 tests passed).
+- **Frontend Test Suite:** 692 / 692 tests passed across 165 test suites.
+- **Backend Test Suite:** 228 / 228 tests passed across 23 test suites.
+- **Global Recursive Typecheck:** 0 TypeScript errors across the entire monorepo (`@arth/contracts`, `@arth/backend`, `@arth/frontend`).
+- **Production Build:** `pnpm build` completed successfully; all 37 application routes and service worker generated.
+

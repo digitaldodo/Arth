@@ -14,9 +14,27 @@ export function skippedRowsForImport(rows: ParsedStatementRow[], importedKeys: S
     else if (row.state === 'ambiguous') reason = 'ambiguous';
     else if (row.state === 'needs_review') reason = 'balance_mismatch';
     else reason = row.selected ? 'import_error' : 'deselected';
-    let amountPaise: string;
-    try { amountPaise = parseINRToPaise(row.amount).toString(); } catch { amountPaise = '0'; }
-    skipped.push({ transaction_date: row.date, amount_paise: amountPaise, state: row.state, reason });
+
+    let amountPaise = '0';
+    try {
+      if (typeof row.amountPaise === 'number' && Number.isFinite(row.amountPaise)) {
+        amountPaise = BigInt(Math.max(0, Math.round(row.amountPaise))).toString();
+      } else {
+        const cleaned = String(row.amount ?? '').replace(/^-/, '').trim();
+        const parsed = parseINRToPaise(cleaned);
+        amountPaise = parsed >= 0n ? parsed.toString() : '0';
+      }
+    } catch {
+      amountPaise = '0';
+    }
+
+    if (BigInt(amountPaise) <= 0n) continue;
+
+    const state: ParsedStatementRow['state'] = (row.state === 'possible_duplicate' || row.state === 'ambiguous' || row.state === 'needs_review' || row.state === 'new')
+      ? row.state
+      : 'needs_review';
+
+    skipped.push({ transaction_date: row.date, amount_paise: amountPaise, state, reason });
   }
   return skipped;
 }

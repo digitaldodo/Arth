@@ -118,33 +118,119 @@ export function parseIndianAmount(value: unknown): { amount: string; amountPaise
   return { amount: `${negative ? '-' : ''}${normalizedAmount}`, amountPaise: paise };
 }
 
-export function parseIndianDate(value: unknown): string {
+const MONTH_MAP: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
+export function parseIndianDate(value: unknown, formatPreference: 'dmy' | 'mdy' = 'dmy'): string {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return validDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
   }
+
+  // Handle native Excel numeric serial dates (e.g. 45245)
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 1000 && value <= 100000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const d = new Date(epoch.getTime() + Math.round(value * 86400 * 1000));
+    return validDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+
   const text = normal(value);
   if (!text) throw new Error('Date value is missing or empty');
+
+  // Excel serial date passed as 5-digit string without punctuation
+  if (/^\d{5}$/.test(text)) {
+    const num = Number(text);
+    if (num >= 20000 && num <= 90000) {
+      const epoch = new Date(Date.UTC(1899, 11, 30));
+      const d = new Date(epoch.getTime() + Math.round(num * 86400 * 1000));
+      return validDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+    }
+  }
+
+  // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
   const iso = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/.exec(text);
   if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
-  const numeric = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})(?!\d)/.exec(text);
-  if (numeric) {
-    const year = Number(numeric[3]) < 100 ? 2000 + Number(numeric[3]) : Number(numeric[3]);
-    return validDate(year, Number(numeric[2]), Number(numeric[1]));
-  }
-  const named = /^(\d{1,2})[-\s/]([A-Za-z]{3,})[-\s/](\d{4}|\d{2})(?!\d)/.exec(text);
+
+  // 2. Named month format: 15-Nov-2026, 15/Nov/2026, 15 Nov 2026, 15.Nov.2026, 15-Nov-26
+  const named = /^(\d{1,2})[-\s/.]?([A-Za-z]{3,})[-\s/.]?(\d{4}|\d{2})(?!\d)/i.exec(text);
   if (named) {
-    const month = new Date(`${named[2].slice(0, 3)} 1, 2000`).getMonth() + 1;
-    if (!Number.isFinite(month)) throw new Error('Date month is invalid');
+    const monthKey = named[2].slice(0, 3).toLowerCase();
+    const month = MONTH_MAP[monthKey];
+    if (!month) throw new Error('Date month is invalid');
     const year = Number(named[3]) < 100 ? 2000 + Number(named[3]) : Number(named[3]);
     return validDate(year, month, Number(named[1]));
   }
+
+  // 3. Named month prefix: Nov 15, 2026 or November 15 2026
+  const namedPrefix = /^([A-Za-z]{3,})[-\s/.]?(\d{1,2})[,\s/.-]+(\d{4}|\d{2})(?!\d)/i.exec(text);
+  if (namedPrefix) {
+    const monthKey = namedPrefix[1].slice(0, 3).toLowerCase();
+    const month = MONTH_MAP[monthKey];
+    if (!month) throw new Error('Date month is invalid');
+    const year = Number(namedPrefix[3]) < 100 ? 2000 + Number(namedPrefix[3]) : Number(namedPrefix[3]);
+    return validDate(year, month, Number(namedPrefix[2]));
+  }
+
+  // 4. Numeric format: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, DD MM YYYY, DD/MM/YY, etc.
+  const numeric = /^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4}|\d{2})(?!\d)/.exec(text);
+  if (numeric) {
+    const year = Number(numeric[3]) < 100 ? 2000 + Number(numeric[3]) : Number(numeric[3]);
+    let day = Number(numeric[1]);
+    let month = Number(numeric[2]);
+
+    if (formatPreference === 'mdy' || (month > 12 && day <= 12)) {
+      const temp = day;
+      day = month;
+      month = temp;
+    }
+
+    return validDate(year, month, day);
+  }
+
   throw new Error('Date format is not recognized');
 }
 
 function validDate(year: number, month: number, day: number): string {
+  if (year < 1970 || year > 2100) throw new Error('Year is outside reasonable range (1970-2100)');
+  if (month < 1 || month > 12) throw new Error('Month is invalid');
+  if (day < 1 || day > 31) throw new Error('Day is invalid');
   const d = new Date(Date.UTC(year, month - 1, day));
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) throw new Error('Date is invalid');
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    throw new Error(`Invalid calendar date: ${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`);
+  }
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+export function inferTableDateFormat(table: string[][], dateCol: number): 'dmy' | 'mdy' {
+  if (dateCol < 0) return 'dmy';
+  let hasFirstAbove12 = false;
+  let hasSecondAbove12 = false;
+  for (let i = 1; i < table.length; i++) {
+    const row = table[i];
+    if (!row || dateCol >= row.length) continue;
+    const text = String(row[dateCol] ?? '').trim();
+    const match = /^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4}|\d{2})/.exec(text);
+    if (match) {
+      const n1 = Number(match[1]);
+      const n2 = Number(match[2]);
+      if (n1 > 12 && n2 <= 12) hasFirstAbove12 = true;
+      if (n2 > 12 && n1 <= 12) hasSecondAbove12 = true;
+    }
+  }
+  if (hasFirstAbove12 && !hasSecondAbove12) return 'dmy';
+  if (hasSecondAbove12 && !hasFirstAbove12) return 'mdy';
+  return 'dmy';
 }
 
 export function parseCsv(text: unknown): string[][] {
@@ -413,7 +499,11 @@ export function normalizeStatementTable(
   const headers = safeTable[headerIndex].map(keyText);
   const col = (candidates: string[]) => findHeaderColumn(headers, candidates);
   const mapped = (key: keyof StatementColumnMapping, fallback: number) => mapping ? mapping[key] as number | null : fallback;
-  const dateCol = mapped('date', col(adapter.dateHeaders)) ?? -1, valueDateCol = mapped('valueDate', col(['value date', 'value dt', 'val date'])) ?? -1;
+  const explicitDateCol = mapped('date', col(adapter.dateHeaders)) ?? -1;
+  const valueDateCol = mapped('valueDate', col(['value date', 'value dt', 'val date'])) ?? -1;
+  const isValueDateFallback = (explicitDateCol < 0 && valueDateCol >= 0) ||
+    (explicitDateCol >= 0 && /value\s*d/i.test(headers[explicitDateCol] ?? ''));
+  const dateCol = isValueDateFallback ? (explicitDateCol >= 0 ? explicitDateCol : valueDateCol) : explicitDateCol;
   const descCol = mapped('description', col(adapter.descriptionHeaders)) ?? -1;
   const debitCol = mapped('debit', col(adapter.debitHeaders)) ?? -1, creditCol = mapped('credit', col(adapter.creditHeaders)) ?? -1;
   const amountCol = mapped('amount', col(['amount', 'amount inr', 'amount (inr)', 'transaction amount', 'txn amount', 'spends', 'net amount'])) ?? -1;
@@ -434,6 +524,7 @@ export function normalizeStatementTable(
     };
   }
   if (debitCol < 0 && creditCol < 0 && amountCol < 0) warnings.push('No debit, credit, or amount column was found. Rows will need manual review.');
+  const dateFormatPreference = inferTableDateFormat(safeTable, dateCol);
   const rows: ParsedStatementRow[] = [];
   let prior: ParsedStatementRow | null = null;
   let explicitOpeningBalancePaise: string | null = null;
@@ -485,29 +576,59 @@ export function normalizeStatementTable(
     }
 
     const rawDate = cellStr(dateCol);
+    const rawValueDate = cellStr(valueDateCol);
 
-    // Multi-line continuation: row has no date but follows an active transaction
-    if (!rawDate && prior) {
-      const continuationText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
-      if (continuationText && !isStatementMetadataOrSummary(continuationText)) {
-        prior.description = `${prior.description || ''} ${continuationText}`.trim();
-        prior.confidence = 'medium';
-        // Extract reference/UTR from continuation text if prior row is missing reference
-        if (!prior.reference) {
-          const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(continuationText);
-          if (refMatch) prior.reference = refMatch[1];
+    // Multi-line continuation: row has no date AND no amounts, but follows an active transaction
+    if (!rawDate && !rawValueDate && prior) {
+      const hasDebit = debitCol >= 0 && Boolean(cellStr(debitCol));
+      const hasCredit = creditCol >= 0 && Boolean(cellStr(creditCol));
+      const hasAmt = amountCol >= 0 && Boolean(cellStr(amountCol));
+      if (!hasDebit && !hasCredit && !hasAmt) {
+        const continuationText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
+        if (continuationText && !isStatementMetadataOrSummary(continuationText)) {
+          prior.description = `${prior.description || ''} ${continuationText}`.trim();
+          prior.confidence = 'medium';
+          // Extract reference/UTR from continuation text if prior row is missing reference
+          if (!prior.reference) {
+            const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(continuationText);
+            if (refMatch) prior.reference = refMatch[1];
+          }
         }
+        continue;
       }
-      continue;
     }
 
     try {
-      const date = parseIndianDate(rawDate);
+      let date: string;
+      let usedValueDateFallback = isValueDateFallback;
+      if (!isValueDateFallback && rawDate) {
+        try {
+          date = parseIndianDate(rawDate, dateFormatPreference);
+        } catch (dateErr) {
+          if (rawValueDate) {
+            try {
+              date = parseIndianDate(rawValueDate, dateFormatPreference);
+              usedValueDateFallback = true;
+            } catch {
+              throw dateErr;
+            }
+          } else {
+            throw dateErr;
+          }
+        }
+      } else if (rawValueDate) {
+        date = parseIndianDate(rawValueDate, dateFormatPreference);
+        usedValueDateFallback = true;
+      } else if (rawDate) {
+        date = parseIndianDate(rawDate, dateFormatPreference);
+      } else {
+        throw new Error('Date value is missing or empty');
+      }
+
       let valueDate: string | null = null;
       let valueDateProblem = false;
-      const rawValueDate = cellStr(valueDateCol);
       if (rawValueDate) {
-        try { valueDate = parseIndianDate(rawValueDate); }
+        try { valueDate = parseIndianDate(rawValueDate, dateFormatPreference); }
         catch { valueDateProblem = true; warnings.push(`Row ${index + 1}: value date could not be read; the transaction is flagged for review.`); }
       }
 
@@ -714,7 +835,7 @@ export function normalizeStatementTable(
         balance: balanceValue,
         state,
         classification,
-        confidence: debitCol >= 0 || creditCol >= 0 ? 'high' : 'medium',
+        confidence: (debitCol >= 0 || creditCol >= 0) && !usedValueDateFallback ? 'high' : 'medium',
         selected: shouldSelect,
         categoryId: rawCategory,
         necessity: parsedNecessity,

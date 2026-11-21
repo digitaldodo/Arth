@@ -315,6 +315,57 @@ export class SupabaseTransactionService implements ITransactionService {
       );
     }
 
+    // 1b. Check duplicate for statement import by statement reference
+    if (input.statement_reference) {
+      const refRes = await client
+        .from('transactions')
+        .select(this.getSelectColumns(true))
+        .eq('user_id', userId)
+        .eq('statement_reference', input.statement_reference)
+        .eq('amount_paise', input.amount_paise.toString())
+        .eq('type', input.type)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (refRes.data) {
+        const existingRef = refRes.data as unknown as StoredTransactionRow;
+        const catName = Array.isArray(existingRef.categories)
+          ? (existingRef.categories[0] as { name?: string })?.name
+          : (existingRef.categories as { name?: string })?.name;
+        return {
+          transaction: mapToTransactionDTO(existingRef as unknown as StoredTransactionRecord, catName),
+          isReplay: true,
+        };
+      }
+    }
+
+    // 1c. Ensure import_batch_id exists if specified to prevent foreign key trigger error
+    if (input.import_batch_id) {
+      const batchCheck = await client
+        .from('statement_import_batches')
+        .select('id')
+        .eq('id', input.import_batch_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!batchCheck.data) {
+        await client
+          .from('statement_import_batches')
+          .insert({
+            id: input.import_batch_id,
+            user_id: userId,
+            source_name: 'Statement Import',
+            source_format: 'pdf',
+            parser_id: input.parser_version ? input.parser_version.split(':')[0] : 'generic',
+            parser_version: '1',
+            status: 'processing',
+            detected_count: 1,
+            imported_count: 0,
+            skipped_count: 0,
+          });
+      }
+    }
+
     // 2. Validate category belongs to user and matches transaction type (if category_id is provided)
     let categoryName: string | undefined = undefined;
     if (input.category_id) {
