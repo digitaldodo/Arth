@@ -25,7 +25,7 @@ const GENERIC_SEGMENTS = new Set([
 ]);
 
 const PRESERVED_ACRONYMS = new Set([
-  'HDFC', 'ICICI', 'SBI', 'PNB', 'AXIS', 'KOTAK', 'ATM', 'POS', 'UPI', 'NEFT', 'IMPS', 'IIT', 'IIM', 'AI', 'INR', 'USD'
+  'HDFC', 'ICICI', 'SBI', 'PNB', 'AXIS', 'KOTAK', 'ATM', 'POS', 'UPI', 'NEFT', 'IMPS', 'IIT', 'IIM', 'AI', 'RS', 'INR', 'USD'
 ]);
 
 /**
@@ -42,10 +42,6 @@ export function toCleanTitleCase(input: string): string {
       const upper = word.toUpperCase();
       if (PRESERVED_ACRONYMS.has(upper)) {
         return upper;
-      }
-      // Keep short all-caps acronyms (2-3 chars, e.g. "RS", "ATM", "POS", "IIT")
-      if (/^[A-Z]{2,3}$/.test(word)) {
-        return word;
       }
       // Single letter uppercase (e.g. "R", "S")
       if (/^[A-Za-z]$/.test(word)) {
@@ -89,14 +85,16 @@ export function extractCounterpartyAndPaymentMethod(
     };
   }
 
-  // 1. Remove URLs, GST numbers, phone numbers, and masked account/card digits
+  // 1. Remove trailing disclaimer/footer text, URLs, GST numbers, phone numbers, and masked account/card digits
   let cleaned = raw
+    // Bank footer/disclaimer text that may have slipped into narration
+    .replace(/\b(?:closing\s*bal(?:ance)?\s*includes|funds?\s*(?:on\s*hold|held)|unclear(?:ed)?\s*funds?|registered\s*office|corporate\s*office|branch\s*(?:address|phone|email)).*$/i, '')
     // URLs
     .replace(/https?:\/\/[^\s]+|www\.[^\s]+/gi, '')
     // GST Numbers (15 alphanumeric characters)
     .replace(/\b\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}\b/gi, '')
-    // Masked identifiers like 4123********1234 or XXXXXXXX1234
-    .replace(/(?:\d{4}|\b)[\*xX]{4,}(?:\d{4}|\b)/g, '')
+    // Masked identifiers like 4123********1234, ********, or XXXXXXXX1234 (no \b anchor so non-word boundary like -*** matches)
+    .replace(/\d*[\*xX]{3,}\d*/g, '')
     // Bank standard disclaimers
     .replace(/\b(?:Txn Ref|Ref No|Reference No|UTR|URN|RRN|Chq No|Cheque No)[:\s]*[A-Za-z0-9]+/gi, '')
     // Trailing time stamps like 14:30 or 14:30:22
@@ -132,6 +130,7 @@ export function extractCounterpartyAndPaymentMethod(
   if (isUpi) {
     // Parse UPI components typically separated by '-' or '/'
     // E.g.: UPI-R S DAIRY-9876543210@paytm-UPI-123456789012-PAYMENT
+    // E.g.: UPI-AUNTY KE SPECIAL SAM-********-9876
     // E.g.: UPI/DR/432198765432/HARSHIT YADAV/PYTM/harshit@paytm/Payment
     // E.g.: UPI/P2M/329871029381/STARBUCKS COFFEE/HDFC/starbucks@hdfc
     const segments = cleaned
@@ -152,6 +151,10 @@ export function extractCounterpartyAndPaymentMethod(
       if (seg.includes('@')) return false;
       // Must contain at least one letter
       if (!/[A-Za-z]/.test(seg)) return false;
+      // Must not be masked identifiers or asterisks
+      if (/[\*xX]{2,}/.test(seg)) return false;
+      // Skip disclaimer text
+      if (/(?:closing\s*bal|funds?\s*(?:on\s*hold|held)|unclear|gstin|regd|office|branch|disclaimer|http|www\.)/i.test(seg)) return false;
       // Must not be a short bank code (e.g. HDFC, ICIC, SBIN, UTIB)
       if (/^(?:HDFC|ICIC|SBIN|UTIB|KKBK|PUNB|CNRB|YESB|BARB|MAHB|IDIB|UBIN)$/i.test(seg)) return false;
       return true;

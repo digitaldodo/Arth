@@ -17,6 +17,19 @@ describe('UPI Intelligence and Counterparty Extraction', () => {
     assert.equal(result.merchantKey, 'r s dairy');
   });
 
+  it('correctly cleans UPI merchant with masked asterisks and trailing bank disclaimers', () => {
+    const raw = 'UPI-AUNTY KE SPECIAL SAM-********9876-PAYMENT Closing balance includes funds on hold unclear funds GSTIN: 27AAACH';
+    const result = extractCounterpartyAndPaymentMethod(raw, 'expense');
+
+    assert.equal(result.isUpi, true);
+    assert.equal(result.paymentMethod, 'upi');
+    assert.equal(result.cleanName, 'Aunty Ke Special Sam');
+    assert.equal(result.cleanName.includes('Closing'), false);
+    assert.equal(result.cleanName.includes('funds on hold'), false);
+    assert.equal(result.cleanName.includes('GSTIN'), false);
+    assert.equal(result.cleanName.includes('***'), false);
+  });
+
   it('correctly handles UPI slash format with DR/RRN and person name', () => {
     const raw = 'UPI/DR/432198765432/HARSHIT YADAV/PYTM/harshit@paytm/Payment';
     const result = extractCounterpartyAndPaymentMethod(raw, 'expense');

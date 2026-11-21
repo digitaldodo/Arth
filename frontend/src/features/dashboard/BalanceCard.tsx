@@ -77,12 +77,12 @@ export function BalanceCard({
                 Total Available Balance
               </span>
               {!isConfigured && !loading && !error && (
-                <Badge variant="warning" size="xs">
-                  Not Configured
+                <Badge variant="neutral" size="xs">
+                  Starting Balance Not Set
                 </Badge>
               )}
               {error && !balances && (
-                <Badge variant="error" size="xs">
+                <Badge variant="neutral" size="xs">
                   Unavailable
                 </Badge>
               )}
@@ -100,11 +100,11 @@ export function BalanceCard({
             <div className="text-2xl sm:text-3xl lg:text-4xl font-mono font-bold tracking-tight text-[var(--text-primary)]">
               {loading && !balances ? (
                 <div className="h-9 w-44 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
-              ) : balances ? (
+              ) : balances && isConfigured ? (
                 balances.formatted_total_available
               ) : error ? (
-                <span className="text-base sm:text-lg font-sans font-medium text-rose-700 dark:text-rose-400">
-                  Calculation error
+                <span className="text-base sm:text-lg font-sans font-medium text-[var(--text-secondary)]" title="Calculation error">
+                  Unavailable
                 </span>
               ) : isOffline ? (
                 'Unavailable offline'
@@ -119,8 +119,14 @@ export function BalanceCard({
             <button
               type="button"
               disabled={!balances || loading}
-              onClick={() => setIsTransferOpen(true)}
-              title={!balances ? 'Balances unavailable' : undefined}
+              onClick={() => {
+                if (!isConfigured) {
+                  setIsConfigureOpen(true);
+                } else {
+                  setIsTransferOpen(true);
+                }
+              }}
+              title={!balances ? 'Balances unavailable' : !isConfigured ? 'Configure starting balances first' : undefined}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⇄</span>
@@ -129,8 +135,14 @@ export function BalanceCard({
             <button
               type="button"
               disabled={!balances || loading}
-              onClick={() => setIsAdjustOpen(true)}
-              title={!balances ? 'Balances unavailable' : undefined}
+              onClick={() => {
+                if (!isConfigured) {
+                  setIsConfigureOpen(true);
+                } else {
+                  setIsAdjustOpen(true);
+                }
+              }}
+              title={!balances ? 'Balances unavailable' : !isConfigured ? 'Configure starting balances first' : undefined}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⚙</span>
@@ -149,18 +161,22 @@ export function BalanceCard({
         {/* Balance-specific error notice */}
         {error && !balances && (
           <div
-            role="alert"
-            className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg text-xs text-rose-800 dark:text-rose-300 flex items-center justify-between gap-3"
+            role="status"
+            className="p-3.5 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-secondary)] flex items-center justify-between gap-3 shadow-2xs"
           >
             <div className="space-y-0.5">
-              <span className="font-semibold block">Failed to calculate account balances</span>
-              <span className="text-[11px] opacity-90">{error}</span>
+              <span className="font-semibold text-[var(--text-primary)] block">
+                Consolidated balance temporarily unavailable
+              </span>
+              <span className="text-[11px] text-[var(--text-muted)] block">
+                Failed to calculate account balances: {error}. Your income, expenses, and transaction ledger continue to operate normally.
+              </span>
             </div>
             {onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
-                className="px-2.5 py-1 text-xs font-semibold bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors shrink-0 cursor-pointer"
+                className="px-2.5 py-1 text-xs font-semibold border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded transition-colors shrink-0 cursor-pointer"
               >
                 Retry
               </button>
@@ -216,8 +232,10 @@ export function BalanceCard({
             <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--text-primary)]">
               {loading && !balances ? (
                 <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
-              ) : (
+              ) : isConfigured ? (
                 balances?.formatted_current_cash || '—'
+              ) : (
+                '—'
               )}
             </div>
           </div>
@@ -233,13 +251,15 @@ export function BalanceCard({
                   Online
                 </Badge>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)]">Bank accounts &amp; digital funds</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Bank accounts, UPI &amp; digital funds</p>
             </div>
             <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--text-primary)]">
               {loading && !balances ? (
                 <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
-              ) : (
+              ) : isConfigured ? (
                 balances?.formatted_current_online || '—'
+              ) : (
+                '—'
               )}
             </div>
           </div>

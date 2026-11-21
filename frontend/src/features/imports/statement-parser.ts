@@ -400,6 +400,22 @@ export function computeStatementSummary(
   };
 }
 
+export function isBankFooterOrDisclaimer(text: unknown): boolean {
+  if (text == null) return false;
+  const clean = String(text).trim();
+  if (!clean) return false;
+  return /(?:closing\s*bal(?:ance)?\s*includes|funds?\s*(?:on\s*hold|held)|unclear(?:ed)?\s*funds?|lien\b|gstin\b|registered\s*office|corporate\s*office|branch\s*(?:address|phone|email|code)|https?:\/\/|www\.|contents\s*of\s*this\s*statement|computer\s*generated|important\s*(?:notice|information)|disclaimer\b|nomination\s*registered|end\s*of\s*(?:this\s*)?statement|statement\s*summary|total\s*(?:withdrawal|deposit|debit|credit)s?)/i.test(clean);
+}
+
+export function stripDisclaimerText(text: string): string {
+  if (!text) return '';
+  const idx = text.search(/\b(?:closing\s*bal(?:ance)?\s*includes|funds?\s*(?:on\s*hold|held)|unclear(?:ed)?\s*funds?|gstin\b|registered\s*office|corporate\s*office|www\.|https?:\/\/|computer\s*generated|end\s*of\s*statement|statement\s*summary)/i);
+  if (idx >= 0) {
+    return text.slice(0, idx).trim();
+  }
+  return text.trim();
+}
+
 export const STATEMENT_METADATA_REGEX =
   /^(?:opening\s*bal(?:ance)?|closing\s*bal(?:ance)?|balance\s*b\/?f|balance\s*c\/?f|brought\s*forward|carried\s*forward|available\s*balance|running\s*balance|balance\s*summary|total\s*withdrawal[s]?|total\s*deposit[s]?|total\s*debit[s]?|total\s*credit[s]?|statement\s*summary|account\s*summary|od\s*limit|overdraft\s*limit|statement\s*of\s*account|account\s*statement|customer\s*id|account\s*no|nomination\s*registered|page\s*\d+\s*(?:of|\/)\s*\d+|computer\s*generated|registered\s*office|gstin|ifsc|micr|branch\s*details|end\s*of\s*(?:statement|personal))/i;
 
@@ -408,7 +424,8 @@ export function isStatementMetadataOrSummary(text: unknown): boolean {
   const clean = String(text).trim();
   if (!clean) return false;
   return STATEMENT_METADATA_REGEX.test(clean) ||
-    /^(?:page\s*\d+|statement\s*period|generated\s*on|downloaded\s*on|rtgs\/neft\s*ifsc)/i.test(clean);
+    /^(?:page\s*\d+|statement\s*period|generated\s*on|downloaded\s*on|rtgs\/neft\s*ifsc)/i.test(clean) ||
+    isBankFooterOrDisclaimer(clean);
 }
 
 export interface PdfTextItem {
@@ -593,11 +610,12 @@ export function normalizeStatementTable(
     };
 
     const fullRowText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
-    const rawDescription = cellStr(descCol);
+    const rawDescription = stripDisclaimerText(cellStr(descCol));
     const isMetadata = isStatementMetadataOrSummary(fullRowText) || (rawDescription ? isStatementMetadataOrSummary(rawDescription) : false);
 
     // If row contains opening or closing balance metadata, extract statement-level balances and never import as transaction
     if (isMetadata) {
+      prior = null;
       if (/opening\s*bal|brought\s*forward|balance\s*b\/?f/i.test(fullRowText)) {
         for (const cell of values) {
           try {
@@ -634,14 +652,22 @@ export function normalizeStatementTable(
       const hasAmt = amountCol >= 0 && Boolean(cellStr(amountCol));
       if (!hasDebit && !hasCredit && !hasAmt) {
         const continuationText = values.filter(Boolean).map((v) => String(v).trim()).filter(Boolean).join(' ');
-        if (continuationText && !isStatementMetadataOrSummary(continuationText)) {
-          prior.description = `${prior.description || ''} ${continuationText}`.trim();
+        if (!continuationText || isStatementMetadataOrSummary(continuationText) || isBankFooterOrDisclaimer(continuationText)) {
+          prior = null;
+          continue;
+        }
+        const cleanContinuation = stripDisclaimerText(continuationText);
+        if (cleanContinuation) {
+          prior.description = `${prior.description || ''} ${cleanContinuation}`.trim();
           prior.confidence = 'medium';
           // Extract reference/UTR from continuation text if prior row is missing reference
           if (!prior.reference) {
-            const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(continuationText);
+            const refMatch = /(?:(?:ref(?:erence)?|utr|rrn|chq|cheque)[:\s/=-]+|upi\/(?:cr|dr)\/)([a-zA-Z0-9]{6,30})/i.exec(cleanContinuation);
             if (refMatch) prior.reference = refMatch[1];
           }
+        }
+        if (cleanContinuation !== continuationText) {
+          prior = null;
         }
         continue;
       }

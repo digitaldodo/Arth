@@ -93,7 +93,6 @@ BEGIN
     FROM public.transactions
     WHERE user_id = v_user_id
       AND deleted_at IS NULL
-      AND account_id IS NULL
       AND recorded_at > v_configured_at;
 
     SELECT
@@ -113,7 +112,6 @@ BEGIN
     FROM public.balance_movements
     WHERE user_id = v_user_id
       AND deleted_at IS NULL
-      AND account_id IS NULL
       AND recorded_at > v_configured_at;
   ELSE
     -- Unconfigured account: zero starting baseline, evaluate all active transactions and movements
@@ -132,8 +130,7 @@ BEGIN
       v_online_expense
     FROM public.transactions
     WHERE user_id = v_user_id
-      AND deleted_at IS NULL
-      AND account_id IS NULL;
+      AND deleted_at IS NULL;
 
     SELECT
       coalesce(sum(amount_paise) FILTER (WHERE movement_type = 'transfer' AND to_method = 'cash'), 0),
@@ -151,8 +148,7 @@ BEGIN
       v_online_adjustments
     FROM public.balance_movements
     WHERE user_id = v_user_id
-      AND deleted_at IS NULL
-      AND account_id IS NULL;
+      AND deleted_at IS NULL;
   END IF;
 
   -- 3. Calculate current net balances
@@ -204,12 +200,7 @@ BEGIN
   -- 1. Extract target user identity
   v_user_id := coalesce(NEW.user_id, OLD.user_id);
 
-  -- 2. Skip validation if the transaction is linked to an account (managed by account balances)
-  IF NEW.account_id IS NOT NULL THEN
-    RETURN NEW;
-  END IF;
-
-  -- 3. Fetch user baseline configuration status
+  -- 2. Fetch user baseline configuration status
   SELECT
     coalesce(balances_configured, FALSE),
     balances_configured_at,
@@ -223,12 +214,12 @@ BEGIN
   FROM public.profiles
   WHERE id = v_user_id;
 
-  -- 4. Invariant: Unconfigured accounts do NOT enforce non-negative floor
+  -- 3. Invariant: Unconfigured accounts do NOT enforce non-negative floor
   IF v_configured IS NOT TRUE THEN
     RETURN NEW;
   END IF;
 
-  -- 5. Compute available balances from all OTHER active records
+  -- 4. Compute available balances from all OTHER active records
   SELECT
     coalesce(sum(amount_paise) FILTER (WHERE type = 'income' AND payment_method = 'cash'), 0),
     coalesce(sum(amount_paise) FILTER (WHERE type = 'expense' AND payment_method = 'cash'), 0),
@@ -242,7 +233,6 @@ BEGIN
   FROM public.transactions
   WHERE user_id = v_user_id
     AND deleted_at IS NULL
-    AND account_id IS NULL
     AND (v_configured_at IS NULL OR recorded_at > v_configured_at)
     AND (TG_OP <> 'UPDATE' OR id <> NEW.id);
 

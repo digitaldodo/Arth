@@ -1338,11 +1338,11 @@ export function TransactionLedger({
                   role="button"
                   tabIndex={0}
                   aria-label={`Transaction ${txn.description || txn.category_name || 'entry'}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}`}
-                  onClick={() => setSelectedTransaction(txn)}
+                  onClick={() => handleStartInlineEdit(txn)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedTransaction(txn);
+                      handleStartInlineEdit(txn);
                     }
                   }}
                   className="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden transition-all cursor-pointer group"
@@ -1380,7 +1380,7 @@ export function TransactionLedger({
                       </div>
                     </div>
 
-                    <div className="text-right flex items-center gap-2">
+                    <div className="text-right flex items-center gap-1.5 shrink-0">
                       <div>
                         <div
                           className={`font-mono text-sm font-semibold tracking-tight tabular-nums ${
@@ -1399,8 +1399,19 @@ export function TransactionLedger({
                       </div>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTransaction(txn);
+                        }}
+                        className="px-2 py-1 rounded text-[11px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                        title="View advanced details"
+                      >
+                        Info
+                      </button>
+                      <button
+                        type="button"
                         onClick={(e) => handleStartInlineEdit(txn, e)}
-                        className="px-2 py-1 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                        className="px-2.5 py-1 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:border-[var(--border-strong)] cursor-pointer"
                         aria-label={`Edit ${txn.description || 'transaction'}`}
                       >
                         Edit
@@ -1457,10 +1468,10 @@ export function TransactionLedger({
                       )}
                     </div>
 
-                    {/* Col 11-12: Amount and Edit Action */}
-                    <div className="col-span-2 text-right flex items-center justify-end gap-2">
+                    {/* Col 11-12: Amount and Actions */}
+                    <div className="col-span-2 text-right flex items-center justify-end gap-1.5">
                       <div
-                        className={`font-mono text-base font-semibold tracking-tight tabular-nums ${
+                        className={`font-mono text-base font-semibold tracking-tight tabular-nums mr-1 ${
                           isIncome
                             ? 'text-[var(--income-fg)]'
                             : 'text-[var(--text-primary)]'
@@ -1470,8 +1481,19 @@ export function TransactionLedger({
                       </div>
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTransaction(txn);
+                        }}
+                        className="px-2 py-0.5 rounded text-[11px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                        title="View raw statement reference & provenance"
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
                         onClick={(e) => handleStartInlineEdit(txn, e)}
-                        className="px-2 py-0.5 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all cursor-pointer opacity-70 group-hover:opacity-100"
+                        className="px-2.5 py-0.5 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all cursor-pointer opacity-80 group-hover:opacity-100"
                         aria-label={`Edit ${txn.description || 'transaction'}`}
                       >
                         Edit

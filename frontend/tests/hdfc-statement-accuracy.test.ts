@@ -221,3 +221,25 @@ test('7. Signed Amounts and POS Debit Reversals: Negative withdrawal increases b
   // Verify Statement Reconciliation: 5641.17 - 500.00 + 101.86 + 1000.00 = 6243.03
   assert.equal(parsed.isReconciled, true, 'Running balance and statement summary must reconcile without discrepancy warnings');
 });
+
+test('8. Bank footers, disclaimers, GSTIN, and branch details are never merged into last transaction description', () => {
+  const rawTable = [
+    ['Date', 'Narration', 'Chq./Ref.No.', 'Value Dt', 'Withdrawal Amt.', 'Deposit Amt.', 'Closing Balance'],
+    ['20/11/2026', 'UPI-AUNTY KE SPECIAL SAM-9876543210@paytm', 'REF887766', '20/11/2026', '240.00', '', '14,500.00'],
+    ['', 'STATEMENT SUMMARY', '', '', '', '', ''],
+    ['', 'Closing balance includes funds held towards uncleared cheques / holds / lien', '', '', '', '', ''],
+    ['', 'GSTIN : 27AAACH1234F1Z1', '', '', '', '', ''],
+    ['', 'Registered Office : HDFC Bank House, Senapati Bapat Marg, Lower Parel (W), Mumbai 400 013', '', '', '', '', ''],
+    ['', 'Visit www.hdfcbank.com for customer support.', '', '', '', '', ''],
+  ];
+
+  const parsed = normalizeStatementTable(rawTable, 'HDFC Bank Statement');
+  assert.equal(parsed.rows.length, 1, 'Only genuine transaction must be extracted');
+
+  const row = parsed.rows[0];
+  assert.equal(row.description, 'UPI-AUNTY KE SPECIAL SAM-9876543210@paytm');
+  assert.equal(row.description.includes('Closing balance'), false);
+  assert.equal(row.description.includes('GSTIN'), false);
+  assert.equal(row.description.includes('Registered Office'), false);
+  assert.equal(row.description.includes('hdfcbank.com'), false);
+});

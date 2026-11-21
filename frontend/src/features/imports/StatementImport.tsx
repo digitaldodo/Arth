@@ -2254,11 +2254,11 @@ export function StatementImport({ userId, onImported }: Props) {
                         type="button"
                         disabled={isRetrying}
                         onClick={() => void retryBatchSync(item)}
-                        className="rounded-md bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                        className="rounded-md bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-neutral-950 px-3 py-1.5 text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-hidden transition-colors"
                       >
                         {isRetrying ? (
                           <>
-                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span className="w-3 h-3 border-2 border-white dark:border-neutral-950 border-t-transparent rounded-full animate-spin" />
                             <span>Syncing…</span>
                           </>
                         ) : (

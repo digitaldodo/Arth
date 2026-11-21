@@ -316,7 +316,7 @@ export function DashboardPage({
             Dashboard
           </h1>
           <p className="text-sm sm:text-base text-[var(--text-secondary)] mt-1">
-            Account balances and cash flow overview
+            Consolidated personal finance and cash flow overview
           </p>
         </div>
 
