@@ -167,18 +167,14 @@ fun SettingsScreen(
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Import a bank message",
+                                    text = "Automatic Transaction Detection",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = when {
-                                        else -> "Share a selected message from Messages for on-device review"
-                                    },
+                                    text = "Configure on-device bank and UPI SMS detection",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = when {
-                                        else -> ArthTheme.colors.textSecondary
-                                    }
+                                    color = ArthTheme.colors.textSecondary
                                 )
                             }
                         }

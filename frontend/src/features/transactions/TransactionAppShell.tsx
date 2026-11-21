@@ -7,15 +7,15 @@ import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { QuickAddModal } from './QuickAddModal';
+import { StatementImportModal } from '@/features/imports/StatementImportModal';
+import { SettingsView } from '@/features/settings/SettingsView';
 import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
-import { SheetsConnectionCard } from '@/features/sheets/SheetsConnectionCard';
 import { DataExportCard } from '@/features/export/DataExportCard';
 import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
 import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
 import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
 import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
 import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
-import { AutomaticDetectionSettings } from '@/features/android/AutomaticDetectionSettings';
 import { LanguagePreference } from '@/features/settings/LanguagePreference';
 import { useAppLock } from '@/features/app-lock/useAppLock';
 import { syncEngine } from '@/features/sync/sync-engine';
@@ -116,6 +116,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     amountPaise: number;
   } | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
+  const [isStatementImportOpen, setIsStatementImportOpen] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [categoryVersion, setCategoryVersion] = useState<number>(0);
   const [saveSuccessBanner, setSaveSuccessBanner] = useState<string | null>(null);
@@ -124,7 +125,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState<boolean>(false);
   const [isStartingBalancesModalOpen, setIsStartingBalancesModalOpen] = useState<boolean>(false);
   const [shellBalances, setShellBalances] = useState<AccountBalancesDTO | null>(null);
-  const [moreSubView, setMoreSubView] = useState<'hub' | 'settings' | 'appearance' | 'security'>('hub');
   const [openedCategoriesFromMore, setOpenedCategoriesFromMore] = useState<boolean>(false);
   const [isPlanningMenuOpen, setIsPlanningMenuOpen] = useState<boolean>(false);
   const planningMenuRef = useRef<HTMLDivElement | null>(null);
@@ -149,8 +149,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       activeView !== 'home' &&
       (!openedCategoriesFromMore || activeView !== 'categories') &&
       activeView !== 'data-sync' &&
-      !['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView) &&
-      (activeView !== 'more' || moreSubView === 'hub'),
+      !['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView),
     onBack: () => {
       navigateToView('home');
       return true;
@@ -195,40 +194,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     id: 'subscreen-documents',
     priority: 'subscreen',
     enabled: activeView === 'documents',
-    onBack: () => { navigateToView('more'); return true; },
-  });
-
-  // Priority 2: Settings subview in More returns to More Hub
-  useBackHandler({
-    id: 'subscreen-more-settings',
-    priority: 'subscreen',
-    enabled: activeView === 'more' && moreSubView === 'settings',
-    onBack: () => {
-      setMoreSubView('hub');
-      return true;
-    },
-  });
-
-  // Priority 2: Appearance subview returns to Settings
-  useBackHandler({
-    id: 'subscreen-more-appearance',
-    priority: 'subscreen',
-    enabled: activeView === 'more' && moreSubView === 'appearance',
-    onBack: () => {
-      setMoreSubView('settings');
-      return true;
-    },
-  });
-
-  // Priority 2: Security subview returns to Settings
-  useBackHandler({
-    id: 'subscreen-more-security',
-    priority: 'subscreen',
-    enabled: activeView === 'more' && moreSubView === 'security',
-    onBack: () => {
-      setMoreSubView('settings');
-      return true;
-    },
+    onBack: () => { navigateToView('home'); return true; },
   });
 
   // Priority 1b: Starting balances modal
@@ -289,9 +255,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     await signOut();
   };
 
-  // Guard critical operations: defer PWA updates while user is entering/saving transactions or syncing
+  // Guard critical operations: defer PWA updates while user is entering/saving transactions, importing statements, or syncing
   useCriticalOperation(
-    isQuickAddOpen || isDeleteModalOpen || isPasswordModalOpen || isStartingBalancesModalOpen || isSyncing
+    isQuickAddOpen || isStatementImportOpen || isDeleteModalOpen || isPasswordModalOpen || isStartingBalancesModalOpen || isSyncing
   );
 
   // The sync engine is the only queue runner; keep shell status scoped to this account.
@@ -372,6 +338,37 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 Ledger
               </span>
             </Link>
+
+            {/* Mobile Navigation Shortcuts for Docs & Tax and Planning */}
+            {user && (
+              <div className="flex lg:hidden items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-md border border-[var(--border-hairline)] ml-1">
+                <button
+                  type="button"
+                  onClick={() => navigateToView('documents')}
+                  className={`px-2 py-1 text-[11px] font-semibold rounded-xs transition-colors cursor-pointer ${
+                    activeView === 'documents'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Docs
+                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsPlanningMenuOpen((prev) => !prev)}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 ${
+                      ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
+                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span>Plan</span>
+                    <span className="text-[9px] opacity-60">▾</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Desktop Navigation Switcher */}
             {user && (
@@ -602,6 +599,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
               <DashboardPage
                 userId={user.id}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+                onOpenStatementImport={() => setIsStatementImportOpen(true)}
                 onNavigateToLedger={() => navigateToView('ledger')}
                 onOpenFilteredLedger={(filter) => {
                   setLedgerInitialFilter(filter);
@@ -626,7 +624,8 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 hasPassword={hasPassword}
                 onAccountPasswordVerified={() => setPasswordStatus('configured')}
                 onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-                onNavigateToStatementImport={() => navigateToView('documents')}
+                onOpenStatementImport={() => setIsStatementImportOpen(true)}
+                onNavigateToStatementImport={() => setIsStatementImportOpen(true)}
                 refreshTrigger={refreshTrigger}
                 onTransactionMutated={() => setRefreshTrigger((prev) => prev + 1)}
               />
@@ -742,448 +741,64 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
               />
             </div>}
 
-            {visitedViews.has('more') && <div className={activeView === 'more' ? 'view-enter' : 'hidden'}>
-              <div className="space-y-5">
-                {/* 1. APPEARANCE SUBVIEW */}
-                {moreSubView === 'appearance' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('settings')}
-                        className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1 cursor-pointer"
-                      >
-                        &larr; Back to Settings
-                      </button>
-                    </div>
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Appearance & Theme
-                      </h1>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                        Configure application theme and visual appearance
-                      </p>
-                    </div>
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 space-y-4">
-                      <div>
-                        <h3 className="text-xs font-semibold text-[var(--text-primary)] mb-1">
-                          Theme Preference
-                        </h3>
-                        <p className="text-[11px] text-[var(--text-muted)] mb-3">
-                          Switch between Archival Light and Obsidian Dark modes.
-                        </p>
-                        <ThemeToggle className="sm:w-64" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. SECURITY SUBVIEW */}
-                {moreSubView === 'security' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('settings')}
-                        className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1 cursor-pointer"
-                      >
-                        &larr; Back to Settings
-                      </button>
-                    </div>
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Security &amp; Password
-                      </h1>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                        Account credentials, application lock, and access recovery
-                      </p>
-                    </div>
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl divide-y divide-[var(--border-hairline)] overflow-hidden">
-                      <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">🔐</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Password Credentials
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              {passwordStatus === 'configured'
-                                ? 'Update your account password or credentials'
-                                : passwordStatus === 'not_configured'
-                                  ? 'Set a password to enable email & username sign-in'
-                                  : 'Check or update your account password settings'}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsPasswordModalOpen(true)}
-                          className="px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer shrink-0"
-                        >
-                          {passwordStatus === 'configured'
-                            ? 'Change Password'
-                            : passwordStatus === 'not_configured'
-                              ? 'Set Password'
-                              : 'Password Settings'}
-                        </button>
-                      </div>
-                      {isMobilePwa && <AppLockSettings appLock={appLock} />}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. SETTINGS SUBVIEW */}
-                {moreSubView === 'settings' && (
-                  <div className="space-y-5">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('hub')}
-                        className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1 cursor-pointer"
-                      >
-                        &larr; Back to More
-                      </button>
-                    </div>
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-                        Settings
-                      </h1>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                        Preferences, visual appearance, credentials, and starting balances
-                      </p>
-                    </div>
-
-                    <LanguagePreference userId={userId ?? undefined} />
-
-                    {/* Account Balances Card */}
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">💰</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Account Starting Balances
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              Initial cash and bank balances when you began using SpendSense
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsStartingBalancesModalOpen(true)}
-                          className="px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
-                        >
-                          {shellBalances?.balances_configured ? 'Edit Balances' : 'Set Up Balances'}
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-2 text-xs font-mono border-t border-[var(--border-hairline)]">
-                        <div className="p-2.5 bg-[var(--bg-canvas)] rounded-md border border-[var(--border-hairline)]">
-                          <span className="text-[10px] text-[var(--text-muted)] block">Starting Cash</span>
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">
-                            {shellBalances?.formatted_starting_cash || '₹0.00'}
-                          </span>
-                        </div>
-                        <div className="p-2.5 bg-[var(--bg-canvas)] rounded-md border border-[var(--border-hairline)]">
-                          <span className="text-[10px] text-[var(--text-muted)] block">Starting Online</span>
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">
-                            {shellBalances?.formatted_starting_online || '₹0.00'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl divide-y divide-[var(--border-hairline)] overflow-hidden">
-                      {/* Appearance Drilldown */}
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('appearance')}
-                        className="w-full p-4 text-left flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">🌓</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Appearance & Theme
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              Archival Light and obsidian Dark theme settings
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-
-                      {/* Security Drilldown */}
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('security')}
-                        className="w-full p-4 text-left flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">🔐</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Security &amp; Password
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              {passwordStatus === 'configured'
-                                ? 'Password configured • Update credentials'
-                                : 'Set password to enable email & username sign-in'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-
-                      {/* Profile Section */}
-                      <div className="p-4 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">👤</span>
-                          <div className="min-w-0">
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Account Profile
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)] font-mono truncate break-all">
-                              {user.displayName
-                                ? `${user.displayName} (${user.email})`
-                                : user.email}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-[var(--border-hairline)]">
-                          <UsernameClaimForm
-                            currentUsername={currentUsername}
-                            onUsernameSet={(newUsername) => setCurrentUsername(newUsername)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Danger Zone */}
-                    <div className="bg-[var(--bg-surface)] border border-rose-200 dark:border-rose-900/40 rounded-xl p-5 space-y-3">
-                      <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
-                        <span className="text-base">⚠</span>
-                        <h3 className="text-xs font-bold tracking-tight uppercase">Danger Zone</h3>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-                        <div>
-                          <h4 className="text-xs font-semibold text-[var(--text-primary)]">
-                            Delete Account &amp; Financial Records
-                          </h4>
-                          <p className="text-[11px] text-[var(--text-muted)] max-w-lg mt-0.5">
-                            Permanently purge your account, transaction ledger, category taxonomy, and people debt/loan tracker. This operation cannot be reversed.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsDeleteModalOpen(true)}
-                          className="px-3.5 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 rounded-md transition-colors cursor-pointer shrink-0"
-                        >
-                          Delete Account...
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. MORE HUB (PRIMARY HUB) */}
-                {moreSubView === 'hub' && (
-                  <div className="space-y-5">
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-                        More &amp; Settings
-                      </h1>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                        Application settings, category customization, and account details
-                      </p>
-                    </div>
-
-                    <div className="grid gap-3">
-                      <button
-                        type="button"
-                        onClick={() => navigateToView('documents')}
-                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">📄</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">Documents &amp; Tax</h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">Review and import a bank or card statement</p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-
-                      {/* Data & Synchronization Card */}
-                      <button
-                        type="button"
-                        onClick={() => navigateToView('data-sync')}
-                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">🔄</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Data &amp; Synchronization
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              IndexedDB offline storage, sync engine status, and multi-device refresh
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-
-                      {/* Settings Navigation Card */}
-                      <button
-                        type="button"
-                        onClick={() => setMoreSubView('settings')}
-                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">⚙️</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Settings
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              Appearance, Security &amp; Password, Starting Balances, Profile
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-
-                      {/* Category Customization Card */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenedCategoriesFromMore(true);
-                          navigateToView('categories');
-                        }}
-                        className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">🏷️</span>
-                          <div>
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Category Customization
-                            </h3>
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              Add, rename, reorder, or archive income and expense categories
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[var(--text-muted)] font-bold">&rarr;</span>
-                      </button>
-                    </div>
-
-                    {/* Planning & Intelligence Tools Section */}
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-5 space-y-3">
+            {visitedViews.has('more') && (
+              <div className={activeView === 'more' ? 'view-enter' : 'hidden'}>
+                <SettingsView
+                  user={user}
+                  currentUsername={currentUsername}
+                  onUsernameSet={(newUsername) => setCurrentUsername(newUsername)}
+                  passwordStatus={passwordStatus}
+                  hasPassword={hasPassword}
+                  passwordButtonText={
+                    passwordStatus === 'configured'
+                      ? 'Change Password'
+                      : passwordStatus === 'not_configured'
+                        ? 'Set Password'
+                        : 'Password Settings'
+                  }
+                  onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                  onOpenDeleteModal={() => setIsDeleteModalOpen(true)}
+                  onOpenStartingBalancesModal={() => setIsStartingBalancesModalOpen(true)}
+                  onOpenCategories={() => {
+                    setOpenedCategoriesFromMore(true);
+                    navigateToView('categories');
+                  }}
+                  onOpenDataSync={() => navigateToView('data-sync')}
+                  shellBalances={shellBalances}
+                  pendingSyncCount={pendingSyncCount}
+                  isSyncing={isSyncing}
+                  isMobilePwa={isMobilePwa}
+                  appLock={appLock}
+                  appLockSlot={isMobilePwa && <AppLockSettings appLock={appLock} />}
+                  onSignOut={handleSignOut}
+                  installPrompt={<InstallPromptCard userId={user?.id} />}
+                  dataExport={<DataExportCard user={user} />}
+                  themeToggleSlot={
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                          Planning &amp; Financial Tools
+                          Appearance & Theme
                         </h3>
-                        <p className="text-[11px] text-[var(--text-muted)]">
-                          Calculators, stress tests, and financial trajectory planning
+                        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          Switch between Archival Light and Obsidian Dark themes.
                         </p>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => navigateToView('safe-to-spend')}
-                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
-                        >
-                          <span className="text-base">🛡️</span>
-                          <div>
-                            <span className="text-xs font-medium text-[var(--text-primary)] block">Safe to Spend</span>
-                            <span className="text-[10px] text-[var(--text-muted)]">Real-time discretionary headroom</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigateToView('emi-planner')}
-                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
-                        >
-                          <span className="text-base">📊</span>
-                          <div>
-                            <span className="text-xs font-medium text-[var(--text-primary)] block">EMI Stress Test</span>
-                            <span className="text-[10px] text-[var(--text-muted)]">Prepayment vs SIP calculator</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigateToView('goal-planner')}
-                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
-                        >
-                          <span className="text-base">🎯</span>
-                          <div>
-                            <span className="text-xs font-medium text-[var(--text-primary)] block">Goal Planner</span>
-                            <span className="text-[10px] text-[var(--text-muted)]">Targeted savings &amp; milestones</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigateToView('fire-planning')}
-                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5"
-                        >
-                          <span className="text-base">🔥</span>
-                          <div>
-                            <span className="text-xs font-medium text-[var(--text-primary)] block">FIRE Planning</span>
-                            <span className="text-[10px] text-[var(--text-muted)]">Financial independence simulator</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => navigateToView('insights')}
-                          className="p-3 text-left bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-lg transition-colors cursor-pointer flex items-center gap-2.5 sm:col-span-2"
-                        >
-                          <span className="text-base">📈</span>
-                          <div>
-                            <span className="text-xs font-medium text-[var(--text-primary)] block">Financial Insights</span>
-                            <span className="text-[10px] text-[var(--text-muted)]">Deterministic behavioral analysis &amp; 50/30/20</span>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Integrated Theme Toggle shortcut */}
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">🌓</span>
-                        <div>
-                          <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                            Appearance & Theme
-                          </h3>
-                          <p className="text-[11px] text-[var(--text-muted)]">
-                            Switch between archival Light and obsidian Dark themes
-                          </p>
-                        </div>
                       </div>
                       <ThemeToggle className="sm:w-64" />
                     </div>
-
-                    {/* Native Android App Card */}
+                  }
+                  androidDownloadSlot={
                     <Link
                       href="/download"
-                      className="w-full p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl flex items-center justify-between hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer text-left shadow-2xs group"
+                      className="flex items-center justify-between p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] hover:border-[var(--border-strong)] rounded-xl transition-all group"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-xl">📱</span>
+                        <span className="text-xl" aria-hidden="true">&#128241;</span>
                         <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
-                              Native Android Application
-                            </h3>
-                            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
-                              APK Release
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[var(--text-muted)]">
-                            Download the official offline-first native app with fingerprint unlock
+                          <p className="text-sm font-medium text-[var(--text-primary)]">
+                            Native Android Application
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Get the official offline-first native app with fingerprint unlock
                           </p>
                         </div>
                       </div>
@@ -1191,27 +806,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                         &rarr;
                       </span>
                     </Link>
-
-                    <InstallPromptCard userId={user?.id} />
-
-                    <AutomaticDetectionSettings />
-
-                    <SheetsConnectionCard />
-
-                    {user && <DataExportCard user={user} />}
-
-                    <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
-                      <button
-                        type="submit"
-                        className="w-full py-2.5 text-xs font-medium border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"
-                      >
-                        Sign Out of SpendSense
-                      </button>
-                    </form>
-                  </div>
-                )}
+                  }
+                />
               </div>
-            </div>}
+            )}
           </>
         ) : (
           <div className="text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-4">
@@ -1299,13 +897,12 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             type="button"
             onClick={() => navigateToView('more')}
             className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
-              activeView === 'more' ||
-              ['categories', 'data-sync', 'documents', 'safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
+              activeView === 'more' || activeView === 'data-sync' || activeView === 'categories'
                 ? 'text-[var(--text-primary)] font-bold'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none" aria-hidden="true">☰</span>
+            <span className="text-base leading-none" aria-hidden="true">⚙️</span>
             <span className="truncate">More</span>
           </button>
         </nav>
@@ -1319,6 +916,24 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           onSuccess={handleTransactionCreated}
           categoryVersion={categoryVersion}
           userId={user?.id}
+        />
+      )}
+
+      {/* Shared Statement Import Modal / Sheet */}
+      {isStatementImportOpen && user && (
+        <StatementImportModal
+          isOpen={true}
+          onClose={() => setIsStatementImportOpen(false)}
+          userId={user.id}
+          onImported={(count) => {
+            setRefreshTrigger((prev) => prev + 1);
+            setSaveSuccessBanner(`Imported ${count} statement transaction(s) into your ledger.`);
+            setTimeout(() => setSaveSuccessBanner(null), 3500);
+          }}
+          onManualEntry={() => {
+            setIsStatementImportOpen(false);
+            setIsQuickAddOpen(true);
+          }}
         />
       )}
 

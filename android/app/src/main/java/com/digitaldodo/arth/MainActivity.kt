@@ -59,6 +59,7 @@ import com.digitaldodo.arth.feature.reports.ReportsScreen
 import com.digitaldodo.arth.feature.security.ArthLockScreen
 import com.digitaldodo.arth.feature.security.SecuritySettingsScreen
 import com.digitaldodo.arth.feature.settings.SettingsScreen
+import com.digitaldodo.arth.feature.sms.SmsDisclosureDialog
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
 import com.digitaldodo.arth.feature.sms.SmsSettingsScreen
 import com.digitaldodo.arth.feature.sms.SmsViewModel
@@ -383,6 +384,45 @@ fun MainTabsScaffold(
     var lastBackPressedTime by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
     val activity = context as? Activity
+    val smsPrefs = remember { com.digitaldodo.arth.core.sms.SmsPreferencesRepository(context) }
+    var showFirstLaunchSmsOnboarding by remember {
+        mutableStateOf(!smsPrefs.hasCompletedFirstLaunchOnboarding)
+    }
+
+    val smsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[android.Manifest.permission.READ_SMS] == true &&
+            permissions[android.Manifest.permission.RECEIVE_SMS] == true
+        if (granted) {
+            smsViewModel.setTrackingEnabled(true)
+            smsViewModel.setTrackingPaused(false)
+        }
+        smsPrefs.hasCompletedFirstLaunchOnboarding = true
+        showFirstLaunchSmsOnboarding = false
+    }
+
+    if (showFirstLaunchSmsOnboarding) {
+        SmsDisclosureDialog(
+            onDismiss = {
+                smsPrefs.hasCompletedFirstLaunchOnboarding = true
+                showFirstLaunchSmsOnboarding = false
+            },
+            onAccept = {
+                if (BuildConfig.SMS_DETECTION_SUPPORTED) {
+                    smsPermissionLauncher.launch(
+                        arrayOf(
+                            android.Manifest.permission.READ_SMS,
+                            android.Manifest.permission.RECEIVE_SMS
+                        )
+                    )
+                } else {
+                    smsPrefs.hasCompletedFirstLaunchOnboarding = true
+                    showFirstLaunchSmsOnboarding = false
+                }
+            }
+        )
+    }
 
     BackHandler(enabled = isDashboard) {
         val now = System.currentTimeMillis()
@@ -553,6 +593,11 @@ fun MainTabsScaffold(
                         },
                         onNavigateToSmsReview = {
                             tabNavController.navigate("sms_review") {
+                                launchSingleTop = true
+                            }
+                        },
+                        onImportStatementClick = {
+                            tabNavController.navigate("statement_import") {
                                 launchSingleTop = true
                             }
                         },

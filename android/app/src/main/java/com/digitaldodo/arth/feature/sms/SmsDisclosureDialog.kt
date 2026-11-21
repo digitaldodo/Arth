@@ -30,7 +30,7 @@ fun SmsDisclosureDialog(
         },
         title = {
             Text(
-                text = "Automatically record your financial transactions",
+                text = "Automatically detect your bank transactions",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
         },
@@ -42,41 +42,36 @@ fun SmsDisclosureDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "SpendSense can identify financial transactions from bank and UPI messages, helping you maintain a more complete financial ledger without manually entering every transaction.",
+                    text = "SpendSense can identify eligible financial transaction messages from your banks and payment providers and prepare them for your personal ledger.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "• Which messages are processed: Only transaction alerts from supported Indian banks, UPI apps, and cards.",
+                    text = "• Messages processed: Only eligible transaction alerts from supported Indian banks, credit cards, and UPI providers. Personal conversations, OTPs, 2FA security codes, and promotional messages are discarded immediately in memory.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
                 Text(
-                    text = "• Why they are processed: To extract transaction amounts, dates, merchants, and reference IDs for your review.",
+                    text = "• Why permissions are needed: Android requires SMS permissions (READ_SMS and RECEIVE_SMS) to inspect incoming bank alerts and provide on-demand historical scans.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
                 Text(
-                    text = "• What information is extracted: Amount in paise, debit/credit direction, counterparty, masked account (e.g. XX1234), and UTR reference.",
+                    text = "• How transactions are categorized: Transactions are automatically matched to categories (e.g. Groceries, Utilities, Dining) using on-device pattern recognition.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
                 Text(
-                    text = "• Unrelated messages excluded: Personal conversations, OTPs, 2FA security codes, and marketing promos are discarded immediately in memory.",
+                    text = "• How duplicate detection works: UTR references, masked account identifiers, timestamps, and exact paise amounts prevent duplicate entries in your ledger.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
                 Text(
-                    text = "• 100% On-Device: Raw SMS text never leaves your phone and is never uploaded to any server.",
+                    text = "• Complete user control: You can pause, disable, or re-enable detection at any time in Settings → Automatic Transaction Detection without affecting your saved ledger.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
                 Text(
-                    text = "• Human-in-the-loop: Every detected transaction is presented as a pending suggestion. Only confirmed entries enter your ledger.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• Complete Control: You can pause tracking, disconnect, or delete local data at any time from Settings.",
+                    text = "• Financial protection & privacy: 100% on-device processing. Raw SMS text never leaves your device and is never uploaded to any server. Every candidate requires your confirmation.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ArthTheme.colors.textSecondary
                 )
@@ -84,7 +79,7 @@ fun SmsDisclosureDialog(
         },
         confirmButton = {
             ArthButton(
-                text = "Enable SMS Tracking",
+                text = "Enable Automatic Detection",
                 onClick = onAccept
             )
         },

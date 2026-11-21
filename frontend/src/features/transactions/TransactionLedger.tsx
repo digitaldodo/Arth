@@ -132,6 +132,7 @@ export interface TransactionLedgerProps {
   userProfile?: UserProfileSummary;
   hasPassword?: boolean;
   onOpenQuickAdd: () => void;
+  onOpenStatementImport?: () => void;
   onNavigateToStatementImport?: () => void;
   refreshTrigger: number;
   onTransactionMutated?: () => void;
@@ -158,6 +159,7 @@ export function TransactionLedger({
   userProfile,
   hasPassword,
   onOpenQuickAdd,
+  onOpenStatementImport,
   onNavigateToStatementImport,
   refreshTrigger,
   onTransactionMutated,
@@ -166,6 +168,7 @@ export function TransactionLedger({
   initialFilter = null,
 }: TransactionLedgerProps) {
   const isPwa = useStandalonePwa();
+  const handleOpenImport = onOpenStatementImport || onNavigateToStatementImport;
   const [transactions, setTransactions] = useState<TransactionDTO[]>([]);
   const [categories, setCategories] = useState<CategoryDTO[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
@@ -900,6 +903,18 @@ export function TransactionLedger({
                 <span>Download PDF</span>
               </button>
 
+              {handleOpenImport && (
+                <button
+                  type="button"
+                  onClick={handleOpenImport}
+                  title="Import transactions from bank statement (PDF, CSV, XLSX, XLS)"
+                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
+                >
+                  <span className="text-xs" aria-hidden="true">📥</span>
+                  <span>Import Bank Statement</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onOpenQuickAdd}
@@ -956,13 +971,24 @@ export function TransactionLedger({
               Clear all filters
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={onOpenQuickAdd}
-              className="px-4 py-2 text-xs font-medium bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
-            >
-              + Record First Transaction
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={onOpenQuickAdd}
+                className="px-4 py-2 text-xs font-medium bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
+              >
+                + Record First Transaction
+              </button>
+              {handleOpenImport && (
+                <button
+                  type="button"
+                  onClick={handleOpenImport}
+                  className="px-4 py-2 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"
+                >
+                  <span aria-hidden="true">📄</span> Import Bank Statement
+                </button>
+              )}
+            </div>
           )}
         </div>
       ) : (

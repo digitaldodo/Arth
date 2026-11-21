@@ -267,10 +267,10 @@ describe('Phase 02: UI Cleanup & Brand Consistency Verifications', () => {
       'TransactionAppShell must render InstallPromptCard as Offline Support in settings'
     );
 
-    // Google Sheets and Data Export cards must be present
+    // Google Sheets synchronization has been discontinued and removed from the active application shell
     assert.ok(
-      content.includes('<SheetsConnectionCard'),
-      'TransactionAppShell must render SheetsConnectionCard'
+      !content.includes('<SheetsConnectionCard'),
+      'TransactionAppShell must not render SheetsConnectionCard'
     );
     assert.ok(
       content.includes('<DataExportCard'),

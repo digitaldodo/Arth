@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
@@ -39,6 +40,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToLedger: () -> Unit,
     onNavigateToSmsReview: () -> Unit,
+    onImportStatementClick: () -> Unit = {},
     onTransactionClick: (String) -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -73,6 +75,19 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Import Bank Statement button
+                        IconButton(
+                            onClick = onImportStatementClick,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileOpen,
+                                contentDescription = "Import Bank Statement",
+                                tint = ArthTheme.colors.textSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
                         // Refresh button
                         IconButton(
                             onClick = { viewModel.refresh() },

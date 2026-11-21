@@ -324,6 +324,19 @@ export async function drainUserOutbox(userId: string): Promise<{
   failed: number;
   message: string;
 }> {
+  // Google Sheets synchronization has been discontinued.
+  return {
+    synced: 0,
+    failed: 0,
+    message: 'Google Sheets synchronization has been discontinued.',
+  };
+}
+
+async function _legacyDrainUserOutbox(userId: string): Promise<{
+  synced: number;
+  failed: number;
+  message: string;
+}> {
   if (!isGoogleServiceAccountConfigured()) {
     throw new Error(
       'Google Sheets integration is not configured on the server. Please check environment variables.'

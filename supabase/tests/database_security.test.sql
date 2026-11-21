@@ -2,7 +2,7 @@
 -- Executes with pgTAP on PostgreSQL / Supabase CLI
 
 BEGIN;
-SELECT plan(20);
+SELECT plan(25);
 
 -- -----------------------------------------------------------------------------
 -- Mock Setup: Authenticated Test Users
@@ -286,6 +286,73 @@ SELECT throws_ok(
   '42501',
   NULL,
   'Authenticated users must be denied direct DELETE on public.person_money_settlements'
+);
+
+-- -----------------------------------------------------------------------------
+-- 14. Test Balance Movements RLS: Cross-User Isolation and Ownership
+-- -----------------------------------------------------------------------------
+-- Insert movement as User A (mock setup context or bypass for fixture)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'balance_movements') THEN
+    INSERT INTO public.balance_movements (
+      id, user_id, movement_type, from_method, to_method, amount_paise, movement_date
+    ) VALUES (
+      '0192e456-789a-7bc1-8def-123456789088'::UUID,
+      '11111111-1111-4111-a111-111111111111'::UUID, -- User A
+      'transfer',
+      'online',
+      'cash',
+      100000,
+      '2026-10-25'
+    ) ON CONFLICT (id) DO NOTHING;
+  END IF;
+END $$;
+
+-- Switch to User B context
+SET LOCAL role = 'authenticated';
+SET LOCAL "request.jwt.claim.sub" = '22222222-2222-4222-a222-222222222222';
+SET LOCAL "request.jwt.claims" = '{"sub":"22222222-2222-4222-a222-222222222222","role":"authenticated"}';
+
+SELECT is_empty(
+  $$ SELECT * FROM public.balance_movements WHERE user_id = '11111111-1111-4111-a111-111111111111'::UUID $$,
+  'User B must not be able to read User A balance movements under RLS'
+);
+
+SELECT throws_ok(
+  $$ INSERT INTO public.balance_movements (
+       id, user_id, movement_type, from_method, to_method, amount_paise, movement_date
+     ) VALUES (
+       '0192e456-789a-7bc1-8def-123456789089'::UUID,
+       '11111111-1111-4111-a111-111111111111'::UUID, -- Attempting to spoof User A
+       'transfer',
+       'online',
+       'cash',
+       50000,
+       '2026-10-25'
+     ) $$,
+  '42501', -- rls_check_violation
+  NULL,
+  'User B must not be able to insert balance movement with User A user_id under RLS'
+);
+
+SELECT is_empty(
+  $$ UPDATE public.balance_movements SET amount_paise = 999999 WHERE id = '0192e456-789a-7bc1-8def-123456789088'::UUID RETURNING * $$,
+  'User B must not be able to update User A balance movements under RLS'
+);
+
+SELECT is_empty(
+  $$ DELETE FROM public.balance_movements WHERE id = '0192e456-789a-7bc1-8def-123456789088'::UUID RETURNING * $$,
+  'User B must not be able to delete User A balance movements under RLS'
+);
+
+-- Switch back to User A context
+SET LOCAL "request.jwt.claim.sub" = '11111111-1111-4111-a111-111111111111';
+SET LOCAL "request.jwt.claims" = '{"sub":"11111111-1111-4111-a111-111111111111","role":"authenticated"}';
+
+SELECT isnt_empty(
+  $$ SELECT * FROM public.balance_movements WHERE id = '0192e456-789a-7bc1-8def-123456789088'::UUID $$,
+  'User A must be able to read own balance movements under RLS'
 );
 
 SELECT * FROM finish();

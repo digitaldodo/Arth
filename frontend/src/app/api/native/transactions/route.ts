@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getBackendBaseUrl, safeBackendErrorResponse } from '@/lib/server-config';
-import { drainUserOutbox } from '@/lib/server/sheets-worker';
 import { getNativeUser } from '../_auth';
 
 export async function GET(request: Request) {
@@ -47,11 +46,7 @@ export async function POST(request: Request) {
       cache: 'no-store',
     });
     const data = await backendResponse.json();
-    if (backendResponse.ok) {
-      drainUserOutbox(userId).catch((syncError) => {
-        console.warn('[NativeTransactionsRoute] Outbox drain deferred after transaction commit:', syncError instanceof Error ? syncError.message : 'unknown error');
-      });
-    }
+
     return NextResponse.json(data, { status: backendResponse.status, headers: { 'Cache-Control': 'no-store' } });
   } catch (err: unknown) {
     return safeBackendErrorResponse(err, 'POST /api/native/transactions');

@@ -379,6 +379,9 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('starting_online_paise BIGINT NOT NULL DEFAULT 0'), 'Must add starting_online_paise to profiles');
     assert.ok(sql.includes('CREATE TABLE IF NOT EXISTS public.balance_movements'), 'Must create balance_movements table');
     assert.ok(sql.includes('ENABLE ROW LEVEL SECURITY'), 'Must enable RLS on balance_movements');
+    assert.ok(sql.includes("policyname = 'balance_movements_select_own'"), 'Must inspect balance_movements_select_own for idempotent guard');
+    assert.ok(sql.includes("USING ERRCODE = '42710'"), 'Must reject conflicting policy definition with 42710');
+    assert.ok(sql.includes('GRANT SELECT, INSERT, UPDATE, DELETE ON public.balance_movements TO authenticated;'), 'Must grant table operations to authenticated');
     assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_account_balances'), 'Must define fn_account_balances function');
     assert.ok(sql.includes('SECURITY INVOKER'), 'Must execute with SECURITY INVOKER for caller security');
   });

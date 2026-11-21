@@ -27,6 +27,7 @@ import { useOptionalAuth } from '@/features/auth/AuthContext';
 interface DashboardPageProps {
   userId: string;
   onOpenQuickAdd: () => void;
+  onOpenStatementImport?: () => void;
   onNavigateToLedger: () => void;
   onOpenFilteredLedger: (filter: {
     categoryId?: string;
@@ -50,6 +51,7 @@ interface DashboardError {
 export function DashboardPage({
   userId,
   onOpenQuickAdd,
+  onOpenStatementImport,
   onNavigateToLedger,
   onOpenFilteredLedger,
   refreshTrigger = 0,
@@ -317,14 +319,27 @@ export function DashboardPage({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenQuickAdd}
-          className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
-        >
-          <span>+</span>
-          <span>Quick Add</span>
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
+          {onOpenStatementImport && (
+            <button
+              type="button"
+              onClick={onOpenStatementImport}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer shadow-2xs shrink-0"
+              title="Import PDF, CSV, or spreadsheet statement"
+            >
+              <span className="text-xs" aria-hidden="true">📄</span>
+              <span>Import Bank Statement</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onOpenQuickAdd}
+            className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
+          >
+            <span>+</span>
+            <span>Quick Add</span>
+          </button>
+        </div>
       </div>
 
       {/* Account Balances Card (Live Available, Cash, and Online Balances - Independent of analytics filter) */}
@@ -461,7 +476,7 @@ export function DashboardPage({
                     Add your first transaction to see your cash flow and spending patterns. Category breakdowns, spending trends, and insights will appear automatically as you record your transactions.
                   </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={onOpenQuickAdd}
@@ -470,6 +485,16 @@ export function DashboardPage({
                     <span>+</span>
                     <span>Add your first transaction</span>
                   </button>
+                  {onOpenStatementImport && (
+                    <button
+                      type="button"
+                      onClick={onOpenStatementImport}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                    >
+                      <span aria-hidden="true">📄</span>
+                      <span>Import Bank Statement</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={onNavigateToLedger}
@@ -521,6 +546,16 @@ export function DashboardPage({
                   >
                     + Add Transaction
                   </button>
+                  {onOpenStatementImport && (
+                    <button
+                      type="button"
+                      onClick={onOpenStatementImport}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                    >
+                      <span aria-hidden="true">📄</span>
+                      <span>Import Statement</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

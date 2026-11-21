@@ -42,6 +42,10 @@ class SmsPreferencesRepository(context: Context) {
         get() = prefs.getInt(KEY_TOTAL_PROCESSED, 0)
         set(value) = prefs.edit().putInt(KEY_TOTAL_PROCESSED, value).apply()
 
+    var hasCompletedFirstLaunchOnboarding: Boolean
+        get() = prefs.getBoolean(KEY_FIRST_LAUNCH_ONBOARDED, false)
+        set(value) = prefs.edit().putBoolean(KEY_FIRST_LAUNCH_ONBOARDED, value).apply()
+
     fun incrementProcessedCount(count: Int = 1) {
         totalMessagesProcessed += count
     }
@@ -60,5 +64,6 @@ class SmsPreferencesRepository(context: Context) {
         private const val KEY_LAST_SCAN_TS = "sms_last_scan_ts"
         private const val KEY_LAST_SCANNED_ID = "sms_last_scanned_id"
         private const val KEY_TOTAL_PROCESSED = "sms_total_processed"
+        private const val KEY_FIRST_LAUNCH_ONBOARDED = "sms_first_launch_onboarded"
     }
 }

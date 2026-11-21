@@ -3,6 +3,7 @@ package com.digitaldodo.arth.feature.sms
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -28,25 +31,29 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.digitaldodo.arth.BuildConfig
 import com.digitaldodo.arth.core.sms.SmsNotificationListenerService
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +79,30 @@ fun SmsSettingsScreen(
     ) { permissions ->
         hasSmsPermission = permissions[Manifest.permission.READ_SMS] == true &&
             permissions[Manifest.permission.RECEIVE_SMS] == true
-        if (hasSmsPermission) viewModel.setTrackingEnabled(true)
+        if (hasSmsPermission) {
+            viewModel.setTrackingEnabled(true)
+            viewModel.setTrackingPaused(false)
+        }
+    }
+
+    val appSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasSmsPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                hasSmsPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+                viewModel.refreshNotificationAccessState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -95,7 +125,7 @@ fun SmsSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (automaticDetectionSupported) "SMS transaction detection" else "Import a bank message") },
+                title = { Text("Automatic Transaction Detection") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -110,52 +140,129 @@ fun SmsSettingsScreen(
         ) {
             item {
                 Card {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Automatic SMS transaction detection", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "SpendSense can classify visible alerts from your default Messages app after you grant Android's Notification access. It processes only that app's notifications on-device, stores recognized transaction fields, and discards the message text. It does not read inbox history.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "Android may hide message previews or redact sensitive notification text. Detection then cannot read that message. Share it to SpendSense manually instead.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        val smsAppLabel = SmsNotificationListenerService.defaultSmsAppLabel(context)
-                        Text(
-                            smsAppLabel?.let { "Default Messages app: $it" }
-                                ?: "No default Messages app is currently available.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (!state.hasNotificationAccess) {
-                            Button(onClick = { showNotificationDisclosure = true }) {
-                                Text("Review and enable notification access")
-                            }
-                        } else {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Detect transaction alerts")
-                                    Text("Notification access is granted")
-                                }
-                                Switch(
-                                    checked = state.isNotificationMonitoringEnabled,
-                                    onCheckedChange = { enabled ->
-                                        if (!enabled) viewModel.setNotificationMonitoringEnabled(false)
-                                        else {
-                                            viewModel.setNotificationMonitoringEnabled(true)
-                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                            }
-                                        }
-                                    }
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Automatic SMS Detection", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (hasSmsPermission && state.isTrackingEnabled && !state.isTrackingPaused)
+                                        "Active • Detecting incoming bank transaction SMS"
+                                    else if (!hasSmsPermission)
+                                        "Disabled • SMS permission required"
+                                    else
+                                        "Paused • Incoming SMS processing suspended",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (hasSmsPermission && state.isTrackingEnabled && !state.isTrackingPaused)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = {
-                                notificationAccessLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                            }) { Text("Manage notification access") }
+                            Switch(
+                                checked = hasSmsPermission && state.isTrackingEnabled && !state.isTrackingPaused,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) {
+                                        if (!hasSmsPermission) {
+                                            showDisclosure = true
+                                        } else {
+                                            viewModel.setTrackingEnabled(true)
+                                            viewModel.setTrackingPaused(false)
+                                        }
+                                    } else {
+                                        viewModel.setTrackingPaused(true)
+                                    }
+                                }
+                            )
                         }
+
+                        // Status badges / details
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Permission Status: ${if (hasSmsPermission) "Granted (READ_SMS, RECEIVE_SMS)" else "Not granted / Revoked"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (hasSmsPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Installation Compatibility: ${if (automaticDetectionSupported) "Direct Release (Restricted SMS allowlisted)" else "Standard Installation (SMS Restricted)"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val lastScanText = if (state.lastScanTimestamp > 0L) {
+                                SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(state.lastScanTimestamp))
+                            } else {
+                                "Never scanned"
+                            }
+                            Text(
+                                text = "Last Successful Scan: $lastScanText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Statistics overview
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Detected", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${state.totalProcessedCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Confirmed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${state.confirmedCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Awaiting Review", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${state.pendingCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Actions
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (!hasSmsPermission) {
+                                Button(
+                                    onClick = { showDisclosure = true },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Enable SMS Access")
+                                }
+                            } else {
+                                Button(
+                                    onClick = { viewModel.scanHistoricalInbox(onFinished = {}) },
+                                    enabled = !state.isScanning && state.isTrackingEnabled,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(if (state.isScanning) "Scanning…" else "Scan Recent Messages")
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null)
+                                    )
+                                    appSettingsLauncher.launch(intent)
+                                }
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.height(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Permissions")
+                            }
+                        }
+
+                        if (!state.scanSummary.isNullOrBlank()) {
+                            Text(state.scanSummary!!, style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        // Privacy explanation
+                        Text(
+                            text = "Financial Information Protection: All SMS message processing and categorization executes 100% locally on your device. Raw SMS text is never transmitted to SpendSense servers or stored remotely. Every candidate requires your review before it enters your ledger. Disabling detection on this device does not affect other devices.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

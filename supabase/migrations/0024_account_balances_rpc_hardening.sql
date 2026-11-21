@@ -118,39 +118,102 @@ CREATE INDEX IF NOT EXISTS idx_balance_movements_user_date
 -- Enable RLS on balance_movements
 ALTER TABLE public.balance_movements ENABLE ROW LEVEL SECURITY;
 
--- Idempotent RLS policies for balance_movements
+-- Idempotent, guarded RLS policies for balance_movements
+-- Safely creates policies if absent, skips if identical, and rejects conflicting definitions
 DO $$
+DECLARE
+  v_pol RECORD;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'balance_movements' AND policyname = 'balance_movements_select_own'
-  ) THEN
+  -- 1. SELECT policy: balance_movements_select_own
+  SELECT * INTO v_pol
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'balance_movements'
+    AND policyname = 'balance_movements_select_own';
+
+  IF NOT FOUND THEN
     CREATE POLICY balance_movements_select_own
       ON public.balance_movements FOR SELECT TO authenticated
       USING (auth.uid() = user_id);
+  ELSE
+    IF v_pol.cmd <> 'SELECT'
+       OR v_pol.permissive <> 'PERMISSIVE'
+       OR NOT (v_pol.roles = '{authenticated}'::name[] OR v_pol.roles::text = '{authenticated}')
+       OR v_pol.qual NOT IN ('(auth.uid() = user_id)', 'auth.uid() = user_id')
+       OR v_pol.with_check IS NOT NULL THEN
+      RAISE EXCEPTION 'Conflicting definition for policy balance_movements_select_own on public.balance_movements: cmd=%, roles=%, qual=%, with_check=%',
+        v_pol.cmd, v_pol.roles, v_pol.qual, v_pol.with_check
+        USING ERRCODE = '42710';
+    END IF;
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'balance_movements' AND policyname = 'balance_movements_insert_own'
-  ) THEN
+  -- 2. INSERT policy: balance_movements_insert_own
+  SELECT * INTO v_pol
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'balance_movements'
+    AND policyname = 'balance_movements_insert_own';
+
+  IF NOT FOUND THEN
     CREATE POLICY balance_movements_insert_own
       ON public.balance_movements FOR INSERT TO authenticated
       WITH CHECK (auth.uid() = user_id);
+  ELSE
+    IF v_pol.cmd <> 'INSERT'
+       OR v_pol.permissive <> 'PERMISSIVE'
+       OR NOT (v_pol.roles = '{authenticated}'::name[] OR v_pol.roles::text = '{authenticated}')
+       OR v_pol.qual IS NOT NULL
+       OR v_pol.with_check NOT IN ('(auth.uid() = user_id)', 'auth.uid() = user_id') THEN
+      RAISE EXCEPTION 'Conflicting definition for policy balance_movements_insert_own on public.balance_movements: cmd=%, roles=%, qual=%, with_check=%',
+        v_pol.cmd, v_pol.roles, v_pol.qual, v_pol.with_check
+        USING ERRCODE = '42710';
+    END IF;
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'balance_movements' AND policyname = 'balance_movements_update_own'
-  ) THEN
+  -- 3. UPDATE policy: balance_movements_update_own
+  SELECT * INTO v_pol
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'balance_movements'
+    AND policyname = 'balance_movements_update_own';
+
+  IF NOT FOUND THEN
     CREATE POLICY balance_movements_update_own
       ON public.balance_movements FOR UPDATE TO authenticated
       USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  ELSE
+    IF v_pol.cmd <> 'UPDATE'
+       OR v_pol.permissive <> 'PERMISSIVE'
+       OR NOT (v_pol.roles = '{authenticated}'::name[] OR v_pol.roles::text = '{authenticated}')
+       OR v_pol.qual NOT IN ('(auth.uid() = user_id)', 'auth.uid() = user_id')
+       OR v_pol.with_check NOT IN ('(auth.uid() = user_id)', 'auth.uid() = user_id') THEN
+      RAISE EXCEPTION 'Conflicting definition for policy balance_movements_update_own on public.balance_movements: cmd=%, roles=%, qual=%, with_check=%',
+        v_pol.cmd, v_pol.roles, v_pol.qual, v_pol.with_check
+        USING ERRCODE = '42710';
+    END IF;
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'balance_movements' AND policyname = 'balance_movements_delete_own'
-  ) THEN
+  -- 4. DELETE policy: balance_movements_delete_own
+  SELECT * INTO v_pol
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'balance_movements'
+    AND policyname = 'balance_movements_delete_own';
+
+  IF NOT FOUND THEN
     CREATE POLICY balance_movements_delete_own
       ON public.balance_movements FOR DELETE TO authenticated
       USING (auth.uid() = user_id);
+  ELSE
+    IF v_pol.cmd <> 'DELETE'
+       OR v_pol.permissive <> 'PERMISSIVE'
+       OR NOT (v_pol.roles = '{authenticated}'::name[] OR v_pol.roles::text = '{authenticated}')
+       OR v_pol.qual NOT IN ('(auth.uid() = user_id)', 'auth.uid() = user_id')
+       OR v_pol.with_check IS NOT NULL THEN
+      RAISE EXCEPTION 'Conflicting definition for policy balance_movements_delete_own on public.balance_movements: cmd=%, roles=%, qual=%, with_check=%',
+        v_pol.cmd, v_pol.roles, v_pol.qual, v_pol.with_check
+        USING ERRCODE = '42710';
+    END IF;
   END IF;
 END $$;
 
