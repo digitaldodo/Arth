@@ -2,12 +2,36 @@
 -- Replaces dashboard aggregation so confirmed pairs are excluded from income and spending.
 
 -- Establish the relationship columns and constraints before defining the RPC that uses them.
-ALTER TABLE public.transaction_links ADD CONSTRAINT uq_transaction_links_id_user UNIQUE (id, user_id);
-ALTER TABLE public.account_movements ADD COLUMN transaction_link_id UUID;
-ALTER TABLE public.account_movements
-  ADD CONSTRAINT uq_account_movements_transaction_link UNIQUE (transaction_link_id),
-  ADD CONSTRAINT fk_account_movement_transaction_link_owner FOREIGN KEY (transaction_link_id, user_id)
-    REFERENCES public.transaction_links(id, user_id) ON DELETE RESTRICT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_transaction_links_id_user'
+  ) THEN
+    ALTER TABLE public.transaction_links ADD CONSTRAINT uq_transaction_links_id_user UNIQUE (id, user_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'account_movements' AND column_name = 'transaction_link_id'
+  ) THEN
+    ALTER TABLE public.account_movements ADD COLUMN transaction_link_id UUID;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_account_movements_transaction_link'
+  ) THEN
+    ALTER TABLE public.account_movements
+      ADD CONSTRAINT uq_account_movements_transaction_link UNIQUE (transaction_link_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_account_movement_transaction_link_owner'
+  ) THEN
+    ALTER TABLE public.account_movements
+      ADD CONSTRAINT fk_account_movement_transaction_link_owner FOREIGN KEY (transaction_link_id, user_id)
+        REFERENCES public.transaction_links(id, user_id) ON DELETE RESTRICT;
+  END IF;
+END $$;
 
 -- Confirm only exact, opposite-sign transactions in different owned financial accounts.
 CREATE OR REPLACE FUNCTION public.confirm_transaction_reconciliation(

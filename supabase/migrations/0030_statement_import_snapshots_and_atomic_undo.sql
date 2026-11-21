@@ -14,8 +14,18 @@ CREATE TABLE public.statement_import_batch_items (
 );
 CREATE INDEX idx_statement_import_items_user_batch ON public.statement_import_batch_items(user_id, batch_id);
 ALTER TABLE public.statement_import_batch_items ENABLE ROW LEVEL SECURITY;
-CREATE POLICY statement_import_items_select_own ON public.statement_import_batch_items
-  FOR SELECT TO authenticated USING (user_id = auth.uid());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'statement_import_batch_items'
+      AND policyname = 'statement_import_items_select_own'
+  ) THEN
+    CREATE POLICY statement_import_items_select_own ON public.statement_import_batch_items
+      FOR SELECT TO authenticated USING (user_id = auth.uid());
+  END IF;
+END $$;
 GRANT SELECT ON public.statement_import_batch_items TO authenticated;
 GRANT ALL ON public.statement_import_batch_items TO service_role;
 

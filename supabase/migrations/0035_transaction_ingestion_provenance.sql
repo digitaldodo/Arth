@@ -9,15 +9,32 @@ ALTER TABLE public.transactions
   ADD COLUMN IF NOT EXISTS category_evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS category_was_corrected BOOLEAN NOT NULL DEFAULT FALSE;
 
-ALTER TABLE public.transactions
-  ADD CONSTRAINT chk_transactions_ingestion_source
-  CHECK (ingestion_source IN ('manual', 'bank_statement', 'message', 'account_aggregator'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_transactions_ingestion_source'
+  ) THEN
+    ALTER TABLE public.transactions
+      ADD CONSTRAINT chk_transactions_ingestion_source
+      CHECK (ingestion_source IN ('manual', 'bank_statement', 'message', 'account_aggregator'));
+  END IF;
 
-ALTER TABLE public.transactions
-  ADD CONSTRAINT chk_transactions_categorization_method
-  CHECK (categorization_method IS NULL OR categorization_method IN ('weak_supervision', 'anchored_fasttext', 'user_correction', 'manual', 'none')),
-  ADD CONSTRAINT chk_transactions_category_confidence
-  CHECK (category_suggestion_confidence IS NULL OR (category_suggestion_confidence >= 0 AND category_suggestion_confidence <= 1));
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_transactions_categorization_method'
+  ) THEN
+    ALTER TABLE public.transactions
+      ADD CONSTRAINT chk_transactions_categorization_method
+      CHECK (categorization_method IS NULL OR categorization_method IN ('weak_supervision', 'anchored_fasttext', 'user_correction', 'manual', 'none'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_transactions_category_confidence'
+  ) THEN
+    ALTER TABLE public.transactions
+      ADD CONSTRAINT chk_transactions_category_confidence
+      CHECK (category_suggestion_confidence IS NULL OR (category_suggestion_confidence >= 0 AND category_suggestion_confidence <= 1));
+  END IF;
+END $$;
 
 COMMENT ON COLUMN public.transactions.ingestion_source IS 'Original acquisition channel; raw source documents/messages are not stored here.';
 COMMENT ON COLUMN public.transactions.category_verified IS 'True when a user explicitly selected or confirmed the persisted category.';

@@ -208,10 +208,18 @@ BEGIN
     'tax_extracted_fields', 'tax_profiles', 'merchant_rules', 'transaction_links'
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (user_id = auth.uid())', t || '_select_own', t);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid())', t || '_insert_own', t);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid())', t || '_update_own', t);
-    EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (user_id = auth.uid())', t || '_delete_own', t);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = t || '_select_own') THEN
+      EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (user_id = auth.uid())', t || '_select_own', t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = t || '_insert_own') THEN
+      EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid())', t || '_insert_own', t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = t || '_update_own') THEN
+      EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid())', t || '_update_own', t);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = t AND policyname = t || '_delete_own') THEN
+      EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (user_id = auth.uid())', t || '_delete_own', t);
+    END IF;
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
   END LOOP;
 END $$;
@@ -227,12 +235,26 @@ VALUES ('arth-private-documents', 'arth-private-documents', false, 31457280,
   ARRAY['application/pdf', 'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'])
 ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "arth_private_documents_select_own" ON storage.objects FOR SELECT TO authenticated
-  USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
-CREATE POLICY "arth_private_documents_insert_own" ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
-CREATE POLICY "arth_private_documents_update_own" ON storage.objects FOR UPDATE TO authenticated
-  USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text)
-  WITH CHECK (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
-CREATE POLICY "arth_private_documents_delete_own" ON storage.objects FOR DELETE TO authenticated
-  USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'arth_private_documents_select_own') THEN
+    CREATE POLICY "arth_private_documents_select_own" ON storage.objects FOR SELECT TO authenticated
+      USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'arth_private_documents_insert_own') THEN
+    CREATE POLICY "arth_private_documents_insert_own" ON storage.objects FOR INSERT TO authenticated
+      WITH CHECK (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'arth_private_documents_update_own') THEN
+    CREATE POLICY "arth_private_documents_update_own" ON storage.objects FOR UPDATE TO authenticated
+      USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text)
+      WITH CHECK (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'arth_private_documents_delete_own') THEN
+    CREATE POLICY "arth_private_documents_delete_own" ON storage.objects FOR DELETE TO authenticated
+      USING (bucket_id = 'arth-private-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+  END IF;
+END $$;

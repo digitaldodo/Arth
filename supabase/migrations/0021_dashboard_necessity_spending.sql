@@ -3,8 +3,8 @@
 -- tiers in the same atomic snapshot query with SECURITY INVOKER.
 
 CREATE OR REPLACE FUNCTION public.fn_dashboard_summary(
-  p_start_date DATE,
-  p_end_date DATE
+  p_start_date DATE DEFAULT NULL,
+  p_end_date DATE DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -28,16 +28,12 @@ BEGIN
     RAISE EXCEPTION 'Authentication required' USING ERRCODE = '28000';
   END IF;
 
-  -- Validate date range bounds
-  IF p_start_date IS NULL OR p_end_date IS NULL THEN
-    RAISE EXCEPTION 'Start date and end date are required' USING ERRCODE = '22000';
-  END IF;
-
-  IF p_start_date > p_end_date THEN
+  -- Validate date range bounds when both are provided
+  IF p_start_date IS NOT NULL AND p_end_date IS NOT NULL AND p_start_date > p_end_date THEN
     RAISE EXCEPTION 'Start date cannot be after end date' USING ERRCODE = '22000';
   END IF;
 
-  -- 1. Compute aggregate income and expense totals for the date range
+  -- 1. Compute aggregate income and expense totals for the date range (or lifetime if unbounded)
   SELECT
     coalesce(sum(amount_paise) FILTER (WHERE type = 'income'), 0),
     coalesce(sum(amount_paise) FILTER (WHERE type = 'expense'), 0)
@@ -47,8 +43,8 @@ BEGIN
   FROM public.transactions
   WHERE user_id = v_user_id
     AND deleted_at IS NULL
-    AND transaction_date >= p_start_date
-    AND transaction_date <= p_end_date;
+    AND (p_start_date IS NULL OR transaction_date >= p_start_date)
+    AND (p_end_date IS NULL OR transaction_date <= p_end_date);
 
   v_net_cash_flow_paise := v_income_paise - v_expenses_paise;
 
@@ -80,8 +76,8 @@ BEGIN
     WHERE t.user_id = v_user_id
       AND t.deleted_at IS NULL
       AND t.type = 'expense'
-      AND t.transaction_date >= p_start_date
-      AND t.transaction_date <= p_end_date
+      AND (p_start_date IS NULL OR t.transaction_date >= p_start_date)
+      AND (p_end_date IS NULL OR t.transaction_date <= p_end_date)
     GROUP BY t.category_id
   ) cat_summary
   JOIN public.categories c ON c.id = cat_summary.category_id;
@@ -119,8 +115,8 @@ BEGIN
     WHERE t.user_id = v_user_id
       AND t.deleted_at IS NULL
       AND t.type = 'expense'
-      AND t.transaction_date >= p_start_date
-      AND t.transaction_date <= p_end_date
+      AND (p_start_date IS NULL OR t.transaction_date >= p_start_date)
+      AND (p_end_date IS NULL OR t.transaction_date <= p_end_date)
     GROUP BY t.necessity
   ) nec_summary ON nec_summary.necessity = nec.necessity;
 
@@ -151,8 +147,8 @@ BEGIN
     FROM public.transactions t
     WHERE t.user_id = v_user_id
       AND t.deleted_at IS NULL
-      AND t.transaction_date >= p_start_date
-      AND t.transaction_date <= p_end_date
+      AND (p_start_date IS NULL OR t.transaction_date >= p_start_date)
+      AND (p_end_date IS NULL OR t.transaction_date <= p_end_date)
     ORDER BY t.transaction_date DESC, t.created_at DESC, t.id DESC
     LIMIT 10
   ) t
