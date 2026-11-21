@@ -17,7 +17,7 @@ import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { computePresetDateRange } from './date-range-utils';
 import { ExportPdfDialog } from './ExportPdfDialog';
 import { type UserProfileSummary } from './ledger-pdf-exporter';
-import { TransactionDetailDrawer } from './TransactionDetailDrawer';
+import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
@@ -201,8 +201,8 @@ export function TransactionLedger({
     }
   };
 
-  // Interactive transaction details & mutations state
-  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
+  // Inline expansion & editing state (State A: Collapsed, State B: Expanded Details, State C: Inline Editor)
+  const [expandedTxnId, setExpandedTxnId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionDTO | null>(null);
 
   // Priority 7: Contextual Inline/Anchored Editing State
@@ -247,13 +247,14 @@ export function TransactionLedger({
       return true;
     },
   });
-  // Priority 1: Back handler for Transaction Details Drawer
+
+  // Back handler for Expanded Transaction Details
   useBackHandler({
-    id: 'drawer-transaction-detail',
+    id: 'expanded-transaction-detail',
     priority: 'modal',
-    enabled: Boolean(selectedTransaction),
+    enabled: Boolean(expandedTxnId && !inlineEditingId),
     onBack: () => {
-      setSelectedTransaction(null);
+      setExpandedTxnId(null);
       return true;
     },
   });
@@ -527,10 +528,26 @@ export function TransactionLedger({
     return `${isNeg ? '-' : '+'}${formatted}.${frac.toString().padStart(2, '0')}`;
   }, [netCashFlowPaise]);
 
-  // Priority 7: Contextual Inline/Anchored Editing Handlers
+  // Inline Details & Editing Handlers (State A: Collapsed, State B: Expanded Details, State C: Inline Editor)
+  const handleToggleExpand = (txnId: string) => {
+    if (expandedTxnId === txnId) {
+      if (inlineEditingId === txnId) {
+        setInlineEditingId(null);
+        setInlineForm(null);
+        setInlineEditError(null);
+      }
+      setExpandedTxnId(null);
+    } else {
+      setInlineEditingId(null);
+      setInlineForm(null);
+      setInlineEditError(null);
+      setExpandedTxnId(txnId);
+    }
+  };
+
   const handleStartInlineEdit = (txn: TransactionDTO, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setSelectedTransaction(null);
+    setExpandedTxnId(txn.id);
     setInlineEditingId(txn.id);
     const amountStr = (Number(txn.amount_paise) / 100).toFixed(2).replace(/\.00$/, '');
     setInlineForm({
@@ -630,15 +647,13 @@ export function TransactionLedger({
     }
   };
 
-  // Handler: Open edit modal from details drawer or button
+  // Handler: Open edit mode directly inline
   const handleOpenEdit = (txn: TransactionDTO) => {
-    setSelectedTransaction(null);
     handleStartInlineEdit(txn);
   };
 
-  // Handler: Open delete modal from details drawer
+  // Handler: Open delete modal from expanded details
   const handleOpenDelete = (txn: TransactionDTO) => {
-    setSelectedTransaction(null);
     setDeleteError(null);
     setDeletingTransaction(txn);
   };
@@ -657,6 +672,9 @@ export function TransactionLedger({
       const target = deletingTransaction;
       clearLedgerQueryCache();
       setTransactions((prev) => prev.filter((t) => t.id !== target.id));
+      if (expandedTxnId === target.id) {
+        setExpandedTxnId(null);
+      }
       setDeletingTransaction(null);
 
       // Offer Undo notification
@@ -1156,232 +1174,77 @@ export function TransactionLedger({
           >
             {filteredTransactions.map((txn) => {
               const isIncome = txn.type === 'income';
+              const { cleanName, isUpi } = extractCounterpartyAndPaymentMethod(txn.description || '', txn.type);
+              const displayTitle = (isUpi && cleanName && cleanName !== 'Uncategorized Transaction')
+                ? cleanName
+                : (txn.description || txn.category_name || 'Uncategorized');
 
-              if (inlineEditingId === txn.id && inlineForm) {
-                return (
-                  <div
-                    key={txn.id}
-                    className="p-4 bg-[var(--bg-surface)] border-2 border-[var(--action-primary-bg)] rounded-xl shadow-xs space-y-3"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        handleCancelInlineEdit(e);
-                      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== 'TEXTAREA')) {
-                        void handleSaveInlineEdit(e);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-2">
-                      <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
-                        <span>✏️</span>
-                        <span>Edit Transaction</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleCancelInlineEdit}
-                        className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 cursor-pointer"
-                        aria-label="Cancel edit"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    {inlineEditError && (
-                      <div className="p-2 rounded bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 text-xs border border-red-200 dark:border-red-900/50">
-                        {inlineEditError}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
-                      <label className="space-y-1">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Amount (₹)</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={inlineForm.amount}
-                          onChange={(e) => setInlineForm({ ...inlineForm, amount: e.target.value })}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 font-mono font-medium text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                          placeholder="0.00"
-                          autoFocus
-                        />
-                      </label>
-
-                      <label className="space-y-1">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Date</span>
-                        <input
-                          type="date"
-                          value={inlineForm.date}
-                          onChange={(e) => setInlineForm({ ...inlineForm, date: e.target.value })}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 font-mono text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                        />
-                      </label>
-
-                      <label className="space-y-1 sm:col-span-2">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Merchant / Description</span>
-                        <input
-                          type="text"
-                          value={inlineForm.description}
-                          onChange={(e) => setInlineForm({ ...inlineForm, description: e.target.value })}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                          placeholder="Merchant counterparty name"
-                        />
-                      </label>
-
-                      <label className="space-y-1">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Type</span>
-                        <select
-                          value={inlineForm.type}
-                          onChange={(e) => {
-                            const nextType = e.target.value as TransactionType;
-                            setInlineForm({
-                              ...inlineForm,
-                              type: nextType,
-                              necessity: nextType === 'expense' ? inlineForm.necessity : null,
-                            });
-                          }}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                        >
-                          <option value="expense">Expense</option>
-                          <option value="income">Income</option>
-                        </select>
-                      </label>
-
-                      <label className="space-y-1">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Channel</span>
-                        <select
-                          value={inlineForm.paymentMethod}
-                          onChange={(e) => setInlineForm({ ...inlineForm, paymentMethod: e.target.value as PaymentMethod })}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                        >
-                          <option value="upi">UPI</option>
-                          <option value="online">Online</option>
-                          <option value="cash">Cash</option>
-                        </select>
-                      </label>
-
-                      <label className="space-y-1 sm:col-span-2">
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Category (Optional)</span>
-                        <select
-                          value={inlineForm.categoryId}
-                          onChange={(e) => setInlineForm({ ...inlineForm, categoryId: e.target.value })}
-                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                        >
-                          <option value="">Uncategorized</option>
-                          {categories
-                            .filter((c) => c.type === inlineForm.type && !c.archived_at)
-                            .map((c) => (
-                              <option value={c.id} key={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                      </label>
-
-                      {inlineForm.type === 'expense' && (
-                        <label className="space-y-1 sm:col-span-2">
-                          <span className="text-[11px] font-medium text-[var(--text-muted)]">Necessity (Optional)</span>
-                          <select
-                            value={inlineForm.necessity || ''}
-                            onChange={(e) => setInlineForm({ ...inlineForm, necessity: (e.target.value as NecessityClass) || null })}
-                            className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
-                          >
-                            <option value="">Unclassified</option>
-                            <option value="essential">Essential</option>
-                            <option value="optional">Optional</option>
-                            <option value="luxury">Luxury</option>
-                          </select>
-                        </label>
-                      )}
-                    </div>
-
-                    {inlineForm.categoryId && (
-                      <label className="flex items-center gap-2 pt-1 text-xs text-[var(--text-secondary)] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={inlineForm.rememberMerchant}
-                          onChange={(e) => setInlineForm({ ...inlineForm, rememberMerchant: e.target.checked })}
-                          className="rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] cursor-pointer"
-                        />
-                        <span>Remember this merchant&apos;s category for future transactions</span>
-                      </label>
-                    )}
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-hairline)]">
-                      <button
-                        type="button"
-                        onClick={handleCancelInlineEdit}
-                        disabled={isSavingInline}
-                        className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleSaveInlineEdit()}
-                        disabled={isSavingInline}
-                        className="px-4 py-1.5 rounded-lg bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] text-xs font-semibold text-[var(--action-primary-fg)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        {isSavingInline ? (
-                          <>
-                            <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            <span>Saving…</span>
-                          </>
-                        ) : (
-                          <span>Save</span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
+              const isExpanded = expandedTxnId === txn.id;
+              const isEditing = inlineEditingId === txn.id;
 
               return (
                 <div
                   key={txn.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Transaction ${txn.description || txn.category_name || 'entry'}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}`}
-                  onClick={() => handleStartInlineEdit(txn)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleStartInlineEdit(txn);
-                    }
-                  }}
-                  className="p-3.5 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)] active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden transition-all cursor-pointer group"
+                  className={`rounded-xl border transition-all duration-150 overflow-hidden ${
+                    isExpanded
+                      ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-xs ring-1 ring-[var(--border-hairline)]'
+                      : 'border-[var(--border-hairline)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-subtle)]'
+                  }`}
                 >
-                  {/* Mobile Layout (< md) */}
-                  <div className="flex md:hidden items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-[var(--text-primary)] group-hover:underline underline-offset-2">
-                          {txn.description || txn.category_name || 'Uncategorized'}
-                        </span>
-                        {txn.description && txn.category_name && (
-                          <span className="text-xs text-[var(--text-secondary)] truncate max-w-[160px]">
-                            • {txn.category_name}
+                  {/* State A: Collapsed Transaction Row (Entire Row is Clickable, NO separate Details/Edit buttons) */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-label={`Transaction ${displayTitle}, ${isIncome ? 'plus' : 'minus'} ${txn.formatted_inr}. Click to ${isExpanded ? 'collapse' : 'view details'}.`}
+                    onClick={() => handleToggleExpand(txn.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleToggleExpand(txn.id);
+                      }
+                    }}
+                    className={`p-3.5 flex items-center justify-between cursor-pointer select-none transition-colors ${
+                      isExpanded ? 'bg-[var(--bg-surface-subtle)]/60' : ''
+                    } focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:outline-hidden`}
+                  >
+                    {/* Mobile Row (< md) */}
+                    <div className="flex md:hidden items-center justify-between w-full gap-3">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                            {displayTitle}
                           </span>
-                        )}
+                          {txn.description && txn.category_name && (
+                            <span className="text-xs text-[var(--text-secondary)] truncate">
+                              • {txn.category_name}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
+                          <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
+                          <span>•</span>
+                          <Badge
+                            variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'}
+                            size="xs"
+                          >
+                            {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                          </Badge>
+                          {('sync_status' in txn && txn.sync_status === 'pending') && (
+                            <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
+                              Pending sync
+                            </Badge>
+                          )}
+                          {txn.necessity && (
+                            <Badge variant={txn.necessity} size="xs" dot={true}>
+                              <span className="capitalize">{txn.necessity}</span>
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
-                        <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
-                        <span>•</span>
-                        <Badge variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
-                          {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
-                        </Badge>
-                        {('sync_status' in txn && txn.sync_status === 'pending') && (
-                          <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
-                            Pending sync
-                          </Badge>
-                        )}
-                        {txn.necessity && (
-                          <Badge variant={txn.necessity} size="xs" dot={true}>
-                            <span className="capitalize">{txn.necessity}</span>
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right flex items-center gap-1.5 shrink-0">
-                      <div>
+                      <div className="text-right flex items-center gap-2 shrink-0">
                         <div
                           className={`font-mono text-sm font-semibold tracking-tight tabular-nums ${
                             isIncome
@@ -1391,115 +1254,421 @@ export function TransactionLedger({
                         >
                           {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
                         </div>
-                        {txn.notes && (
-                          <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
-                            note 📝
+                        <span
+                          className={`text-xs text-[var(--text-muted)] transition-transform duration-150 inline-block ${
+                            isExpanded ? 'rotate-180 text-[var(--text-primary)]' : ''
+                          }`}
+                          aria-hidden="true"
+                        >
+                          ▼
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Desktop Tabular Grid Layout (>= md) */}
+                    <div className="hidden md:grid grid-cols-12 items-center gap-2 w-full">
+                      {/* Col 1-4: Description & Category */}
+                      <div className="col-span-4 min-w-0 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                            {displayTitle}
+                          </span>
+                          {txn.notes && (
+                            <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
+                              📝
+                            </span>
+                          )}
+                        </div>
+                        {txn.description && txn.category_name && (
+                          <span className="text-xs text-[var(--text-secondary)] truncate block">
+                            {txn.category_name}
                           </span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedTransaction(txn);
-                        }}
-                        className="px-2 py-1 rounded text-[11px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
-                        title="View advanced details"
-                      >
-                        Info
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleStartInlineEdit(txn, e)}
-                        className="px-2.5 py-1 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:border-[var(--border-strong)] cursor-pointer"
-                        aria-label={`Edit ${txn.description || 'transaction'}`}
-                      >
-                        Edit
-                      </button>
+
+                      {/* Col 5-6: Date */}
+                      <div className="col-span-2 text-xs font-mono text-[var(--text-secondary)]">
+                        {formatDateHuman(txn.transaction_date)}
+                      </div>
+
+                      {/* Col 7-8: Payment Method & Sync Status */}
+                      <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                        <Badge
+                          variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'}
+                          size="xs"
+                        >
+                          {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                        </Badge>
+                        {('sync_status' in txn && txn.sync_status === 'pending') && (
+                          <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
+                            Pending sync
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Col 9-10: Necessity */}
+                      <div className="col-span-2">
+                        {txn.necessity ? (
+                          <Badge variant={txn.necessity} size="xs" dot={true}>
+                            <span className="capitalize">{txn.necessity}</span>
+                          </Badge>
+                        ) : (
+                          <span className="text-[11px] font-mono text-[var(--text-muted)]">—</span>
+                        )}
+                      </div>
+
+                      {/* Col 11-12: Amount and Expand Chevron (NO Details or Edit buttons on collapsed row) */}
+                      <div className="col-span-2 text-right flex items-center justify-end gap-2.5">
+                        <div
+                          className={`font-mono text-base font-semibold tracking-tight tabular-nums ${
+                            isIncome
+                              ? 'text-[var(--income-fg)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                        </div>
+                        <span
+                          className={`text-xs text-[var(--text-muted)] transition-transform duration-150 inline-block ${
+                            isExpanded ? 'rotate-180 text-[var(--text-primary)]' : ''
+                          }`}
+                          aria-hidden="true"
+                        >
+                          ▼
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Desktop Tabular Grid Layout (>= md) */}
-                  <div className="hidden md:grid grid-cols-12 items-center gap-2">
-                    {/* Col 1-4: Description & Category */}
-                    <div className="col-span-4 min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[var(--text-primary)] truncate group-hover:underline underline-offset-2">
-                          {txn.description || txn.category_name || 'Uncategorized'}
-                        </span>
-                        {txn.notes && (
-                          <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
-                            📝
-                          </span>
-                        )}
-                      </div>
-                      {txn.description && txn.category_name && (
-                        <span className="text-xs text-[var(--text-secondary)] truncate block">
-                          {txn.category_name}
-                        </span>
-                      )}
-                    </div>
+                  {/* Inline Expanded Area: Either State C (Editor) or State B (Details) */}
+                  {isExpanded && (
+                    <div className="border-t border-[var(--border-hairline)] bg-[var(--bg-canvas)]">
+                      {isEditing && inlineForm ? (
+                        /* State C: Inline Editing Form */
+                        <div
+                          className="p-4 sm:p-5 space-y-4"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              handleCancelInlineEdit(e);
+                            } else if (
+                              e.key === 'Enter' &&
+                              (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== 'TEXTAREA')
+                            ) {
+                              void handleSaveInlineEdit(e);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center justify-between pb-2 border-b border-[var(--border-hairline)]">
+                            <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                              <span>✏️</span>
+                              <span>Edit Transaction</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleCancelInlineEdit}
+                              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-2 py-1 rounded cursor-pointer"
+                              aria-label="Cancel edit"
+                            >
+                              ✕ Cancel
+                            </button>
+                          </div>
 
-                    {/* Col 5-6: Date */}
-                    <div className="col-span-2 text-xs font-mono text-[var(--text-secondary)]">
-                      {formatDateHuman(txn.transaction_date)}
-                    </div>
+                          {inlineEditError && (
+                            <div className="p-2.5 rounded-lg bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 text-xs border border-red-200 dark:border-red-900/50">
+                              {inlineEditError}
+                            </div>
+                          )}
 
-                    {/* Col 7-8: Payment Method & Sync Status */}
-                    <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
-                      <Badge variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
-                        {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
-                      </Badge>
-                      {('sync_status' in txn && txn.sync_status === 'pending') && (
-                        <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
-                          Pending sync
-                        </Badge>
-                      )}
-                    </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Amount (₹)</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={inlineForm.amount}
+                                onChange={(e) => setInlineForm({ ...inlineForm, amount: e.target.value })}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 font-mono font-medium text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                                placeholder="0.00"
+                                autoFocus
+                              />
+                            </label>
 
-                    {/* Col 9-10: Necessity */}
-                    <div className="col-span-2">
-                      {txn.necessity ? (
-                        <Badge variant={txn.necessity} size="xs" dot={true}>
-                          <span className="capitalize">{txn.necessity}</span>
-                        </Badge>
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Date</span>
+                              <input
+                                type="date"
+                                value={inlineForm.date}
+                                onChange={(e) => setInlineForm({ ...inlineForm, date: e.target.value })}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 font-mono text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                              />
+                            </label>
+
+                            <label className="space-y-1 sm:col-span-2">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Merchant / Description</span>
+                              <input
+                                type="text"
+                                value={inlineForm.description}
+                                onChange={(e) => setInlineForm({ ...inlineForm, description: e.target.value })}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                                placeholder="Merchant counterparty name"
+                              />
+                            </label>
+
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Type</span>
+                              <select
+                                value={inlineForm.type}
+                                onChange={(e) => {
+                                  const nextType = e.target.value as TransactionType;
+                                  setInlineForm({
+                                    ...inlineForm,
+                                    type: nextType,
+                                    necessity: nextType === 'expense' ? inlineForm.necessity : null,
+                                  });
+                                }}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)] cursor-pointer"
+                              >
+                                <option value="expense">Expense</option>
+                                <option value="income">Income</option>
+                              </select>
+                            </label>
+
+                            <label className="space-y-1">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Channel</span>
+                              <select
+                                value={inlineForm.paymentMethod}
+                                onChange={(e) => setInlineForm({ ...inlineForm, paymentMethod: e.target.value as PaymentMethod })}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)] cursor-pointer"
+                              >
+                                <option value="upi">UPI</option>
+                                <option value="online">Online</option>
+                                <option value="cash">Cash</option>
+                              </select>
+                            </label>
+
+                            <label className="space-y-1 sm:col-span-2">
+                              <span className="text-[11px] font-medium text-[var(--text-muted)]">Category (Optional)</span>
+                              <select
+                                value={inlineForm.categoryId}
+                                onChange={(e) => setInlineForm({ ...inlineForm, categoryId: e.target.value })}
+                                className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)] cursor-pointer"
+                              >
+                                <option value="">Uncategorized</option>
+                                {categories
+                                  .filter((c) => c.type === inlineForm.type && !c.archived_at)
+                                  .map((c) => (
+                                    <option value={c.id} key={c.id}>{c.name}</option>
+                                  ))}
+                              </select>
+                            </label>
+
+                            {inlineForm.type === 'expense' && (
+                              <label className="space-y-1 sm:col-span-2">
+                                <span className="text-[11px] font-medium text-[var(--text-muted)]">Necessity (Optional)</span>
+                                <select
+                                  value={inlineForm.necessity || ''}
+                                  onChange={(e) => setInlineForm({ ...inlineForm, necessity: (e.target.value as NecessityClass) || null })}
+                                  className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-2 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)] cursor-pointer"
+                                >
+                                  <option value="">Unclassified</option>
+                                  <option value="essential">Essential</option>
+                                  <option value="optional">Optional</option>
+                                  <option value="luxury">Luxury</option>
+                                </select>
+                              </label>
+                            )}
+                          </div>
+
+                          {inlineForm.categoryId && (
+                            <label className="flex items-center gap-2 pt-1 text-xs text-[var(--text-secondary)] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={inlineForm.rememberMerchant}
+                                onChange={(e) => setInlineForm({ ...inlineForm, rememberMerchant: e.target.checked })}
+                                className="rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] cursor-pointer"
+                              />
+                              <span>Remember this merchant&apos;s category for future transactions</span>
+                            </label>
+                          )}
+
+                          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--border-hairline)]">
+                            <button
+                              type="button"
+                              onClick={handleCancelInlineEdit}
+                              disabled={isSavingInline}
+                              className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveInlineEdit()}
+                              disabled={isSavingInline}
+                              className="px-5 py-2 rounded-lg bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] text-xs font-semibold text-[var(--action-primary-fg)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              {isSavingInline ? (
+                                <>
+                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  <span>Saving…</span>
+                                </>
+                              ) : (
+                                <span>Save Changes</span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       ) : (
-                        <span className="text-[11px] font-mono text-[var(--text-muted)]">—</span>
+                        /* State B: Inline Expanded Details */
+                        <div className="p-4 sm:p-5 space-y-4">
+                          {/* Expanded Header: Clean Title and Single Edit Action */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--border-hairline)]">
+                            <div className="space-y-0.5 min-w-0">
+                              <span className="text-[10px] uppercase font-mono tracking-wider font-semibold text-[var(--text-muted)] block">
+                                Transaction Details
+                              </span>
+                              <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                                {displayTitle}
+                              </h4>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleStartInlineEdit(txn, e)}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
+                                aria-label={`Edit ${displayTitle}`}
+                              >
+                                <span>✏️</span>
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDelete(txn);
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40"
+                                title="Delete transaction"
+                              >
+                                <span>🗑️</span>
+                                <span>Delete</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleExpand(txn.id);
+                                }}
+                                className="px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer"
+                                aria-label="Collapse details"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Key Fields Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-xs">
+                            <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
+                              <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-0.5">
+                                Amount &amp; Direction
+                              </span>
+                              <span
+                                className={`font-mono text-sm font-bold tabular-nums block ${
+                                  isIncome ? 'text-[var(--income-fg)]' : 'text-[var(--text-primary)]'
+                                }`}
+                              >
+                                {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                              </span>
+                              <span className="text-[10px] text-[var(--text-secondary)] capitalize">
+                                {txn.type}
+                              </span>
+                            </div>
+
+                            <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
+                              <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-0.5">
+                                Transaction Date
+                              </span>
+                              <span className="font-mono text-xs text-[var(--text-primary)] font-semibold block">
+                                {formatDateHuman(txn.transaction_date)}
+                              </span>
+                              <span className="text-[10px] font-mono text-[var(--text-muted)] block">
+                                {txn.transaction_date}
+                              </span>
+                            </div>
+
+                            <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
+                              <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-0.5">
+                                Payment Channel
+                              </span>
+                              <div className="pt-0.5">
+                                <Badge
+                                  variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'}
+                                  size="xs"
+                                >
+                                  {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online / Bank' : 'Cash'}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
+                              <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-0.5">
+                                Category &amp; Tier
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                <span className="text-xs text-[var(--text-primary)] font-medium">
+                                  {txn.category_name || 'Uncategorized'}
+                                </span>
+                                {txn.necessity && (
+                                  <Badge variant={txn.necessity} size="xs" dot={true}>
+                                    <span className="capitalize">{txn.necessity}</span>
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Reference / Provenance Metadata & Raw Narration */}
+                          {(txn.statement_reference || (txn.description && txn.description !== displayTitle) || txn.notes) && (
+                            <div className="pt-3 border-t border-[var(--border-hairline)] space-y-2.5">
+                              {txn.statement_reference && (
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider shrink-0">
+                                    Statement Reference / UTR:
+                                  </span>
+                                  <span className="font-mono text-xs text-[var(--text-primary)] font-medium select-all">
+                                    {txn.statement_reference}
+                                  </span>
+                                </div>
+                              )}
+
+                              {txn.notes && (
+                                <div className="text-xs">
+                                  <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-0.5">
+                                    Notes:
+                                  </span>
+                                  <p className="text-xs text-[var(--text-secondary)] italic bg-[var(--bg-surface)] p-2.5 rounded-lg border border-[var(--border-hairline)]">
+                                    {txn.notes}
+                                  </p>
+                                </div>
+                              )}
+
+                              {txn.description && txn.description !== displayTitle && (
+                                <div>
+                                  <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider block mb-1">
+                                    Original Statement Narration:
+                                  </span>
+                                  <p className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--bg-surface)] p-2.5 rounded-lg border border-[var(--border-hairline)] break-all leading-relaxed select-all">
+                                    {txn.description}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-
-                    {/* Col 11-12: Amount and Actions */}
-                    <div className="col-span-2 text-right flex items-center justify-end gap-1.5">
-                      <div
-                        className={`font-mono text-base font-semibold tracking-tight tabular-nums mr-1 ${
-                          isIncome
-                            ? 'text-[var(--income-fg)]'
-                            : 'text-[var(--text-primary)]'
-                        }`}
-                      >
-                        {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedTransaction(txn);
-                        }}
-                        className="px-2 py-0.5 rounded text-[11px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
-                        title="View raw statement reference & provenance"
-                      >
-                        Details
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleStartInlineEdit(txn, e)}
-                        className="px-2.5 py-0.5 rounded text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all cursor-pointer opacity-80 group-hover:opacity-100"
-                        aria-label={`Edit ${txn.description || 'transaction'}`}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -1508,15 +1677,6 @@ export function TransactionLedger({
       )}
         </>
       )}
-
-      {/* Interactive Transaction Details Drawer */}
-      <TransactionDetailDrawer
-        transaction={selectedTransaction}
-        isOpen={Boolean(selectedTransaction)}
-        onClose={() => setSelectedTransaction(null)}
-        onEdit={handleOpenEdit}
-        onDelete={handleOpenDelete}
-      />
 
       {/* Edit Transaction Modal (Reuses QuickAddModal) */}
       {editingTransaction && (

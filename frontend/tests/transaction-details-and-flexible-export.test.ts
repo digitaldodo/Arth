@@ -108,7 +108,7 @@ describe('Flexible Ledger PDF Export: Date Range Presets & Validation', () => {
     assert.equal(singleDay, '25-10-2026');
   });
 
-  test('TransactionLedger implements accessible clickable rows with keyboard interaction', () => {
+  test('TransactionLedger implements accessible clickable rows with inline expansion and no sidebar drawer', () => {
     const ledgerPath = path.resolve(__dirname, '../src/features/transactions/TransactionLedger.tsx');
     const content = fs.readFileSync(ledgerPath, 'utf8');
 
@@ -116,10 +116,16 @@ describe('Flexible Ledger PDF Export: Date Range Presets & Validation', () => {
     assert.ok(content.includes('role="button"'), 'Transaction row must have role="button"');
     assert.ok(content.includes('tabIndex={0}'), 'Transaction row must have tabIndex={0}');
     assert.ok(content.includes('onKeyDown'), 'Transaction row must have onKeyDown listener');
-    assert.ok(content.includes('setSelectedTransaction'), 'Row click must set selected transaction');
+    assert.ok(content.includes('expandedTxnId'), 'Row click must toggle inline expansion state');
 
-    // Dialogs & drawers must be integrated
-    assert.ok(content.includes('<TransactionDetailDrawer'), 'Must render TransactionDetailDrawer');
+    // Acceptance criteria: NO sidebar drawer, inline expansion in place
+    assert.ok(!content.includes('<TransactionDetailDrawer'), 'Must NOT render TransactionDetailDrawer sidebar');
+    assert.ok(content.includes('handleToggleExpand'), 'Must handle row click inline expand/collapse');
+    assert.ok(content.includes('handleStartInlineEdit'), 'Must support in-place inline edit transformation');
+    assert.ok(content.includes('handleCancelInlineEdit'), 'Must support cancelling edit back to expanded details');
+    assert.ok(content.includes('handleSaveInlineEdit'), 'Must support saving edit in place');
+
+    // Dialogs integrated
     assert.ok(content.includes('<DeleteTransactionModal'), 'Must render DeleteTransactionModal');
     assert.ok(content.includes('<ExportPdfDialog'), 'Must render ExportPdfDialog');
   });
