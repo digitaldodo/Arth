@@ -670,7 +670,19 @@ export function QuickAddModal({
             <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
               {type === 'expense' ? 'Paid using' : 'Received as'}
             </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handlePaymentMethodChange('upi')}
+                disabled={isSubmitting}
+                className={`py-2 px-3 rounded-lg border text-center font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  paymentMethod === 'upi'
+                    ? 'bg-[var(--tag-upi-bg)] text-[var(--tag-upi-fg)] border-[var(--tag-upi-border)] font-semibold ring-1 ring-[var(--tag-upi-dot)]'
+                    : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--border-subtle)]'
+                }`}
+              >
+                UPI
+              </button>
               <button
                 type="button"
                 onClick={() => handlePaymentMethodChange('online')}

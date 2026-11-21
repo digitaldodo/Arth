@@ -341,8 +341,8 @@ class SyncEngine {
       amountDecimal = updates.amount;
     }
 
-    const categoryId = updates.category_id ?? existing.category_id;
-    const category = categories.find((c) => c.id === categoryId);
+    const categoryId = updates.category_id !== undefined ? updates.category_id : existing.category_id;
+    const category = categoryId ? categories.find((c) => c.id === categoryId) : null;
 
     const updatedTxn: OfflineTransactionDTO = {
       ...existing,
@@ -351,7 +351,7 @@ class SyncEngine {
       formatted_inr: formattedInr,
       type: updates.type ?? existing.type,
       category_id: categoryId,
-      category_name: category?.name ?? existing.category_name,
+      category_name: category ? category.name : (categoryId === null ? undefined : existing.category_name),
       transaction_date: updates.transaction_date ?? existing.transaction_date,
       payment_method: updates.payment_method ?? existing.payment_method,
       necessity: updates.type === 'expense' ? (updates.necessity ?? existing.necessity) : null,

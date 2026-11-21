@@ -216,11 +216,50 @@ In `StatementImport.tsx`, `batchRecord.skipped_rows = skippedRowsForImport(resul
 
 ---
 
-### 6.3 Comprehensive Verification Results
+### 6.3 Verification Baseline
+- **Baseline Test Suite:** `frontend/tests/statement-import-ledger-sync-recovery.test.ts` (12 / 12 tests passed).
 
-- **New Test Suite:** `frontend/tests/statement-import-ledger-sync-recovery.test.ts` (12 / 12 tests passed).
-- **Frontend Test Suite:** 692 / 692 tests passed across 165 test suites.
-- **Backend Test Suite:** 228 / 228 tests passed across 23 test suites.
-- **Global Recursive Typecheck:** 0 TypeScript errors across the entire monorepo (`@arth/contracts`, `@arth/backend`, `@arth/frontend`).
+---
+
+## 7. Master Product Improvements & Three-Section Review Architecture
+
+### 7.1 Three-Section Review Workflow
+The import review interface is partitioned into three mutually exclusive, dedicated sections:
+- **Section A — To Review:** Uncommitted candidate rows awaiting user confirmation. Categories and necessity are fully optional. Rows immediately transition *out* of Section A upon verified local-first persistence into the Ledger.
+- **Section B — Imported:** Committed transactions displaying a green status badge, committed debit/credit totals, and a direct link to the Transaction Ledger. Committed rows never appear in Section A.
+- **Section C — Skipped / Needs Attention:** Non-imported rows displaying explicit reasons (`Ambiguous Date`, `Candidate Transfer`, `Candidate Card Settlement`, `Possible Duplicate`, `User Skipped`).
+
+### 7.2 Non-Discarding Date Extraction & Inline Resolution
+Rows with unparseable or ambiguous dates are **never discarded**. They are captured in Section C with an inline date picker (`<input type="date">`) and a "Confirm Date & Move to Review" action. The parser resolves ordinal suffixes (`21st Nov 2026`), embedded date prefixes (`Dt: 21/11/2026`), OCR substitutions (`O` for `0`, `l`/`I` for `1`), and compact 8-digit formats (`21112026`).
+
+### 7.3 Database Migration 0038: First-Class UPI Payment Method
+- Added `'upi'` to PostgreSQL `payment_method` enum (`ALTER TYPE public.payment_method ADD VALUE IF NOT EXISTS 'upi'`).
+- Updated `fn_account_balances` and `fn_validate_transaction_balance` so that `'upi'` transactions are categorized under digital balances alongside `'online'`.
+- Updated `@arth/contracts`, backend validation, and frontend badges (`variant="upi"`).
+
+### 7.4 UPI Intelligence & Clean Merchant Counterparty Extraction
+The `extractCounterpartyAndPaymentMethod` engine strips banking noise, handles UPI patterns (`UPI-...`, `UPI/...`, `UPI-P2P`, `UPI-P2M`, `UPI-QR`), extracts VPA handles, masks card/account numbers, preserves Indian financial acronyms (`HDFC`, `ICICI`, `SBI`, `ATM`, `POS`, `UPI`, `NEFT`, `IMPS`), and exposes raw narration in details while displaying clean merchant titles.
+
+### 7.5 Layered Categorization & Rule Learning Integration
+A 4-tier categorization pipeline:
+1. **Layer 1: User-Specific Merchant Rules** (local persistence, instant override).
+2. **Layer 2: Curated Indian Merchant Directory** (Swiggy, Zomato, BigBasket, Blinkit, etc.).
+3. **Layer 3: Weak Supervision / FastText ML Models**.
+4. **Layer 4: First-Class Uncategorized Fallback** (`category_id: null`).
+When a user assigns a category in Review or the Ledger, an inline prompt offers "Remember this merchant's category for future transactions", auto-learning rules for future imports.
+
+### 7.6 Contextual Inline Transaction Editing in Ledger
+Replaced oversized drawers and popups with contextual inline editing directly within the table row on desktop and touch-friendly anchored cards on mobile. Allows editing amount, date, description, category, necessity, and payment method with immediate Save/Cancel and Enter/Escape keyboard shortcuts. Preserves raw narration without overwriting notes or statement references.
+
+### 7.7 Batch Inspection Modal & Accessible Contrast
+- **Inspect Batch Modal:** Displays strictly mutually exclusive batch accounting: `detected === committed + pending + confirmed_duplicates + skipped`. Displays skipped row details with dates, amounts, and reasons.
+- **High-Contrast Retry Sync:** Eliminates yellow-on-yellow contrast in light/dark themes with WCAG AA compliant amber buttons.
+
+---
+
+### 7.8 Final Monorepo Verification Results
+- **Frontend Test Suite:** 708 / 708 tests passed across 180 test suites.
+- **Backend Test Suite:** 229 / 229 tests passed across 49 test suites.
+- **Global Typecheck:** 0 TypeScript errors across all workspace packages (`@arth/contracts`, `@arth/backend`, `@arth/frontend`).
 - **Production Build:** `pnpm build` completed successfully; all 37 application routes and service worker generated.
 

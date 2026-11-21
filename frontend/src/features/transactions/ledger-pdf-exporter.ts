@@ -687,7 +687,7 @@ export async function exportLedgerToPdf(
     const name = t.description?.trim() || t.category_name?.trim() || 'Transaction';
     const category = t.category_name?.trim() || 'Uncategorized';
     const type = isIncome ? 'Income' : 'Expense';
-    const method = t.payment_method === 'online' ? 'Online' : 'Cash';
+    const method = t.payment_method === 'upi' ? 'UPI' : t.payment_method === 'online' ? 'Online' : 'Cash';
 
     // Format human-readable necessity tag
     const necessity =

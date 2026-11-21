@@ -23,6 +23,10 @@ import { getStatementCompatibilityMatrix } from './statement-adapters';
 import { alignOcrRows, requireOcrReview, type OcrCell, type OcrLine } from './statement-ocr';
 import { skippedRowsForImport } from './statement-skip-history';
 import { merchantFingerprint, recordCategoryCorrection, suggestCategory } from '@/features/categorization';
+import { Badge } from '@/components/ui/Badge';
+import { categorizeTransactionWithLayers } from '@/features/categorization/layered-categorization';
+import { saveUserMerchantRule } from '@/features/categorization/user-merchant-rules';
+import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
 
 type Props = {
   userId: string;
@@ -100,6 +104,16 @@ export function StatementImport({ userId, onImported }: Props) {
   const [reviewFilter, setReviewFilter] = useState<'all' | 'new' | 'already_recorded' | 'possible_duplicate' | 'needs_review'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRowKeys, setExpandedRowKeys] = useState<Set<string>>(new Set());
+  const [activeSection, setActiveSection] = useState<'to_review' | 'imported' | 'attention'>('to_review');
+  const [dateCorrectionMap, setDateCorrectionMap] = useState<Record<string, string>>({});
+  const [rememberMerchantPrompt, setRememberMerchantPrompt] = useState<{
+    rowKey: string;
+    merchantPattern: string;
+    categoryId: string;
+    categoryName: string;
+  } | null>(null);
+  const [inspectedBatch, setInspectedBatch] = useState<StatementImportBatch | null>(null);
+  const [rememberedSuccessMsg, setRememberedSuccessMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pdfTask = useRef<{ destroy: () => Promise<void> } | null>(null);
   const parseVersion = useRef(0);
@@ -193,7 +207,35 @@ export function StatementImport({ userId, onImported }: Props) {
     if (pdfTask.current) void pdfTask.current.destroy().catch(() => {});
   }, []);
 
-  const selectedRows = useMemo(() => result?.rows.filter((row) => row.selected) || [], [result]);
+  const importedRows = useMemo(() => {
+    return result?.rows.filter((r) => r.state === 'imported') || [];
+  }, [result?.rows]);
+
+  const attentionRows = useMemo(() => {
+    if (!result?.rows) return [];
+    return result.rows.filter((r) => {
+      if (r.state === 'imported') return false;
+      return (
+        r.state === 'needs_review' ||
+        r.state === 'possible_duplicate' ||
+        r.classification === 'extraction_problem' ||
+        r.classification === 'possible_duplicate' ||
+        r.classification === 'already_recorded' ||
+        r.classification === 'internal_transfer' ||
+        r.classification === 'credit_card_settlement' ||
+        !r.date ||
+        r.exclusionReason != null
+      );
+    });
+  }, [result?.rows]);
+
+  const toReviewRows = useMemo(() => {
+    if (!result?.rows) return [];
+    const attentionKeys = new Set(attentionRows.map((r) => r.key));
+    return result.rows.filter((r) => r.state !== 'imported' && !attentionKeys.has(r.key));
+  }, [result?.rows, attentionRows]);
+
+  const selectedRows = useMemo(() => toReviewRows.filter((row) => row.selected), [toReviewRows]);
 
   const selectedTotalPaise = useMemo(() => {
     return selectedRows.reduce((acc, row) => acc + BigInt(row.amountPaise), 0n);
@@ -219,22 +261,20 @@ export function StatementImport({ userId, onImported }: Props) {
 
   const filteredRows = useMemo(() => {
     if (!result) return [];
-    let list = result.rows;
-
-    if (reviewFilter === 'new') {
-      list = list.filter((r) => r.state === 'new');
-    } else if (reviewFilter === 'already_recorded') {
-      list = list.filter((r) => r.classification === 'already_recorded');
-    } else if (reviewFilter === 'possible_duplicate') {
-      list = list.filter((r) => r.state === 'possible_duplicate' || r.classification === 'possible_duplicate');
-    } else if (reviewFilter === 'needs_review') {
-      list = list.filter((r) => r.state === 'needs_review' || r.state === 'ambiguous');
+    let list: ParsedStatementRow[] = [];
+    if (activeSection === 'to_review') {
+      list = toReviewRows;
+    } else if (activeSection === 'imported') {
+      list = importedRows;
+    } else {
+      list = attentionRows;
     }
 
     const q = typeof searchQuery === 'string' ? searchQuery.toLowerCase().trim() : '';
     if (q) {
       list = list.filter((r) =>
         (r.description || '').toLowerCase().includes(q) ||
+        (r.cleanMerchant || '').toLowerCase().includes(q) ||
         (r.amount || '').includes(q) ||
         (r.date || '').includes(q) ||
         (r.reference && String(r.reference).toLowerCase().includes(q))
@@ -242,7 +282,7 @@ export function StatementImport({ userId, onImported }: Props) {
     }
 
     return list;
-  }, [result, reviewFilter, searchQuery]);
+  }, [result, activeSection, toReviewRows, importedRows, attentionRows, searchQuery]);
 
   async function readFile(selectedFile: File) {
     const version = ++parseVersion.current;
@@ -315,12 +355,11 @@ export function StatementImport({ userId, onImported }: Props) {
 
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const suggested = suggestCategory(row.description, available, row.type);
-        const match = suggested?.category;
+        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
         return {
           ...row,
-          categoryId: match?.id || '',
-          necessity: row.type === 'expense' ? (row.necessity || null) : null,
+          categoryId: layered.categoryId || '',
+          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
         };
       });
 
@@ -397,12 +436,11 @@ export function StatementImport({ userId, onImported }: Props) {
       }
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const suggested = suggestCategory(row.description, available, row.type);
-        const match = suggested?.category;
+        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
         return {
           ...row,
-          categoryId: match?.id || '',
-          necessity: row.type === 'expense' ? (row.necessity || null) : null,
+          categoryId: layered.categoryId || '',
+          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
         };
       });
       setResult(parsed);
@@ -616,13 +654,12 @@ export function StatementImport({ userId, onImported }: Props) {
 
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
-        const suggested = suggestCategory(row.description, available, row.type);
-        const match = suggested?.category;
+        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
         return {
           ...row,
-          categoryId: match?.id || '',
+          categoryId: layered.categoryId || '',
           selected: false,
-          necessity: row.type === 'expense' ? (row.necessity || null) : null,
+          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
         };
       });
 
@@ -674,20 +711,96 @@ export function StatementImport({ userId, onImported }: Props) {
   }
 
   function selectAllRows(selected: boolean) {
-    setResult((current) => current ? {
-      ...current,
-      rows: current.rows.map((row) => ({ ...row, selected })),
-    } : current);
+    setResult((current) => {
+      if (!current) return current;
+      const targetKeys = new Set(toReviewRows.map((r) => r.key));
+      return {
+        ...current,
+        rows: current.rows.map((row) => (targetKeys.has(row.key) ? { ...row, selected } : row)),
+      };
+    });
   }
 
   function selectNewOnly() {
-    setResult((current) => current ? {
-      ...current,
-      rows: current.rows.map((row) => ({
-        ...row,
-        selected: row.state === 'new' && row.classification !== 'already_recorded' && row.classification !== 'possible_duplicate',
-      })),
-    } : current);
+    setResult((current) => {
+      if (!current) return current;
+      const targetKeys = new Set(toReviewRows.map((r) => r.key));
+      return {
+        ...current,
+        rows: current.rows.map((row) => (targetKeys.has(row.key) ? { ...row, selected: true } : row)),
+      };
+    });
+  }
+
+  function confirmRowDate(key: string) {
+    const chosenDate = dateCorrectionMap[key];
+    if (!chosenDate) return;
+    updateRow(key, {
+      date: chosenDate,
+      state: 'new',
+      classification: 'new',
+      selected: true,
+      warning: undefined,
+      exclusionReason: undefined,
+    });
+    setDateCorrectionMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function includeRowInReview(key: string) {
+    updateRow(key, {
+      state: 'new',
+      classification: 'new',
+      selected: true,
+      exclusionReason: undefined,
+      warning: undefined,
+    });
+  }
+
+  function permanentlySkipRow(key: string) {
+    updateRow(key, {
+      selected: false,
+      exclusionReason: 'Permanently skipped by user',
+    });
+  }
+
+  function handleRememberMerchant(row: ParsedStatementRow, catId: string) {
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const pattern = row.cleanMerchant || row.description;
+    saveUserMerchantRule(userId, {
+      pattern,
+      cleanName: row.cleanMerchant || pattern,
+      categoryId: cat.id,
+      categoryName: cat.name,
+      necessity: row.necessity ?? null,
+    });
+    setRememberedSuccessMsg(`Rule remembered! Transactions matching "${pattern}" will auto-categorize to ${cat.name}.`);
+    setTimeout(() => setRememberedSuccessMsg(null), 4000);
+    setRememberMerchantPrompt(null);
+
+    // Apply rule immediately to other uncategorized rows in this parsed statement
+    setResult((cur) => {
+      if (!cur) return cur;
+      return {
+        ...cur,
+        rows: cur.rows.map((r) => {
+          if (r.key === row.key || r.categoryId) return r;
+          const rPattern = r.cleanMerchant || r.description;
+          if (rPattern.toLowerCase().includes(pattern.toLowerCase()) || pattern.toLowerCase().includes(rPattern.toLowerCase())) {
+            return {
+              ...r,
+              categoryId: cat.id,
+              necessity: r.type === 'expense' ? (r.necessity || (row.necessity ?? null)) : null,
+            };
+          }
+          return r;
+        }),
+      };
+    });
   }
 
   async function persistRemoteBatch(batch: StatementImportBatch, sourceFormat: StoredBatch['source_format'], parserId: string, sourceHash: string | null, importedCount: number) {
@@ -839,6 +952,7 @@ export function StatementImport({ userId, onImported }: Props) {
       const updatedHistory = [batchRecord, ...history.filter((item) => item.id !== batchId)];
       setHistory(updatedHistory);
       void refreshPendingCounts(updatedHistory);
+      setActiveSection('imported');
       setMessage(pendingForBatch.length
         ? `${syncedCount} of ${importedIds.length} transactions synced; ${pendingForBatch.length} saved locally and queued for cloud sync. Batch ${batchId.slice(0, 8)}.`
         : `Successfully imported ${importedIds.length} transactions into your consolidated ledger. Batch ${batchId.slice(0, 8)}.`);
@@ -1243,208 +1357,637 @@ export function StatementImport({ userId, onImported }: Props) {
             </fieldset>
           )}
 
-          {/* Review Toolbar & Bulk Controls */}
-          <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Review &amp; Confirm Transactions</h3>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Review extracted transactions before committing them to your consolidated personal Ledger.
-                </p>
+          {/* Three-Section Review Workflow */}
+          <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 sm:p-5 space-y-4">
+            {/* Section Tabs Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('to_review')}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'to_review'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-xs'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <span>Section A — To Review</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    activeSection === 'to_review'
+                      ? 'bg-[var(--action-primary-fg)]/20 text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-canvas)] text-[var(--text-muted)]'
+                  }`}>
+                    {toReviewRows.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('imported')}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'imported'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <span>Section B — Imported</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    activeSection === 'imported'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                  }`}>
+                    {importedRows.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('attention')}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'attention'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <span>Section C — Skipped / Needs Attention</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    activeSection === 'attention'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                  }`}>
+                    {attentionRows.length}
+                  </span>
+                </button>
               </div>
 
-              {/* Commit Action Button */}
-              <button
-                type="button"
-                disabled={importing || !selectedRows.length}
-                onClick={() => void importSelected()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--action-primary-bg)] px-5 py-2.5 text-xs sm:text-sm font-bold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
-              >
-                {importing ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    <span>Importing {selectedRows.length} transactions…</span>
-                  </>
+              {/* Action button visible when in review tab */}
+              {activeSection === 'to_review' && (
+                <button
+                  type="button"
+                  disabled={importing || !selectedRows.length}
+                  onClick={() => void importSelected()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--action-primary-bg)] px-5 py-2 text-xs sm:text-sm font-bold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {importing ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span>Importing {selectedRows.length} transactions…</span>
+                    </>
+                  ) : (
+                    <span>Import selected transactions ({selectedRows.length}) · {formatPaiseToINR(selectedTotalPaise)}</span>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Remembered Rule Notification Banner */}
+            {rememberedSuccessMsg && (
+              <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
+                <span>✓ {rememberedSuccessMsg}</span>
+                <button type="button" onClick={() => setRememberedSuccessMsg(null)} className="text-xs cursor-pointer font-bold ml-2">✕</button>
+              </div>
+            )}
+
+            {/* SECTION A: TO REVIEW */}
+            {activeSection === 'to_review' && (
+              <div className="space-y-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    Review and confirm uncommitted transactions. Categories and necessity are optional.
+                  </div>
+                  <div className="w-full md:w-64">
+                    <input
+                      type="text"
+                      placeholder="Filter by description, merchant, amount…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {/* Selection Shortcuts */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-[var(--text-muted)] border-t border-[var(--border-hairline)]">
+                  <div className="flex items-center gap-2">
+                    <span>Select:</span>
+                    <button
+                      type="button"
+                      onClick={() => selectAllRows(true)}
+                      className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
+                    >
+                      Select all ({toReviewRows.length})
+                    </button>
+                    <span>·</span>
+                    <button
+                      type="button"
+                      onClick={selectNewOnly}
+                      className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
+                    >
+                      Select new only
+                    </button>
+                    <span>·</span>
+                    <button
+                      type="button"
+                      onClick={() => selectAllRows(false)}
+                      className="text-[var(--text-secondary)] hover:underline cursor-pointer"
+                    >
+                      Deselect all
+                    </button>
+                  </div>
+                  <span>Showing {filteredRows.length} of {toReviewRows.length} rows to review</span>
+                </div>
+
+                {toReviewRows.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg space-y-1">
+                    <p className="font-semibold text-[var(--text-primary)]">No uncommitted transactions to review.</p>
+                    <p>All extracted transactions have either been committed to your Ledger (Section B) or placed in Section C for attention.</p>
+                  </div>
+                ) : filteredRows.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                    No transactions match the search filter.
+                  </div>
                 ) : (
-                  <span>Import selected transactions ({selectedRows.length})</span>
-                )}
-              </button>
-            </div>
+                  <>
+                    {/* Desktop Review Table */}
+                    <div className="hidden md:block overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={filteredRows.length > 0 && filteredRows.every((r) => r.selected)}
+                                onChange={(e) => {
+                                  const check = e.target.checked;
+                                  setResult((curr) => curr ? {
+                                    ...curr,
+                                    rows: curr.rows.map((r) => filteredRows.some((fr) => fr.key === r.key) ? { ...r, selected: check } : r),
+                                  } : curr);
+                                }}
+                                aria-label="Select all filtered rows"
+                                className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
+                              />
+                            </th>
+                            <th className="py-2.5 px-3 w-28 font-medium">Date</th>
+                            <th className="py-2.5 px-3 font-medium">Merchant / Counterparty</th>
+                            <th className="py-2.5 px-3 w-24 text-center font-medium">Channel</th>
+                            <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
+                            <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
+                            <th className="py-2.5 px-3 w-40 font-medium">Category (Optional)</th>
+                            <th className="py-2.5 px-3 w-16 text-center font-medium">Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-hairline)]">
+                          {filteredRows.map((row) => {
+                            const isExpanded = expandedRowKeys.has(row.key);
+                            const category = categories.find((c) => c.id === row.categoryId);
+                            return (
+                              <Fragment key={row.key}>
+                                <tr className={`transition-colors hover:bg-[var(--bg-surface-subtle)] ${row.selected ? 'bg-[var(--bg-surface)]' : 'bg-[var(--bg-canvas)] opacity-80'}`}>
+                                  <td className="py-2.5 px-3 text-center align-top">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.selected}
+                                      onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
+                                      aria-label={`Select ${row.description || 'transaction'}`}
+                                      className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="py-2.5 px-3 font-mono text-[var(--text-secondary)] align-top whitespace-nowrap">
+                                    {row.date}
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top min-w-0 max-w-sm lg:max-w-md">
+                                    <div className="font-semibold text-[var(--text-primary)] leading-tight" title={row.description || ''}>
+                                      {row.cleanMerchant || row.description || 'Unspecified Transaction'}
+                                    </div>
+                                    {row.cleanMerchant && row.cleanMerchant !== row.description && (
+                                      <p className="text-[10px] text-[var(--text-muted)] line-clamp-1 mt-0.5" title={row.description}>
+                                        {row.description}
+                                      </p>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
+                                      {row.reference && (
+                                        <span className="font-mono bg-[var(--bg-surface-subtle)] px-1.5 py-0.5 rounded border border-[var(--border-hairline)]">
+                                          Ref: {row.reference}
+                                        </span>
+                                      )}
+                                      {row.valueDate && <span>Value: {row.valueDate}</span>}
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
+                                    <Badge variant={row.paymentMethod === 'upi' ? 'upi' : row.paymentMethod === 'online' ? 'online' : 'cash'} size="xs">
+                                      {row.paymentMethod === 'upi' ? 'UPI' : row.paymentMethod === 'online' ? 'Online' : 'Cash'}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      row.type === 'expense'
+                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    }`}>
+                                      {row.type === 'expense' ? 'Expense' : 'Income'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top text-right font-mono font-semibold whitespace-nowrap">
+                                    <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                      {row.type === 'expense' ? '-' : '+'}₹{row.amount}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top">
+                                    <select
+                                      className="w-full rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1 text-xs text-[var(--text-primary)]"
+                                      value={row.categoryId || ''}
+                                      onChange={(event) => {
+                                        const nextCatId = event.target.value;
+                                        updateRow(row.key, { categoryId: nextCatId });
+                                        if (nextCatId) {
+                                          const cat = categories.find((c) => c.id === nextCatId);
+                                          if (cat) {
+                                            setRememberMerchantPrompt({
+                                              rowKey: row.key,
+                                              merchantPattern: row.cleanMerchant || row.description,
+                                              categoryId: nextCatId,
+                                              categoryName: cat.name,
+                                            });
+                                          }
+                                        } else {
+                                          setRememberMerchantPrompt(null);
+                                        }
+                                      }}
+                                    >
+                                      <option value="">Uncategorized</option>
+                                      {categories.filter((c) => c.type === row.type && !c.archived_at).map((c) => (
+                                        <option value={c.id} key={c.id}>{c.name}</option>
+                                      ))}
+                                    </select>
+                                    {rememberMerchantPrompt?.rowKey === row.key && (
+                                      <div className="mt-1 p-1.5 rounded bg-[var(--action-primary-bg)]/10 border border-[var(--action-primary-bg)]/20 text-[10px] space-y-1">
+                                        <span className="block text-[var(--text-primary)]">
+                                          Remember <strong>{rememberMerchantPrompt.categoryName}</strong> for future imports of &quot;{rememberMerchantPrompt.merchantPattern.slice(0, 30)}&quot;?
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRememberMerchant(row, rememberMerchantPrompt.categoryId)}
+                                            className="px-2 py-0.5 rounded bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] font-medium text-[9px] cursor-pointer"
+                                          >
+                                            Remember
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setRememberMerchantPrompt(null)}
+                                            className="text-[9px] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                                          >
+                                            Dismiss
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRowExpand(row.key)}
+                                      className="px-2 py-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                                      aria-label={isExpanded ? 'Hide transaction details' : 'View or edit transaction details'}
+                                    >
+                                      {isExpanded ? 'Hide ▲' : 'Details ▼'}
+                                    </button>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className="bg-[var(--bg-surface-subtle)]">
+                                    <td colSpan={8} className="p-4 border-t border-[var(--border-hairline)]">
+                                      <div className="space-y-3">
+                                        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                            Date
+                                            <input
+                                              className={`${inputClass} mt-0.5`}
+                                              type="date"
+                                              value={row.date}
+                                              onChange={(event) => updateRow(row.key, { date: event.target.value })}
+                                            />
+                                          </label>
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)] sm:col-span-2">
+                                            Description / Narration
+                                            <input
+                                              className={`${inputClass} mt-0.5`}
+                                              value={row.description || ''}
+                                              onChange={(event) => updateRow(row.key, { description: event.target.value })}
+                                            />
+                                          </label>
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                            Amount (₹)
+                                            <input
+                                              className={`${inputClass} mt-0.5 font-mono`}
+                                              inputMode="decimal"
+                                              value={row.amount || ''}
+                                              onChange={(event) => {
+                                                const value = event.target.value;
+                                                try {
+                                                  const paise = Number(parseINRToPaise(value));
+                                                  updateRow(row.key, { amount: value, amountPaise: paise });
+                                                } catch {
+                                                  updateRow(row.key, { amount: value });
+                                                }
+                                              }}
+                                            />
+                                          </label>
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                            Direction
+                                            <select
+                                              className={`${inputClass} mt-0.5`}
+                                              value={row.type}
+                                              onChange={(event) => {
+                                                const nextType = event.target.value as 'income' | 'expense';
+                                                updateRow(row.key, {
+                                                  type: nextType,
+                                                  categoryId: categories.find((c) => c.type === nextType && !c.archived_at)?.id || '',
+                                                  necessity: nextType === 'expense' ? (row.necessity || null) : null,
+                                                });
+                                              }}
+                                            >
+                                              <option value="expense">Expense</option>
+                                              <option value="income">Income</option>
+                                            </select>
+                                          </label>
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                            Necessity (Optional)
+                                            {row.type === 'expense' ? (
+                                              <select
+                                                className={`${inputClass} mt-0.5`}
+                                                value={row.necessity || ''}
+                                                onChange={(event) => updateRow(row.key, { necessity: (event.target.value as 'essential' | 'optional' | 'luxury') || null })}
+                                              >
+                                                <option value="">Unclassified</option>
+                                                <option value="essential">Essential</option>
+                                                <option value="optional">Optional</option>
+                                                <option value="luxury">Luxury</option>
+                                              </select>
+                                            ) : (
+                                              <input
+                                                className={`${inputClass} mt-0.5 opacity-50 cursor-not-allowed`}
+                                                disabled
+                                                value="—"
+                                              />
+                                            )}
+                                          </label>
+                                          <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                            Channel
+                                            <select
+                                              className={`${inputClass} mt-0.5`}
+                                              value={row.paymentMethod}
+                                              onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' | 'upi' })}
+                                            >
+                                              <option value="upi">UPI</option>
+                                              <option value="online">Online / Card</option>
+                                              <option value="cash">Cash</option>
+                                            </select>
+                                          </label>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-hairline)]">
+                                          <label className="inline-flex items-center gap-1.5">
+                                            <span>Reference / UTR:</span>
+                                            <input
+                                              className="rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-0.5 text-xs font-mono text-[var(--text-primary)]"
+                                              placeholder="Optional reference"
+                                              value={row.reference || ''}
+                                              onChange={(event) => updateRow(row.key, { reference: event.target.value || null })}
+                                            />
+                                          </label>
+                                          {row.balance && <span>Statement balance: ₹{row.balance}</span>}
+                                          {row.cleanMerchant && (
+                                            <span>Detected counterparty: <strong className="text-[var(--text-primary)]">{row.cleanMerchant}</strong></span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
-            {/* Filter Tabs & Search Bar */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-2 border-t border-[var(--border-hairline)]">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('all')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    reviewFilter === 'all'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  All ({result.rows.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('new')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    reviewFilter === 'new'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  New ({summary?.newCount ?? 0})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('already_recorded')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    reviewFilter === 'already_recorded'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Already on File ({totals.alreadyRecorded})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('possible_duplicate')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    reviewFilter === 'possible_duplicate'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Duplicates ({totals.duplicates})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter('needs_review')}
-                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
-                    reviewFilter === 'needs_review'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Needs Review ({totals.review})
-                </button>
-              </div>
-
-              {/* Search filter input */}
-              <div className="w-full md:w-64">
-                <input
-                  type="text"
-                  placeholder="Filter by description or amount…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            {/* Selection Shortcut Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-[var(--text-muted)]">
-              <div className="flex items-center gap-2">
-                <span>Select:</span>
-                <button
-                  type="button"
-                  onClick={() => selectAllRows(true)}
-                  className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
-                >
-                  Select all ({result.rows.length})
-                </button>
-                <span>·</span>
-                <button
-                  type="button"
-                  onClick={selectNewOnly}
-                  className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
-                >
-                  Select new only
-                </button>
-                <span>·</span>
-                <button
-                  type="button"
-                  onClick={() => selectAllRows(false)}
-                  className="text-[var(--text-secondary)] hover:underline cursor-pointer"
-                >
-                  Deselect all
-                </button>
-              </div>
-              <span>Showing {filteredRows.length} of {result.rows.length} rows</span>
-            </div>
-
-            {/* Empty state */}
-            {filteredRows.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
-                No transactions match the selected filter.
-              </div>
-            ) : (
-              <>
-                {/* 1. Desktop Clean Table View (hidden on small viewports) */}
-                <div className="hidden md:block overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
-                      <tr>
-                        <th className="py-2.5 px-3 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={filteredRows.length > 0 && filteredRows.every((r) => r.selected)}
-                            onChange={(e) => {
-                              const check = e.target.checked;
-                              setResult((curr) => curr ? {
-                                ...curr,
-                                rows: curr.rows.map((r) => filteredRows.some((fr) => fr.key === r.key) ? { ...r, selected: check } : r),
-                              } : curr);
-                            }}
-                            aria-label="Select all filtered rows"
-                            className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
-                          />
-                        </th>
-                        <th className="py-2.5 px-3 w-28 font-medium">Date</th>
-                        <th className="py-2.5 px-3 font-medium">Description / Narration</th>
-                        <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
-                        <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
-                        <th className="py-2.5 px-3 w-32 text-center font-medium">Status</th>
-                        <th className="py-2.5 px-3 w-16 text-center font-medium">Details</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-hairline)]">
+                    {/* Mobile Review Cards View */}
+                    <div className="block md:hidden space-y-2.5">
                       {filteredRows.map((row) => {
                         const isExpanded = expandedRowKeys.has(row.key);
                         const category = categories.find((c) => c.id === row.categoryId);
-                        const suggestion = suggestCategory(row.description, categories, row.type);
                         return (
-                          <Fragment key={row.key}>
-                            <tr className={`transition-colors hover:bg-[var(--bg-surface-subtle)] ${row.selected ? 'bg-[var(--bg-surface)]' : 'bg-[var(--bg-canvas)] opacity-80'}`}>
-                              <td className="py-2.5 px-3 text-center align-top">
-                                <input
-                                  type="checkbox"
-                                  checked={row.selected}
-                                  onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
-                                  aria-label={`Select ${row.description || 'transaction'}`}
-                                  className="h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2.5 px-3 font-mono text-[var(--text-secondary)] align-top whitespace-nowrap">
+                          <article
+                            key={row.key}
+                            className={`rounded-lg border p-3 transition-colors ${
+                              row.selected
+                                ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]'
+                                : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] opacity-85'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={row.selected}
+                                onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
+                                aria-label={`Select ${row.description || 'transaction'}`}
+                                className="mt-1 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-snug">
+                                    {row.cleanMerchant || row.description || 'Unspecified Transaction'}
+                                  </p>
+                                  <span className={`font-mono font-bold text-xs shrink-0 ${
+                                    row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                                  }`}>
+                                    {row.type === 'expense' ? '-' : '+'}₹{row.amount}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px] text-[var(--text-muted)]">
+                                  <span className="font-mono">{row.date}</span>
+                                  <span>·</span>
+                                  <Badge variant={row.paymentMethod === 'upi' ? 'upi' : row.paymentMethod === 'online' ? 'online' : 'cash'} size="xs">
+                                    {row.paymentMethod === 'upi' ? 'UPI' : row.paymentMethod === 'online' ? 'Online' : 'Cash'}
+                                  </Badge>
+                                  <span>·</span>
+                                  <span>{category ? category.name : 'Uncategorized'}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleRowExpand(row.key)}
+                                className="p-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                                aria-label={isExpanded ? 'Collapse row details' : 'Expand row details'}
+                              >
+                                {isExpanded ? '▲' : '▼'}
+                              </button>
+                            </div>
+
+                            {/* Mobile Expanded Editor */}
+                            {isExpanded && (
+                              <div className="mt-3 pt-3 border-t border-[var(--border-hairline)] space-y-2.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                    Date
+                                    <input
+                                      className={`${inputClass} mt-0.5`}
+                                      type="date"
+                                      value={row.date}
+                                      onChange={(event) => updateRow(row.key, { date: event.target.value })}
+                                    />
+                                  </label>
+                                  <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                    Amount (₹)
+                                    <input
+                                      className={`${inputClass} mt-0.5 font-mono`}
+                                      inputMode="decimal"
+                                      value={row.amount}
+                                      onChange={(event) => {
+                                        const value = event.target.value;
+                                        try {
+                                          const paise = Number(parseINRToPaise(value));
+                                          updateRow(row.key, { amount: value, amountPaise: paise });
+                                        } catch {
+                                          updateRow(row.key, { amount: value });
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="text-[10px] font-medium text-[var(--text-muted)] sm:col-span-2">
+                                    Description / Narration
+                                    <input
+                                      className={`${inputClass} mt-0.5`}
+                                      value={row.description || ''}
+                                      onChange={(event) => updateRow(row.key, { description: event.target.value })}
+                                    />
+                                  </label>
+                                  <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                    Category (Optional)
+                                    <select
+                                      className={`${inputClass} mt-0.5`}
+                                      value={row.categoryId || ''}
+                                      onChange={(event) => {
+                                        const nextCatId = event.target.value;
+                                        updateRow(row.key, { categoryId: nextCatId });
+                                        if (nextCatId) {
+                                          const cat = categories.find((c) => c.id === nextCatId);
+                                          if (cat) {
+                                            setRememberMerchantPrompt({
+                                              rowKey: row.key,
+                                              merchantPattern: row.cleanMerchant || row.description,
+                                              categoryId: nextCatId,
+                                              categoryName: cat.name,
+                                            });
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <option value="">Uncategorized</option>
+                                      {categories.filter((c) => c.type === row.type && !c.archived_at).map((c) => (
+                                        <option value={c.id} key={c.id}>{c.name}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                                    Channel
+                                    <select
+                                      className={`${inputClass} mt-0.5`}
+                                      value={row.paymentMethod}
+                                      onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' | 'upi' })}
+                                    >
+                                      <option value="upi">UPI</option>
+                                      <option value="online">Online</option>
+                                      <option value="cash">Cash</option>
+                                    </select>
+                                  </label>
+                                </div>
+                                {rememberMerchantPrompt?.rowKey === row.key && (
+                                  <div className="p-2 rounded bg-[var(--action-primary-bg)]/10 border border-[var(--action-primary-bg)]/20 text-[11px] flex items-center justify-between">
+                                    <span>Remember for this merchant?</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRememberMerchant(row, rememberMerchantPrompt.categoryId)}
+                                      className="px-2 py-0.5 rounded bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] font-semibold text-[10px]"
+                                    >
+                                      Save Rule
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* SECTION B: IMPORTED TRANSACTIONS */}
+            {activeSection === 'imported' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+                      <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                        {importedRows.length} Transaction{importedRows.length === 1 ? '' : 's'} Committed to Consolidated Ledger
+                      </h4>
+                    </div>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                      These transactions are permanently persisted on your device and queued for cloud synchronization. They will never appear in Section A (To Review).
+                    </p>
+                  </div>
+                  <a
+                    href="/dashboard"
+                    className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs shrink-0 cursor-pointer"
+                  >
+                    View in Transaction Ledger →
+                  </a>
+                </div>
+
+                {importedRows.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                    No transactions have been committed from this statement session yet. Switch to Section A to select and import records.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                        <tr>
+                          <th className="py-2.5 px-3 w-28 font-medium">Date</th>
+                          <th className="py-2.5 px-3 font-medium">Merchant / Counterparty</th>
+                          <th className="py-2.5 px-3 w-24 text-center font-medium">Channel</th>
+                          <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
+                          <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
+                          <th className="py-2.5 px-3 w-36 font-medium">Category</th>
+                          <th className="py-2.5 px-3 w-24 text-center font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--border-hairline)]">
+                        {importedRows.map((row) => {
+                          const category = categories.find((c) => c.id === row.categoryId);
+                          return (
+                            <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
+                              <td className="py-2 px-3 font-mono text-[var(--text-secondary)] whitespace-nowrap">
                                 {row.date}
                               </td>
-                              <td className="py-2.5 px-3 align-top min-w-0 max-w-sm lg:max-w-md xl:max-w-lg">
-                                <div className="font-medium text-[var(--text-primary)] line-clamp-2" title={row.description || 'Unspecified Transaction'}>
-                                  {row.description || 'Unspecified Transaction'}
+                              <td className="py-2 px-3 min-w-0 max-w-sm">
+                                <div className="font-medium text-[var(--text-primary)]">
+                                  {row.cleanMerchant || row.description || 'Transaction'}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
-                                  {row.reference && (
-                                    <span className="font-mono bg-[var(--bg-surface-subtle)] px-1.5 py-0.5 rounded border border-[var(--border-hairline)]">
-                                      Ref: {row.reference}
-                                    </span>
-                                  )}
-                                  {row.valueDate && <span>Value: {row.valueDate}</span>}
-                                  {row.exclusionReason && <span className="text-amber-700 dark:text-amber-300 font-medium">⚠️ {row.exclusionReason}</span>}
-                                </div>
+                                {row.reference && (
+                                  <span className="font-mono text-[10px] text-[var(--text-muted)]">Ref: {row.reference}</span>
+                                )}
                               </td>
-                              <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <Badge variant={row.paymentMethod === 'upi' ? 'upi' : row.paymentMethod === 'online' ? 'online' : 'cash'} size="xs">
+                                  {row.paymentMethod === 'upi' ? 'UPI' : row.paymentMethod === 'online' ? 'Online' : 'Cash'}
+                                </Badge>
+                              </td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
                                   row.type === 'expense'
                                     ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
                                     : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
@@ -1452,364 +1995,156 @@ export function StatementImport({ userId, onImported }: Props) {
                                   {row.type === 'expense' ? 'Expense' : 'Income'}
                                 </span>
                               </td>
+                              <td className="py-2 px-3 text-right font-mono font-semibold whitespace-nowrap">
+                                <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                  {row.type === 'expense' ? '-' : '+'}₹{row.amount}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-[var(--text-secondary)]">
+                                {category ? category.name : <span className="text-[var(--text-muted)] italic">Uncategorized</span>}
+                              </td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  ✓ Imported
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SECTION C: SKIPPED / NEEDS ATTENTION */}
+            {activeSection === 'attention' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-1 text-xs">
+                  <h4 className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <span>⚠️</span>
+                    <span>Skipped &amp; Attention Rows ({attentionRows.length})</span>
+                  </h4>
+                  <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                    Transactions listed below are excluded from automatic ledger import. This includes entries with ambiguous dates, candidate transfers or credit-card bill settlements, duplicates already on file, or user-skipped entries. Every row displays an explicit reason.
+                  </p>
+                </div>
+
+                {attentionRows.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                    No transactions skipped or requiring attention in this statement.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                        <tr>
+                          <th className="py-2.5 px-3 w-36 font-medium">Date / Resolution</th>
+                          <th className="py-2.5 px-3 font-medium">Narration / Counterparty</th>
+                          <th className="py-2.5 px-3 w-28 text-right font-medium">Amount</th>
+                          <th className="py-2.5 px-3 w-44 font-medium">Reason Excluded</th>
+                          <th className="py-2.5 px-3 w-44 text-right font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--border-hairline)]">
+                        {attentionRows.map((row) => {
+                          const isMissingDate = !row.date || row.classification === 'extraction_problem';
+                          let reasonLabel = 'Review Needed';
+                          let reasonClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+
+                          if (isMissingDate) {
+                            reasonLabel = 'Ambiguous Date';
+                            reasonClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+                          } else if (row.classification === 'internal_transfer') {
+                            reasonLabel = 'Candidate Transfer';
+                          } else if (row.classification === 'credit_card_settlement') {
+                            reasonLabel = 'Candidate Card Settlement';
+                          } else if (row.classification === 'possible_duplicate') {
+                            reasonLabel = 'Possible Duplicate';
+                            reasonClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
+                          } else if (row.classification === 'already_recorded') {
+                            reasonLabel = 'Already on File';
+                            reasonClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
+                          } else if (row.exclusionReason) {
+                            reasonLabel = row.exclusionReason;
+                          }
+
+                          return (
+                            <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
+                              <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                                {isMissingDate ? (
+                                  <div className="space-y-1.5">
+                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium block">
+                                      {row.rawDate ? `Raw: "${row.rawDate}"` : 'Date needed'}
+                                    </span>
+                                    <input
+                                      type="date"
+                                      value={dateCorrectionMap[row.key] || ''}
+                                      onChange={(e) => setDateCorrectionMap((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                                      className="w-32 rounded border border-amber-400 bg-[var(--bg-canvas)] px-2 py-1 text-xs font-mono text-[var(--text-primary)]"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="font-mono text-[var(--text-secondary)]">{row.date}</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 align-top min-w-0 max-w-sm">
+                                <div className="font-medium text-[var(--text-primary)] leading-tight">
+                                  {row.cleanMerchant || row.description || 'Unspecified Transaction'}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
+                                  {row.reference && <span className="font-mono">Ref: {row.reference}</span>}
+                                  {row.warning && <span className="text-amber-700 dark:text-amber-300">Note: {row.warning}</span>}
+                                </div>
+                              </td>
                               <td className="py-2.5 px-3 align-top text-right font-mono font-semibold whitespace-nowrap">
                                 <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
                                   {row.type === 'expense' ? '-' : '+'}₹{row.amount}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
-                                {row.classification && (
-                                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium ${
-                                    row.classification === 'new'
-                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                      : row.classification === 'already_recorded'
-                                        ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                                        : row.classification === 'reversal'
-                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  }`}>
-                                    {row.classification.replace(/_/g, ' ')}
-                                  </span>
+                              <td className="py-2.5 px-3 align-top">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${reasonClass}`}>
+                                  {reasonLabel}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 align-top text-right whitespace-nowrap space-x-1.5">
+                                {isMissingDate ? (
+                                  <button
+                                    type="button"
+                                    disabled={!dateCorrectionMap[row.key]}
+                                    onClick={() => confirmRowDate(row.key)}
+                                    className="rounded bg-[var(--action-primary-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors disabled:opacity-40 cursor-pointer"
+                                  >
+                                    Confirm Date &amp; Move to Review
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => includeRowInReview(row.key)}
+                                      className="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] cursor-pointer"
+                                    >
+                                      Include in Review
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => permanentlySkipRow(row.key)}
+                                      className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:text-rose-600 cursor-pointer"
+                                    >
+                                      Skip
+                                    </button>
+                                  </>
                                 )}
                               </td>
-                              <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleRowExpand(row.key)}
-                                  className="px-2 py-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
-                                  aria-label={isExpanded ? 'Hide transaction details' : 'View or edit transaction details'}
-                                >
-                                  {isExpanded ? 'Hide ▲' : 'Details ▼'}
-                                </button>
-                              </td>
                             </tr>
-                            {isExpanded && (
-                              <tr className="bg-[var(--bg-surface-subtle)]">
-                                <td colSpan={7} className="p-4 border-t border-[var(--border-hairline)]">
-                                  <div className="space-y-3">
-                                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                        Date
-                                        <input
-                                          className={`${inputClass} mt-0.5`}
-                                          type="date"
-                                          value={row.date}
-                                          onChange={(event) => updateRow(row.key, { date: event.target.value })}
-                                        />
-                                      </label>
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)] sm:col-span-2">
-                                        Description
-                                        <input
-                                          className={`${inputClass} mt-0.5`}
-                                          value={row.description || ''}
-                                          onChange={(event) => updateRow(row.key, { description: event.target.value })}
-                                        />
-                                      </label>
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                        Amount (₹)
-                                        <input
-                                          className={`${inputClass} mt-0.5 font-mono`}
-                                          inputMode="decimal"
-                                          value={row.amount || ''}
-                                          onChange={(event) => {
-                                            const value = event.target.value;
-                                            try {
-                                              const paise = Number(parseINRToPaise(value));
-                                              updateRow(row.key, { amount: value, amountPaise: paise });
-                                            } catch {
-                                              updateRow(row.key, { amount: value });
-                                            }
-                                          }}
-                                        />
-                                      </label>
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                        Direction
-                                        <select
-                                          className={`${inputClass} mt-0.5`}
-                                          value={row.type}
-                                          onChange={(event) => {
-                                            const nextType = event.target.value as 'income' | 'expense';
-                                            updateRow(row.key, {
-                                              type: nextType,
-                                              categoryId: categories.find((c) => c.type === nextType && !c.archived_at)?.id || '',
-                                              necessity: nextType === 'expense' ? (row.necessity || null) : null,
-                                            });
-                                          }}
-                                        >
-                                          <option value="expense">Expense</option>
-                                          <option value="income">Income</option>
-                                        </select>
-                                      </label>
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                        Category (Optional)
-                                        <select
-                                          className={`${inputClass} mt-0.5`}
-                                          value={row.categoryId}
-                                          onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}
-                                        >
-                                          <option value="">Uncategorized</option>
-                                          {categories.filter((c) => c.type === row.type && !c.archived_at).map((c) => (
-                                            <option value={c.id} key={c.id}>{c.name}</option>
-                                          ))}
-                                        </select>
-                                      </label>
-                                      <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                        Necessity (Optional)
-                                        {row.type === 'expense' ? (
-                                          <select
-                                            className={`${inputClass} mt-0.5`}
-                                            value={row.necessity || ''}
-                                            onChange={(event) => updateRow(row.key, { necessity: (event.target.value as 'essential' | 'optional' | 'luxury') || null })}
-                                          >
-                                            <option value="">Unclassified</option>
-                                            <option value="essential">Essential</option>
-                                            <option value="optional">Optional</option>
-                                            <option value="luxury">Luxury</option>
-                                          </select>
-                                        ) : (
-                                          <input
-                                            className={`${inputClass} mt-0.5 opacity-50 cursor-not-allowed`}
-                                            disabled
-                                            value="—"
-                                          />
-                                        )}
-                                      </label>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[var(--text-muted)] pt-1 border-t border-[var(--border-hairline)]">
-                                      <label className="inline-flex items-center gap-1.5">
-                                        <span>Channel:</span>
-                                        <select
-                                          className="rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-0.5 text-xs text-[var(--text-primary)]"
-                                          value={row.paymentMethod}
-                                          onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' })}
-                                        >
-                                          <option value="online">Online</option>
-                                          <option value="cash">Cash</option>
-                                        </select>
-                                      </label>
-                                      <label className="inline-flex items-center gap-1.5">
-                                        <span>Reference / UTR:</span>
-                                        <input
-                                          className="rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-0.5 text-xs font-mono text-[var(--text-primary)]"
-                                          placeholder="Optional reference"
-                                          value={row.reference || ''}
-                                          onChange={(event) => updateRow(row.key, { reference: event.target.value || null })}
-                                        />
-                                      </label>
-                                      {row.balance && <span>Statement balance: ₹{row.balance}</span>}
-                                      {suggestion && (
-                                        <span>
-                                          Suggested category: <strong className="font-semibold text-[var(--text-primary)]">{suggestion.category.name}</strong> ({Math.round(suggestion.confidence * 100)}% rule confidence)
-                                        </span>
-                                      )}
-                                      {row.warning && <span className="text-amber-700 dark:text-amber-300 font-medium">{row.warning}</span>}
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* 2. Mobile Clean Cards View (hidden on md+ viewports) */}
-                <div className="block md:hidden space-y-2.5">
-                  {filteredRows.map((row) => {
-                    const isExpanded = expandedRowKeys.has(row.key);
-                    const category = categories.find((c) => c.id === row.categoryId);
-                    const suggestion = suggestCategory(row.description, categories, row.type);
-                    return (
-                      <article
-                        key={row.key}
-                        className={`rounded-lg border p-3 transition-colors ${
-                          row.selected
-                            ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]'
-                            : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] opacity-85'
-                        }`}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={row.selected}
-                            onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
-                            aria-label={`Select ${row.description || 'transaction'}`}
-                            className="mt-1 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-snug">
-                                {row.description || 'Unspecified Transaction'}
-                              </p>
-                              <span className={`font-mono font-bold text-xs shrink-0 ${
-                                row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-                              }`}>
-                                {row.type === 'expense' ? '-' : '+'}₹{row.amount}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px] text-[var(--text-muted)]">
-                              <span className="font-mono">{row.date}</span>
-                              <span>·</span>
-                              <span className={`px-1.5 py-0.2 rounded font-medium ${
-                                row.type === 'expense' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                              }`}>
-                                {row.type}
-                              </span>
-                              <span>·</span>
-                              <span>{category ? category.name : 'Uncategorized'}</span>
-                              {row.classification && (
-                                <>
-                                  <span>·</span>
-                                  <span className={`px-1 rounded text-[9px] font-medium ${
-                                    row.classification === 'new'
-                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                      : row.classification === 'already_recorded'
-                                        ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                                        : row.classification === 'reversal'
-                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  }`}>
-                                    {row.classification.replace(/_/g, ' ')}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleRowExpand(row.key)}
-                            className="p-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
-                            aria-label={isExpanded ? 'Collapse row details' : 'Expand row details'}
-                          >
-                            {isExpanded ? '▲' : '▼'}
-                          </button>
-                        </div>
-
-                        {/* Mobile Expanded Editor */}
-                        {isExpanded && (
-                          <div className="mt-3 pt-3 border-t border-[var(--border-hairline)] space-y-2.5">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                Date
-                                <input
-                                  className={`${inputClass} mt-0.5`}
-                                  type="date"
-                                  value={row.date}
-                                  onChange={(event) => updateRow(row.key, { date: event.target.value })}
-                                />
-                              </label>
-                              <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                Amount (₹)
-                                <input
-                                  className={`${inputClass} mt-0.5 font-mono`}
-                                  inputMode="decimal"
-                                  value={row.amount}
-                                  onChange={(event) => {
-                                    const value = event.target.value;
-                                    try {
-                                      const paise = Number(parseINRToPaise(value));
-                                      updateRow(row.key, { amount: value, amountPaise: paise });
-                                    } catch {
-                                      updateRow(row.key, { amount: value });
-                                    }
-                                  }}
-                                />
-                              </label>
-                              <label className="text-[10px] font-medium text-[var(--text-muted)] sm:col-span-2">
-                                Description
-                                <input
-                                  className={`${inputClass} mt-0.5`}
-                                  value={row.description || ''}
-                                  onChange={(event) => updateRow(row.key, { description: event.target.value })}
-                                />
-                              </label>
-                              <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                Direction
-                                <select
-                                  className={`${inputClass} mt-0.5`}
-                                  value={row.type}
-                                  onChange={(event) => {
-                                    const nextType = event.target.value as 'income' | 'expense';
-                                    updateRow(row.key, {
-                                      type: nextType,
-                                      categoryId: categories.find((c) => c.type === nextType && !c.archived_at)?.id || '',
-                                      necessity: nextType === 'expense' ? (row.necessity || null) : null,
-                                    });
-                                  }}
-                                >
-                                  <option value="expense">Expense</option>
-                                  <option value="income">Income</option>
-                                </select>
-                              </label>
-                              <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                Category (Optional)
-                                <select
-                                  className={`${inputClass} mt-0.5`}
-                                  value={row.categoryId}
-                                  onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}
-                                >
-                                  <option value="">Uncategorized</option>
-                                  {categories.filter((c) => c.type === row.type && !c.archived_at).map((c) => (
-                                    <option value={c.id} key={c.id}>{c.name}</option>
-                                  ))}
-                                </select>
-                              </label>
-                              {row.type === 'expense' && (
-                                <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                  Necessity (Optional)
-                                  <select
-                                    className={`${inputClass} mt-0.5`}
-                                    value={row.necessity || ''}
-                                    onChange={(event) => updateRow(row.key, { necessity: (event.target.value as 'essential' | 'optional' | 'luxury') || null })}
-                                  >
-                                    <option value="">Unclassified</option>
-                                    <option value="essential">Essential</option>
-                                    <option value="optional">Optional</option>
-                                    <option value="luxury">Luxury</option>
-                                  </select>
-                                </label>
-                              )}
-                              <label className="text-[10px] font-medium text-[var(--text-muted)]">
-                                Channel
-                                <select
-                                  className={`${inputClass} mt-0.5`}
-                                  value={row.paymentMethod}
-                                  onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' })}
-                                >
-                                  <option value="online">Online</option>
-                                  <option value="cash">Cash</option>
-                                </select>
-                              </label>
-                              <label className="text-[10px] font-medium text-[var(--text-muted)] sm:col-span-2">
-                                Reference / UTR
-                                <input
-                                  className={`${inputClass} mt-0.5 font-mono`}
-                                  placeholder="Optional reference"
-                                  value={row.reference || ''}
-                                  onChange={(event) => updateRow(row.key, { reference: event.target.value || null })}
-                                />
-                              </label>
-                            </div>
-                            <div className="text-[10px] text-[var(--text-muted)] space-y-1 pt-1">
-                              {row.reference && <p className="font-mono">Ref: {row.reference}</p>}
-                              {row.valueDate && <p>Value Date: {row.valueDate}</p>}
-                              {row.balance && <p>Balance: ₹{row.balance}</p>}
-                              {suggestion && (
-                                <p>
-                                  Suggested category: <strong className="text-[var(--text-primary)]">{suggestion.category.name}</strong> ({Math.round(suggestion.confidence * 100)}% rule confidence)
-                                </p>
-                              )}
-                              {row.warning && <p className="text-amber-700 dark:text-amber-300">{row.warning}</p>}
-                            </div>
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
-              </>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1865,7 +2200,7 @@ export function StatementImport({ userId, onImported }: Props) {
                       <span>·</span>
                       <span>Imported to Ledger: <strong className="text-emerald-600 dark:text-emerald-400">{item.imported_ids.length}</strong></span>
                       <span>·</span>
-                      <span>Skipped: <strong className="text-[var(--text-primary)]">{skippedCount}</strong></span>
+                      <span>Skipped / Attn: <strong className="text-[var(--text-primary)]">{skippedCount}</strong></span>
                     </div>
 
                     {(item.skipped_rows?.length || 0) > 0 && (
@@ -1876,7 +2211,7 @@ export function StatementImport({ userId, onImported }: Props) {
                         <ul className="mt-1.5 space-y-1 pl-4 text-[11px] text-[var(--text-muted)]">
                           {item.skipped_rows!.map((row, index) => (
                             <li key={`${row.transaction_date}-${index}`}>
-                              {row.transaction_date} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}
+                              {row.transaction_date || 'Unknown Date'} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}
                             </li>
                           ))}
                         </ul>
@@ -1906,15 +2241,32 @@ export function StatementImport({ userId, onImported }: Props) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInspectedBatch(item)}
+                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
+                    >
+                      Inspect Batch
+                    </button>
                     {!isUndone && pendingCount > 0 && (
                       <button
                         type="button"
                         disabled={isRetrying}
                         onClick={() => void retryBatchSync(item)}
-                        className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 text-xs font-medium text-amber-900 dark:text-amber-200 hover:bg-amber-100 cursor-pointer disabled:opacity-50"
+                        className="rounded-md bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
                       >
-                        {isRetrying ? 'Syncing…' : 'Retry Sync'}
+                        {isRetrying ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Syncing…</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>↻</span>
+                            <span>Retry Sync</span>
+                          </>
+                        )}
                       </button>
                     )}
                     {!isUndone && item.imported_ids.length > 0 && confirmUndoId !== item.id && (
@@ -1932,6 +2284,112 @@ export function StatementImport({ userId, onImported }: Props) {
             })}
           </div>
         </aside>
+      )}
+
+      {/* Batch Inspection Modal */}
+      {inspectedBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-xl p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-hairline)]">
+              <div>
+                <h3 className="text-base font-semibold text-[var(--text-primary)]">
+                  Statement Batch Breakdown: {inspectedBatch.source}
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Batch ID: <span className="font-mono">{inspectedBatch.id}</span> · {new Date(inspectedBatch.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectedBatch(null)}
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] cursor-pointer"
+                aria-label="Close batch inspection"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Mutually Exclusive Accounting Reconciliation */}
+            <div className="rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] p-3.5 space-y-2">
+              <div className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+                Batch Accounting Reconciliation
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Statement rows follow strict mutually exclusive accounting:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-xs">
+                <div className="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Detected Rows</span>
+                  <strong className="text-[var(--text-primary)] text-sm">{inspectedBatch.detected_count}</strong>
+                </div>
+                <div className="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Committed to Ledger</span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 text-sm">{inspectedBatch.imported_ids.length}</strong>
+                </div>
+                <div className="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Pending Cloud Sync</span>
+                  <strong className="text-amber-600 dark:text-amber-400 text-sm">{pendingCountByBatch[inspectedBatch.id] ?? 0}</strong>
+                </div>
+                <div className="p-2 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">
+                  <span className="text-[10px] text-[var(--text-muted)] block">Skipped / Attn</span>
+                  <strong className="text-[var(--text-primary)] text-sm">{inspectedBatch.skipped_rows?.length ?? 0}</strong>
+                </div>
+              </div>
+              <div className="text-[11px] text-[var(--text-muted)] pt-1">
+                <span>Formula: </span>
+                <span className="font-mono text-[var(--text-secondary)]">
+                  {inspectedBatch.detected_count} detected = {inspectedBatch.imported_ids.length} committed + {inspectedBatch.skipped_rows?.length ?? 0} skipped
+                </span>
+              </div>
+              <div className="text-[10px] text-[var(--text-muted)] italic">
+                * Note: Statement summary balances (Opening and Closing balance) are verified purely for reconciliation mathematics and are never classified as transactions or counted in skipped rows.
+              </div>
+            </div>
+
+            {/* Skipped Rows Detailed List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-[var(--text-primary)]">
+                Skipped &amp; Attention Rows ({inspectedBatch.skipped_rows?.length ?? 0})
+              </h4>
+              {(!inspectedBatch.skipped_rows || inspectedBatch.skipped_rows.length === 0) ? (
+                <p className="text-xs text-[var(--text-muted)]">No rows were skipped in this batch.</p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto border border-[var(--border-hairline)] rounded-lg">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)] sticky top-0">
+                      <tr>
+                        <th className="py-2 px-3 font-medium">Date</th>
+                        <th className="py-2 px-3 font-medium text-right">Amount</th>
+                        <th className="py-2 px-3 font-medium">State</th>
+                        <th className="py-2 px-3 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-hairline)] font-mono">
+                      {inspectedBatch.skipped_rows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-[var(--bg-surface-subtle)]">
+                          <td className="py-1.5 px-3 text-[var(--text-secondary)]">{row.transaction_date || '—'}</td>
+                          <td className="py-1.5 px-3 text-right text-[var(--text-primary)]">{formatPaiseToINR(BigInt(row.amount_paise))}</td>
+                          <td className="py-1.5 px-3 text-[11px] text-[var(--text-muted)]">{row.state.replace('_', ' ')}</td>
+                          <td className="py-1.5 px-3 text-[11px] text-amber-700 dark:text-amber-300 font-sans">{skipReasonLabel(row.reason)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-[var(--border-hairline)]">
+              <button
+                type="button"
+                onClick={() => setInspectedBatch(null)}
+                className="px-4 py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 4. BANK & FORMAT COMPATIBILITY MATRIX */}

@@ -8,6 +8,7 @@ import {
   type CategoryListResponse,
   type TransactionType,
   type AccountBalancesDTO,
+  type PaymentMethod,
 } from '@arth/contracts';
 import type { AppConfig } from '../../config/index.js';
 import {
@@ -28,7 +29,7 @@ export interface StoredTransactionRecord {
   category_id: string | null;
   category_name?: string;
   transaction_date: string;
-  payment_method: 'online' | 'cash';
+  payment_method: PaymentMethod;
   necessity: 'essential' | 'optional' | 'luxury' | null;
   description: string | null;
   notes: string | null;

@@ -140,8 +140,11 @@ export function TransactionDetailDrawer({
             {/* Payment Method */}
             <div className="flex items-center justify-between p-3 gap-3">
               <span className="text-[var(--text-muted)] font-medium shrink-0">Payment Method</span>
-              <Badge variant={transaction.payment_method === 'online' ? 'online' : 'cash'} size="sm">
-                {transaction.payment_method === 'online' ? 'Online' : 'Cash'}
+              <Badge
+                variant={transaction.payment_method === 'upi' ? 'upi' : transaction.payment_method === 'online' ? 'online' : 'cash'}
+                size="sm"
+              >
+                {transaction.payment_method === 'upi' ? 'UPI' : transaction.payment_method === 'online' ? 'Online' : 'Cash'}
               </Badge>
             </div>
 

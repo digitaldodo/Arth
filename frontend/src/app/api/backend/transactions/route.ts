@@ -6,7 +6,7 @@ import {
 } from '@/lib/server-config';
 import { drainUserOutbox } from '@/lib/server/sheets-worker';
 import { createClient } from '@/lib/supabase/server';
-import { paiseToDecimal, formatPaiseToINR, type TransactionDTO } from '@arth/contracts';
+import { paiseToDecimal, formatPaiseToINR, type TransactionDTO, type PaymentMethod } from '@arth/contracts';
 
 /**
  * BFF proxy POST /api/backend/transactions -> Fastify POST /api/v1/transactions
@@ -358,7 +358,7 @@ export async function GET(req: NextRequest) {
               category_id: String(r.category_id),
               category_name: catName || undefined,
               transaction_date: String(r.transaction_date),
-              payment_method: r.payment_method as 'online' | 'cash',
+              payment_method: r.payment_method as PaymentMethod,
               necessity: (r.necessity as 'essential' | 'optional' | 'luxury') || null,
               description: (r.description as string) || null,
               notes: (r.notes as string) || null,

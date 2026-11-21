@@ -5,7 +5,7 @@
  */
 
 export type TransactionType = 'income' | 'expense';
-export type PaymentMethod = 'online' | 'cash';
+export type PaymentMethod = 'online' | 'cash' | 'upi';
 export type NecessityClass = 'essential' | 'optional' | 'luxury';
 export type OutboxStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type BalanceMovementType = 'transfer' | 'adjustment';

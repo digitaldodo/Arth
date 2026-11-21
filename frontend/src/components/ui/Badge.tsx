@@ -8,6 +8,7 @@ export type BadgeVariant =
   | 'luxury'
   | 'cash'
   | 'online'
+  | 'upi'
   | 'income'
   | 'expense'
   | 'connected'
@@ -59,6 +60,11 @@ const VARIANT_STYLES: Record<
     container:
       'bg-[var(--tag-online-bg)] text-[var(--tag-online-fg)] border-[var(--tag-online-border)]',
     dot: 'bg-[var(--tag-online-dot)]',
+  },
+  upi: {
+    container:
+      'bg-[var(--tag-upi-bg)] text-[var(--tag-upi-fg)] border-[var(--tag-upi-border)]',
+    dot: 'bg-[var(--tag-upi-dot)]',
   },
   income: {
     container:

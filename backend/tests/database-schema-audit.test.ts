@@ -49,7 +49,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0034_username_uniqueness_and_identity_hardening.sql',
       '0035_transaction_ingestion_provenance.sql',
       '0036_expand_ingestion_sources.sql',
-      '0037_optional_category_and_necessity.sql'
+      '0037_optional_category_and_necessity.sql',
+      '0038_payment_method_upi.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');
@@ -411,5 +412,14 @@ describe('Database Schema & Migration Integrity Audit', () => {
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM PUBLIC;'), 'Revoke from PUBLIC');
     assert.ok(sql.includes('REVOKE ALL ON FUNCTION public.fn_dashboard_summary(DATE, DATE) FROM anon;'), 'Revoke from anon');
     assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.fn_dashboard_summary(DATE, DATE) TO authenticated;'), 'Grant to authenticated');
+  });
+
+  test('0038_payment_method_upi.sql safely extends payment_method enum and updates balance functions', () => {
+    const sql = fs.readFileSync(path.join(migrationsDir, '0038_payment_method_upi.sql'), 'utf-8');
+    assert.ok(sql.includes("ALTER TYPE public.payment_method ADD VALUE 'upi'"), 'Must safely add upi to payment_method enum');
+    assert.ok(sql.includes("payment_method IN ('online', 'upi')"), 'Must treat upi as digital funds in balance calculation');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_account_balances'), 'Must update fn_account_balances');
+    assert.ok(sql.includes('CREATE OR REPLACE FUNCTION public.fn_validate_transaction_balance'), 'Must update fn_validate_transaction_balance');
+    assert.ok(!/DROP\s+(TABLE|COLUMN)\b/i.test(sql), 'Migration must be non-destructive and additive');
   });
 });

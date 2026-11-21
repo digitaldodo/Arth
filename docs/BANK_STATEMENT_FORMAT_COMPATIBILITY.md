@@ -142,3 +142,7 @@ All statement import functionality is verified through automated test suites in 
 
 4. `tests/statement-import-parser.test.ts` & `tests/bank-statement-import-consolidated-ledger.test.ts`:
    - 28 automated tests covering multi-line narration merging, value date preservation, cross-source deduplication (SMS vs manual vs statement), and ephemeral password scrubbing.
+
+5. `tests/date-recovery-statement.test.ts` & `tests/upi-parser.test.ts`:
+   - **Date Extraction Resilience:** Tests ordinal dates (`21st Nov 2026`), embedded date prefixes (`Dt: 21/11/2026`), OCR substitutions (`2l/11/2O26`), and compact formats (`21112026`). Verifies that rows with ambiguous dates are preserved in Section C rather than discarded.
+   - **UPI Intelligence & Payment Method Disambiguation:** 8 tests validating slash/dash formats (`UPI-FLIPKART`, `UPI/P2M/...`), VPA handle identification, RRN extraction, GST and URL filtering, and acronym-preserving title casing for major Indian banking channels.

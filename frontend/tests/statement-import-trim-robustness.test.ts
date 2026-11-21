@@ -239,8 +239,12 @@ test('15. Invalid transaction rows: rejected safely without throwing runtime err
     ['End of Statement'],
   ];
   const result = normalizeStatementTable(table, 'HDFC Bank Statement');
-  // None of the metadata or zero rows should be imported as transactions
-  assert.equal(result.rows.length, 0);
+  // None of the metadata or zero rows should be auto-selected for import
+  assert.equal(result.rows.filter((r) => r.selected).length, 0);
+  // Bad date row is preserved for manual user review/correction (Priority 8 & Priority 1 non-discard rule)
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].state, 'needs_review');
+  assert.equal(result.rows[0].classification, 'extraction_problem');
   assert.ok(result.warnings.length > 0);
 });
 

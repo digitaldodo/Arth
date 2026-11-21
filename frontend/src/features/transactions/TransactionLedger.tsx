@@ -8,7 +8,9 @@ import {
   type TransactionType,
   type NecessityClass,
   type PaymentMethod,
+  parseINRToPaise,
 } from '@arth/contracts';
+import { saveUserMerchantRule } from '@/features/categorization/user-merchant-rules';
 import { fetchCategories, fetchTransactions, restoreTransaction } from '@/lib/api-client';
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
@@ -202,7 +204,26 @@ export function TransactionLedger({
   // Interactive transaction details & mutations state
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDTO | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<TransactionDTO | null>(null);
-  useCriticalOperation(editingTransaction !== null);
+
+  // Priority 7: Contextual Inline/Anchored Editing State
+  interface InlineEditForm {
+    id: string;
+    amount: string;
+    date: string;
+    description: string;
+    categoryId: string;
+    type: TransactionType;
+    necessity: NecessityClass | null;
+    paymentMethod: PaymentMethod;
+    rememberMerchant: boolean;
+  }
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineForm, setInlineForm] = useState<InlineEditForm | null>(null);
+  const [inlineEditError, setInlineEditError] = useState<string | null>(null);
+  const [isSavingInline, setIsSavingInline] = useState(false);
+  const [rememberToast, setRememberToast] = useState<string | null>(null);
+
+  useCriticalOperation(editingTransaction !== null || inlineEditingId !== null);
   const [deletingTransaction, setDeletingTransaction] = useState<TransactionDTO | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -214,6 +235,18 @@ export function TransactionLedger({
 
   // PDF Export Dialog State
   const [isExportDialogOpen, setIsExportDialogOpen] = useState<boolean>(false);
+
+  // Back handler for Inline Editing
+  useBackHandler({
+    id: 'form-inline-editing',
+    priority: 'modal',
+    enabled: Boolean(inlineEditingId),
+    onBack: () => {
+      setInlineEditingId(null);
+      setInlineForm(null);
+      return true;
+    },
+  });
   // Priority 1: Back handler for Transaction Details Drawer
   useBackHandler({
     id: 'drawer-transaction-detail',
@@ -494,10 +527,113 @@ export function TransactionLedger({
     return `${isNeg ? '-' : '+'}${formatted}.${frac.toString().padStart(2, '0')}`;
   }, [netCashFlowPaise]);
 
-  // Handler: Open edit modal from details drawer
+  // Priority 7: Contextual Inline/Anchored Editing Handlers
+  const handleStartInlineEdit = (txn: TransactionDTO, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedTransaction(null);
+    setInlineEditingId(txn.id);
+    const amountStr = (Number(txn.amount_paise) / 100).toFixed(2).replace(/\.00$/, '');
+    setInlineForm({
+      id: txn.id,
+      amount: amountStr,
+      date: txn.transaction_date,
+      description: txn.description || '',
+      categoryId: txn.category_id || '',
+      type: txn.type,
+      necessity: txn.necessity || null,
+      paymentMethod: (txn.payment_method as PaymentMethod) || 'online',
+      rememberMerchant: false,
+    });
+    setInlineEditError(null);
+  };
+
+  const handleCancelInlineEdit = (e?: React.SyntheticEvent) => {
+    if (e) e.stopPropagation();
+    setInlineEditingId(null);
+    setInlineForm(null);
+    setInlineEditError(null);
+  };
+
+  const handleSaveInlineEdit = async (e?: React.SyntheticEvent) => {
+    if (e) e.stopPropagation();
+    if (!inlineForm) return;
+
+    const amountTrimmed = inlineForm.amount.trim();
+    if (!amountTrimmed) {
+      setInlineEditError('Amount is required');
+      return;
+    }
+    let paise = 0n;
+    try {
+      paise = parseINRToPaise(amountTrimmed);
+      if (paise <= 0n) {
+        setInlineEditError('Amount must be greater than zero');
+        return;
+      }
+    } catch {
+      setInlineEditError('Please enter a valid amount');
+      return;
+    }
+
+    const dateTrimmed = inlineForm.date.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTrimmed)) {
+      setInlineEditError('Please enter a valid date in YYYY-MM-DD format');
+      return;
+    }
+
+    setIsSavingInline(true);
+    setInlineEditError(null);
+
+    try {
+      const category = inlineForm.categoryId ? categories.find((c) => c.id === inlineForm.categoryId) : null;
+
+      // Preserve raw narration: Updating description must not overwrite statement_reference or notes containing raw statement narration
+      const response = await syncEngine.updateTransactionLocalFirst(
+        inlineForm.id,
+        {
+          amount: (Number(paise) / 100).toFixed(2),
+          type: inlineForm.type,
+          category_id: inlineForm.categoryId ? inlineForm.categoryId : null,
+          transaction_date: dateTrimmed,
+          payment_method: inlineForm.paymentMethod,
+          necessity: inlineForm.type === 'expense' ? inlineForm.necessity : null,
+          description: inlineForm.description.trim() || null,
+        },
+        categories,
+        userId || 'default'
+      );
+
+      // If user opted to remember this merchant category:
+      if (inlineForm.rememberMerchant && inlineForm.categoryId && category) {
+        const pattern = inlineForm.description.trim() || category.name;
+        saveUserMerchantRule(userId || 'default', {
+          pattern,
+          cleanName: pattern,
+          categoryId: category.id,
+          categoryName: category.name,
+          necessity: inlineForm.necessity,
+        });
+        setRememberToast(`Rule saved! Future transactions matching "${pattern}" will auto-categorize to ${category.name}.`);
+        setTimeout(() => setRememberToast(null), 4000);
+      }
+
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === inlineForm.id ? { ...t, ...response.transaction } : t))
+      );
+
+      setInlineEditingId(null);
+      setInlineForm(null);
+    } catch (err) {
+      setInlineEditError(sanitizeUserFacingError(err, 'Failed to save transaction changes'));
+    } finally {
+      setIsSavingInline(false);
+    }
+  };
+
+  // Handler: Open edit modal from details drawer or button
   const handleOpenEdit = (txn: TransactionDTO) => {
     setSelectedTransaction(null);
-    setEditingTransaction(txn);
+    handleStartInlineEdit(txn);
   };
 
   // Handler: Open delete modal from details drawer
@@ -785,8 +921,9 @@ export function TransactionLedger({
             className="w-full h-10 px-3 py-2 text-xs bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-lg text-[var(--text-secondary)] focus:outline-hidden focus:border-[var(--focus-ring)] cursor-pointer transition-colors"
           >
             <option value="all">All Payment Methods</option>
-            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
             <option value="online">Online</option>
+            <option value="cash">Cash</option>
           </select>
 
           {/* 3. Date Range + Prev/Next Month Steppers */}
@@ -1005,6 +1142,13 @@ export function TransactionLedger({
             <span className="col-span-2 text-right">Amount (INR)</span>
           </div>
 
+          {rememberToast && (
+            <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between mb-2">
+              <span>✓ {rememberToast}</span>
+              <button type="button" onClick={() => setRememberToast(null)} className="text-xs font-bold cursor-pointer ml-2">✕</button>
+            </div>
+          )}
+
           <div
             className={`space-y-2 transition-opacity duration-150 ${
               isRefreshing ? 'opacity-65' : 'opacity-100'
@@ -1012,6 +1156,182 @@ export function TransactionLedger({
           >
             {filteredTransactions.map((txn) => {
               const isIncome = txn.type === 'income';
+
+              if (inlineEditingId === txn.id && inlineForm) {
+                return (
+                  <div
+                    key={txn.id}
+                    className="p-4 bg-[var(--bg-surface)] border-2 border-[var(--action-primary-bg)] rounded-xl shadow-xs space-y-3"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        handleCancelInlineEdit(e);
+                      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName !== 'TEXTAREA')) {
+                        void handleSaveInlineEdit(e);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-2">
+                      <span className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                        <span>✏️</span>
+                        <span>Edit Transaction</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCancelInlineEdit}
+                        className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 cursor-pointer"
+                        aria-label="Cancel edit"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {inlineEditError && (
+                      <div className="p-2 rounded bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 text-xs border border-red-200 dark:border-red-900/50">
+                        {inlineEditError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Amount (₹)</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={inlineForm.amount}
+                          onChange={(e) => setInlineForm({ ...inlineForm, amount: e.target.value })}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 font-mono font-medium text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                          placeholder="0.00"
+                          autoFocus
+                        />
+                      </label>
+
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Date</span>
+                        <input
+                          type="date"
+                          value={inlineForm.date}
+                          onChange={(e) => setInlineForm({ ...inlineForm, date: e.target.value })}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 font-mono text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                        />
+                      </label>
+
+                      <label className="space-y-1 sm:col-span-2">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Merchant / Description</span>
+                        <input
+                          type="text"
+                          value={inlineForm.description}
+                          onChange={(e) => setInlineForm({ ...inlineForm, description: e.target.value })}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                          placeholder="Merchant counterparty name"
+                        />
+                      </label>
+
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Type</span>
+                        <select
+                          value={inlineForm.type}
+                          onChange={(e) => {
+                            const nextType = e.target.value as TransactionType;
+                            setInlineForm({
+                              ...inlineForm,
+                              type: nextType,
+                              necessity: nextType === 'expense' ? inlineForm.necessity : null,
+                            });
+                          }}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                        >
+                          <option value="expense">Expense</option>
+                          <option value="income">Income</option>
+                        </select>
+                      </label>
+
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Channel</span>
+                        <select
+                          value={inlineForm.paymentMethod}
+                          onChange={(e) => setInlineForm({ ...inlineForm, paymentMethod: e.target.value as PaymentMethod })}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                        >
+                          <option value="upi">UPI</option>
+                          <option value="online">Online</option>
+                          <option value="cash">Cash</option>
+                        </select>
+                      </label>
+
+                      <label className="space-y-1 sm:col-span-2">
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Category (Optional)</span>
+                        <select
+                          value={inlineForm.categoryId}
+                          onChange={(e) => setInlineForm({ ...inlineForm, categoryId: e.target.value })}
+                          className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                        >
+                          <option value="">Uncategorized</option>
+                          {categories
+                            .filter((c) => c.type === inlineForm.type && !c.archived_at)
+                            .map((c) => (
+                              <option value={c.id} key={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                      </label>
+
+                      {inlineForm.type === 'expense' && (
+                        <label className="space-y-1 sm:col-span-2">
+                          <span className="text-[11px] font-medium text-[var(--text-muted)]">Necessity (Optional)</span>
+                          <select
+                            value={inlineForm.necessity || ''}
+                            onChange={(e) => setInlineForm({ ...inlineForm, necessity: (e.target.value as NecessityClass) || null })}
+                            className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)]"
+                          >
+                            <option value="">Unclassified</option>
+                            <option value="essential">Essential</option>
+                            <option value="optional">Optional</option>
+                            <option value="luxury">Luxury</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
+
+                    {inlineForm.categoryId && (
+                      <label className="flex items-center gap-2 pt-1 text-xs text-[var(--text-secondary)] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={inlineForm.rememberMerchant}
+                          onChange={(e) => setInlineForm({ ...inlineForm, rememberMerchant: e.target.checked })}
+                          className="rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] cursor-pointer"
+                        />
+                        <span>Remember this merchant&apos;s category for future transactions</span>
+                      </label>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-hairline)]">
+                      <button
+                        type="button"
+                        onClick={handleCancelInlineEdit}
+                        disabled={isSavingInline}
+                        className="px-3.5 py-1.5 rounded-lg border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveInlineEdit()}
+                        disabled={isSavingInline}
+                        className="px-4 py-1.5 rounded-lg bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] text-xs font-semibold text-[var(--action-primary-fg)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        {isSavingInline ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            <span>Saving…</span>
+                          </>
+                        ) : (
+                          <span>Save</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={txn.id}
@@ -1044,8 +1364,8 @@ export function TransactionLedger({
                       <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] flex-wrap">
                         <span className="shrink-0">{formatDateHuman(txn.transaction_date)}</span>
                         <span>•</span>
-                        <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
-                          {txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                        <Badge variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
+                          {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
                         </Badge>
                         {('sync_status' in txn && txn.sync_status === 'pending') && (
                           <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
@@ -1060,21 +1380,31 @@ export function TransactionLedger({
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <div
-                        className={`font-mono text-sm font-semibold tracking-tight tabular-nums ${
-                          isIncome
-                            ? 'text-[var(--income-fg)]'
-                            : 'text-[var(--text-primary)]'
-                        }`}
-                      >
-                        {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                    <div className="text-right flex items-center gap-2">
+                      <div>
+                        <div
+                          className={`font-mono text-sm font-semibold tracking-tight tabular-nums ${
+                            isIncome
+                              ? 'text-[var(--income-fg)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
+                        </div>
+                        {txn.notes && (
+                          <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
+                            note 📝
+                          </span>
+                        )}
                       </div>
-                      {txn.notes && (
-                        <span className="text-[10px] text-[var(--text-muted)]" title={txn.notes}>
-                          note 📝
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartInlineEdit(txn, e)}
+                        className="px-2 py-1 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                        aria-label={`Edit ${txn.description || 'transaction'}`}
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
 
@@ -1106,8 +1436,8 @@ export function TransactionLedger({
 
                     {/* Col 7-8: Payment Method & Sync Status */}
                     <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
-                      <Badge variant={txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
-                        {txn.payment_method === 'online' ? 'Online' : 'Cash'}
+                      <Badge variant={txn.payment_method === 'upi' ? 'upi' : txn.payment_method === 'online' ? 'online' : 'cash'} size="xs">
+                        {txn.payment_method === 'upi' ? 'UPI' : txn.payment_method === 'online' ? 'Online' : 'Cash'}
                       </Badge>
                       {('sync_status' in txn && txn.sync_status === 'pending') && (
                         <Badge variant="warning" size="xs" dot={true} title="Waiting to sync">
@@ -1127,8 +1457,8 @@ export function TransactionLedger({
                       )}
                     </div>
 
-                    {/* Col 11-12: Amount */}
-                    <div className="col-span-2 text-right">
+                    {/* Col 11-12: Amount and Edit Action */}
+                    <div className="col-span-2 text-right flex items-center justify-end gap-2">
                       <div
                         className={`font-mono text-base font-semibold tracking-tight tabular-nums ${
                           isIncome
@@ -1138,6 +1468,14 @@ export function TransactionLedger({
                       >
                         {isIncome ? `+${txn.formatted_inr}` : `-${txn.formatted_inr}`}
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartInlineEdit(txn, e)}
+                        className="px-2 py-0.5 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-all cursor-pointer opacity-70 group-hover:opacity-100"
+                        aria-label={`Edit ${txn.description || 'transaction'}`}
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 </div>

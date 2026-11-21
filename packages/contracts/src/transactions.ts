@@ -1,6 +1,6 @@
 import type { TransactionType } from './categories.js';
 
-export type PaymentMethod = 'online' | 'cash';
+export type PaymentMethod = 'online' | 'cash' | 'upi';
 export type NecessityClass = 'essential' | 'optional' | 'luxury';
 export type TransactionIngestionSource = 'manual' | 'bank_statement' | 'sms' | 'notification' | 'message_share' | 'message' | 'account_aggregator';
 export type CategorizationMethod = 'weak_supervision' | 'anchored_fasttext' | 'user_correction' | 'manual' | 'none';
@@ -68,7 +68,7 @@ export interface CreateTransactionResponse {
 export interface UpdateTransactionRequest {
   amount?: string; // Exact decimal string in INR (e.g. "250.00", "150.5")
   type?: TransactionType;
-  category_id?: string; // Category UUID belonging to caller and matching type
+  category_id?: string | null; // Category UUID belonging to caller and matching type, or null for Uncategorized
   transaction_date?: string; // YYYY-MM-DD
   payment_method?: PaymentMethod;
   necessity?: NecessityClass | null; // Required if type is 'expense'; strictly null/absent if 'income'

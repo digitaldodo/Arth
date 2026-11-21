@@ -94,6 +94,11 @@
   --tag-online-border: #BAE6FD;
   --tag-online-dot: #0284C7;
 
+  --tag-upi-fg: #0F766E;
+  --tag-upi-bg: #F0FDFA;
+  --tag-upi-border: #99F6E4;
+  --tag-upi-dot: #14B8A6;
+
   /* Semantic Tags: Connection & Integrations */
   --tag-connected-fg: #166534;
   --tag-connected-bg: #F0FDF4;
@@ -185,6 +190,11 @@
     --tag-online-border: rgba(14, 165, 233, 0.28);
     --tag-online-dot: #38BDF8;
 
+    --tag-upi-fg: #5EEAD4;
+    --tag-upi-bg: rgba(20, 184, 166, 0.14);
+    --tag-upi-border: rgba(20, 184, 166, 0.28);
+    --tag-upi-dot: #2DD4BF;
+
     --tag-connected-fg: #86EFAC;
     --tag-connected-bg: rgba(34, 197, 94, 0.14);
     --tag-connected-border: rgba(34, 197, 94, 0.28);
@@ -267,6 +277,11 @@
   --tag-online-bg: rgba(14, 165, 233, 0.14);
   --tag-online-border: rgba(14, 165, 233, 0.28);
   --tag-online-dot: #38BDF8;
+
+  --tag-upi-fg: #5EEAD4;
+  --tag-upi-bg: rgba(20, 184, 166, 0.14);
+  --tag-upi-border: rgba(20, 184, 166, 0.28);
+  --tag-upi-dot: #2DD4BF;
 
   --tag-connected-fg: #86EFAC;
   --tag-connected-bg: rgba(34, 197, 94, 0.14);

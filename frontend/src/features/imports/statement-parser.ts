@@ -1,5 +1,7 @@
 import { detectStatementAdapter, findHeaderColumn } from './statement-adapters';
 import { assessPossibleDuplicate } from '@/features/categorization/duplicates';
+import type { PaymentMethod } from '@arth/contracts';
+import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
 
 export type StatementKind = 'income' | 'expense';
 export type ImportReviewState = 'new' | 'possible_duplicate' | 'ambiguous' | 'needs_review' | 'imported';
@@ -20,12 +22,16 @@ export type RowClassification =
 export interface ParsedStatementRow {
   key: string;
   date: string;
+  rawDate?: string;
   valueDate?: string | null;
   description: string;
+  cleanMerchant?: string;
+  merchantKey?: string;
+  rawNarration?: string;
   amount: string;
   amountPaise: number;
   type: StatementKind;
-  paymentMethod: 'online' | 'cash';
+  paymentMethod: PaymentMethod;
   reference: string | null;
   balance: string | null;
   state: ImportReviewState;
@@ -145,7 +151,7 @@ export function parseIndianDate(value: unknown, formatPreference: 'dmy' | 'mdy' 
     return validDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
   }
 
-  const text = normal(value);
+  let text = normal(value);
   if (!text) throw new Error('Date value is missing or empty');
 
   // Excel serial date passed as 5-digit string without punctuation
@@ -158,32 +164,54 @@ export function parseIndianDate(value: unknown, formatPreference: 'dmy' | 'mdy' 
     }
   }
 
+  // Strip non-date prefixes like "Dt:", "Date:", "Txn Dt:", "Txn Date:", "Value Dt:"
+  text = text.replace(/^(?:txn\s*date|trans(?:action)?\s*date|value\s*date|txn\s*dt|value\s*dt|date|dt)[:\s-]+/i, '').trim();
+
+  // Strip trailing timestamps like " 14:30:25" or " 14:30"
+  text = text.replace(/\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM))?$/i, '').trim();
+
+  // Remove ordinal suffixes: 21st, 1st, 2nd, 3rd, 22nd, etc. -> 21, 1, 2, 3, 22
+  text = text.replace(/\b(\d{1,2})(?:st|nd|rd|th)\b/gi, '$1');
+
+  // OCR character cleaning on numeric segments: replace O/o with 0, and l/I with 1
+  if (/[\d\/\-\.]/.test(text) && !/[a-zA-Z]{4,}/.test(text)) {
+    text = text.replace(/(^|[\/\-\.\s])([OlI0-9]+)([\/\-\.\s]|$)/g, (_m, p1, token, p3) => {
+      if (/^oct$/i.test(token)) return `${p1}${token}${p3}`;
+      const cleaned = token
+        .replace(/[Oo]/g, '0')
+        .replace(/[lI]/g, '1');
+      return `${p1}${cleaned}${p3}`;
+    });
+  }
+
   // 1. ISO format: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
-  const iso = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/.exec(text);
+  const iso = /(?:^|[^\d])(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/.exec(text);
   if (iso) return validDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
 
   // 2. Named month format: 15-Nov-2026, 15/Nov/2026, 15 Nov 2026, 15.Nov.2026, 15-Nov-26
-  const named = /^(\d{1,2})[-\s/.]?([A-Za-z]{3,})[-\s/.]?(\d{4}|\d{2})(?!\d)/i.exec(text);
+  const named = /(?:^|[^\d])(\d{1,2})[-\s/.]?([A-Za-z]{3,})[-\s/.]?(\d{4}|\d{2})(?!\d)/i.exec(text);
   if (named) {
     const monthKey = named[2].slice(0, 3).toLowerCase();
     const month = MONTH_MAP[monthKey];
-    if (!month) throw new Error('Date month is invalid');
-    const year = Number(named[3]) < 100 ? 2000 + Number(named[3]) : Number(named[3]);
-    return validDate(year, month, Number(named[1]));
+    if (month) {
+      const year = Number(named[3]) < 100 ? 2000 + Number(named[3]) : Number(named[3]);
+      return validDate(year, month, Number(named[1]));
+    }
   }
 
   // 3. Named month prefix: Nov 15, 2026 or November 15 2026
-  const namedPrefix = /^([A-Za-z]{3,})[-\s/.]?(\d{1,2})[,\s/.-]+(\d{4}|\d{2})(?!\d)/i.exec(text);
+  const namedPrefix = /([A-Za-z]{3,})[-\s/.]?(\d{1,2})[,\s/.-]+(\d{4}|\d{2})(?!\d)/i.exec(text);
   if (namedPrefix) {
     const monthKey = namedPrefix[1].slice(0, 3).toLowerCase();
     const month = MONTH_MAP[monthKey];
-    if (!month) throw new Error('Date month is invalid');
-    const year = Number(namedPrefix[3]) < 100 ? 2000 + Number(namedPrefix[3]) : Number(namedPrefix[3]);
-    return validDate(year, month, Number(namedPrefix[2]));
+    if (month) {
+      const year = Number(namedPrefix[3]) < 100 ? 2000 + Number(namedPrefix[3]) : Number(namedPrefix[3]);
+      return validDate(year, month, Number(namedPrefix[2]));
+    }
   }
 
   // 4. Numeric format: DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, DD MM YYYY, DD/MM/YY, etc.
-  const numeric = /^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4}|\d{2})(?!\d)/.exec(text);
+  const numeric = /(?:^|[^\d])(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4}|\d{2})(?!\d)/.exec(text);
   if (numeric) {
     const year = Number(numeric[3]) < 100 ? 2000 + Number(numeric[3]) : Number(numeric[3]);
     let day = Number(numeric[1]);
@@ -196,6 +224,27 @@ export function parseIndianDate(value: unknown, formatPreference: 'dmy' | 'mdy' 
     }
 
     return validDate(year, month, day);
+  }
+
+  // 5. Compact 8-digit date format: DDMMYYYY or YYYYMMDD
+  const compact8 = /(?:^|[^\d])(\d{8})(?!\d)/.exec(text);
+  if (compact8) {
+    const dStr = compact8[1];
+    const yearPrefix = Number(dStr.slice(0, 4));
+    if (yearPrefix >= 1990 && yearPrefix <= 2099) {
+      const y = yearPrefix;
+      const m = Number(dStr.slice(4, 6));
+      const d = Number(dStr.slice(6, 8));
+      try {
+        return validDate(y, m, d);
+      } catch {}
+    }
+    const d = Number(dStr.slice(0, 2));
+    const m = Number(dStr.slice(2, 4));
+    const y = Number(dStr.slice(4, 8));
+    try {
+      return validDate(y, m, d);
+    } catch {}
   }
 
   throw new Error('Date format is not recognized');
@@ -599,30 +648,45 @@ export function normalizeStatementTable(
     }
 
     try {
-      let date: string;
+      let date = '';
+      let dateProblem = false;
       let usedValueDateFallback = isValueDateFallback;
+      const rawDateCandidate = rawDate || rawValueDate || '';
+
       if (!isValueDateFallback && rawDate) {
         try {
           date = parseIndianDate(rawDate, dateFormatPreference);
-        } catch (dateErr) {
+        } catch {
           if (rawValueDate) {
             try {
               date = parseIndianDate(rawValueDate, dateFormatPreference);
               usedValueDateFallback = true;
             } catch {
-              throw dateErr;
+              dateProblem = true;
             }
           } else {
-            throw dateErr;
+            dateProblem = true;
           }
         }
       } else if (rawValueDate) {
-        date = parseIndianDate(rawValueDate, dateFormatPreference);
-        usedValueDateFallback = true;
+        try {
+          date = parseIndianDate(rawValueDate, dateFormatPreference);
+          usedValueDateFallback = true;
+        } catch {
+          dateProblem = true;
+        }
       } else if (rawDate) {
-        date = parseIndianDate(rawDate, dateFormatPreference);
+        try {
+          date = parseIndianDate(rawDate, dateFormatPreference);
+        } catch {
+          dateProblem = true;
+        }
       } else {
-        throw new Error('Date value is missing or empty');
+        dateProblem = true;
+      }
+
+      if (dateProblem) {
+        warnings.push(`Row ${index + 1}: date could not be read ("${rawDateCandidate || 'empty'}"); flagged for manual entry.`);
       }
 
       let valueDate: string | null = null;
@@ -758,7 +822,13 @@ export function normalizeStatementTable(
       let exclusionReason: string | undefined;
       let shouldSelect = true;
 
-      if (missingDescription) {
+      if (dateProblem) {
+        classification = 'extraction_problem';
+        state = 'needs_review';
+        warning = `Date could not be recognized ("${rawDateCandidate || 'empty'}"). Enter a valid date before importing.`;
+        exclusionReason = 'Ambiguous transaction date';
+        shouldSelect = false;
+      } else if (missingDescription) {
         classification = 'needs_review';
         state = 'needs_review';
         warning = 'Transaction narration is missing in statement row. Verify details before importing.';
@@ -822,20 +892,26 @@ export function normalizeStatementTable(
         : null;
       const rawCategory = cellStr(categoryCol);
 
+      const { cleanName, paymentMethod: detectedMethod, merchantKey } = extractCounterpartyAndPaymentMethod(description, type);
+
       const row: ParsedStatementRow = {
-        key: `${index}-${date}-${parsedAmountPaise}`,
+        key: `${index}-${date || 'nodate'}-${parsedAmountPaise}`,
         date,
+        rawDate: rawDateCandidate,
         valueDate,
         description,
+        cleanMerchant: cleanName,
+        merchantKey,
+        rawNarration: description,
         amount: String(rawAmount || '').replace(/^-/, ''),
         amountPaise: parsedAmountPaise,
         type,
-        paymentMethod: 'online',
+        paymentMethod: detectedMethod,
         reference,
         balance: balanceValue,
         state,
         classification,
-        confidence: (debitCol >= 0 || creditCol >= 0) && !usedValueDateFallback ? 'high' : 'medium',
+        confidence: (debitCol >= 0 || creditCol >= 0) && !usedValueDateFallback && !dateProblem ? 'high' : 'medium',
         selected: shouldSelect,
         categoryId: rawCategory,
         necessity: parsedNecessity,

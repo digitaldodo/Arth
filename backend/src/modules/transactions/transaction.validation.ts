@@ -145,8 +145,8 @@ export function validateCreateTransactionRequest(body: unknown): ValidatedCreate
   }
 
   // 6. Validate Payment Method
-  if (payload.payment_method !== 'online' && payload.payment_method !== 'cash') {
-    throw new ValidationError("Payment method must be 'online' or 'cash'");
+  if (payload.payment_method !== 'online' && payload.payment_method !== 'cash' && payload.payment_method !== 'upi') {
+    throw new ValidationError("Payment method must be 'online', 'cash', or 'upi'");
   }
   const payment_method: PaymentMethod = payload.payment_method;
 
@@ -479,8 +479,8 @@ export function validateUpdateTransactionRequest(body: unknown): ValidatedUpdate
   }
 
   if (payload.payment_method !== undefined) {
-    if (payload.payment_method !== 'online' && payload.payment_method !== 'cash') {
-      throw new ValidationError("Payment method must be 'online' or 'cash'");
+    if (payload.payment_method !== 'online' && payload.payment_method !== 'cash' && payload.payment_method !== 'upi') {
+      throw new ValidationError("Payment method must be 'online', 'cash', or 'upi'");
     }
     result.payment_method = payload.payment_method;
   }
