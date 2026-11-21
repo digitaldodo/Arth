@@ -63,7 +63,7 @@ export function StatementImportModal({
       {/* Modal / Bottom Sheet Card */}
       <div
         ref={modalRef}
-        className="relative z-10 w-full max-h-[92vh] md:max-w-4xl overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-t-2xl md:rounded-xl shadow-2xl p-4 sm:p-6 transition-all"
+        className="relative z-10 w-full max-h-[92vh] md:max-w-5xl lg:max-w-6xl overflow-y-auto overflow-x-hidden bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-t-2xl md:rounded-xl shadow-2xl p-4 sm:p-6 transition-all"
         style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         {/* Header with Title and Close Button */}

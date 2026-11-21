@@ -178,3 +178,46 @@ test('6. Optional Category & Necessity: Transactions default to null necessity a
   assert.equal(row.necessity, null, 'Statement expense rows must initialize with necessity: null (unclassified)');
   assert.equal(row.categoryId, '', 'Initial categoryId must be empty string until user selects or rule suggests');
 });
+
+test('7. Signed Amounts and POS Debit Reversals: Negative withdrawal increases balance and is classified as income reversal', () => {
+  // Real HDFC case: POS purchase reversal appears in Withdrawal Amt. with negative sign
+  // Opening balance: 5,641.17
+  // Row 1: Normal expense of 500.00 -> balance becomes 5,141.17
+  // Row 2: POS Reversal of -101.86 in Withdrawal Amt. -> balance INCREASES to 5,243.03!
+  // Row 3: Income deposit of 1,000.00 in Deposit Amt. -> balance becomes 6,243.03
+  const rawTable = [
+    ['Date', 'Narration', 'Chq./Ref.No.', 'Value Dt', 'Withdrawal Amt.', 'Deposit Amt.', 'Closing Balance'],
+    ['', 'OPENING BALANCE BROUGHT FORWARD', '', '', '', '', '5,641.17'],
+    ['01/11/2026', 'POS PURCHASE RELIANCE FRESH', 'REF001', '01/11/2026', '500.00', '', '5,141.17'],
+    ['02/11/2026', 'POS REVERSAL SWIGGY BANGALORE', 'REF002', '02/11/2026', '-101.86', '', '5,243.03'],
+    ['03/11/2026', 'SALARY CREDIT ACME', 'REF003', '03/11/2026', '', '1,000.00', '6,243.03'],
+    ['', 'CLOSING BALANCE CARRIED FORWARD', '', '', '', '', '6,243.03'],
+  ];
+
+  const parsed = normalizeStatementTable(rawTable, 'HDFC Bank Statement');
+  assert.equal(parsed.rows.length, 3, 'Must extract exactly 3 genuine transactions');
+
+  // Verify Row 1: normal expense
+  const expense = parsed.rows[0];
+  assert.equal(expense.type, 'expense');
+  assert.equal(expense.amount, '500.00');
+  assert.equal(expense.amountPaise, 50000);
+
+  // Verify Row 2: POS Reversal (-101.86 in Withdrawal)
+  const reversal = parsed.rows[1];
+  assert.equal(reversal.type, 'income', 'Negative withdrawal must be classified as income because it increases bank balance');
+  assert.equal(reversal.amount, '101.86', 'Amount string must be absolute INR value');
+  assert.equal(reversal.amountPaise, 10186, 'Amount paise must be positive integer');
+  assert.equal(reversal.classification, 'reversal', 'Classification must be reversal');
+  assert.equal(reversal.selected, false, 'Candidate reversal should be unselected by default for user review');
+  assert.equal(reversal.warning?.includes('Reversal'), true);
+
+  // Verify Row 3: normal income
+  const income = parsed.rows[2];
+  assert.equal(income.type, 'income');
+  assert.equal(income.amount, '1000.00');
+  assert.equal(income.amountPaise, 100000);
+
+  // Verify Statement Reconciliation: 5641.17 - 500.00 + 101.86 + 1000.00 = 6243.03
+  assert.equal(parsed.isReconciled, true, 'Running balance and statement summary must reconcile without discrepancy warnings');
+});

@@ -391,8 +391,11 @@ export function normalizeStatementTable(
   const dateCol = mapped('date', col(adapter.dateHeaders)) ?? -1, valueDateCol = mapped('valueDate', col(['value date', 'value dt', 'val date'])) ?? -1;
   const descCol = mapped('description', col(adapter.descriptionHeaders)) ?? -1;
   const debitCol = mapped('debit', col(adapter.debitHeaders)) ?? -1, creditCol = mapped('credit', col(adapter.creditHeaders)) ?? -1;
-  const amountCol = mapped('amount', col(['amount', 'transaction amount', 'spends'])) ?? -1, typeCol = mapped('type', col(['type', 'dr cr', 'transaction type'])) ?? -1;
+  const amountCol = mapped('amount', col(['amount', 'amount inr', 'amount (inr)', 'transaction amount', 'txn amount', 'spends', 'net amount'])) ?? -1;
+  const typeCol = mapped('type', col(['type', 'dr cr', 'transaction type', 'cr dr', 'txn type'])) ?? -1;
   const refCol = mapped('reference', col(adapter.referenceHeaders)) ?? -1, balanceCol = mapped('balance', col(adapter.balanceHeaders)) ?? -1;
+  const categoryCol = col(['category', 'category name']);
+  const necessityCol = col(['necessity', 'necessity class']);
   if (dateCol < 0 || descCol < 0) {
     return {
       rows: [],
@@ -514,6 +517,7 @@ export function normalizeStatementTable(
       let rawAmount = '';
       let type: StatementKind = 'expense';
       let parsedAmountPaise = 0;
+      let isReversalEntry = false;
 
       if (conflictingColumns) {
         // Both columns populated: flag for user review
@@ -523,11 +527,23 @@ export function normalizeStatementTable(
       } else if (creditPresent) {
         rawAmount = creditAmount.amount;
         parsedAmountPaise = creditAmount.amountPaise;
-        type = 'income';
+        if (rawAmount.startsWith('-')) {
+          // Negative credit/deposit decreases balance -> expense reversal
+          type = 'expense';
+          isReversalEntry = true;
+        } else {
+          type = 'income';
+        }
       } else if (debitPresent) {
         rawAmount = debitAmount.amount;
         parsedAmountPaise = debitAmount.amountPaise;
-        type = 'expense';
+        if (rawAmount.startsWith('-')) {
+          // Negative withdrawal/debit increases balance -> income reversal (e.g. HDFC -101.86)
+          type = 'income';
+          isReversalEntry = true;
+        } else {
+          type = 'expense';
+        }
       } else if (amountCol >= 0 && amountCol !== balanceCol && values[amountCol]) {
         // Single signed amount column (never closing balance)
         const candidate = values[amountCol];
@@ -536,10 +552,26 @@ export function normalizeStatementTable(
           if (parsed.amountPaise > 0) {
             rawAmount = parsed.amount;
             parsedAmountPaise = parsed.amountPaise;
-            if (typeCol >= 0 && /credit|deposit|cr/i.test(values[typeCol])) type = 'income';
-            else if (typeCol >= 0 && /debit|withdrawal|dr/i.test(values[typeCol])) type = 'expense';
-            else if (/[+-]/.test(rawAmount)) type = rawAmount.trim().startsWith('-') ? 'expense' : 'income';
-            else { type = /salary|interest|refund|cashback|dividend/i.test(description) ? 'income' : 'expense'; }
+            const isNegative = rawAmount.trim().startsWith('-');
+            if (typeCol >= 0 && /credit|deposit|income|cr/i.test(values[typeCol])) {
+              if (isNegative) {
+                type = 'expense';
+                isReversalEntry = true;
+              } else {
+                type = 'income';
+              }
+            } else if (typeCol >= 0 && /debit|withdrawal|expense|dr/i.test(values[typeCol])) {
+              if (isNegative) {
+                type = 'income';
+                isReversalEntry = true;
+              } else {
+                type = 'expense';
+              }
+            } else if (/[+-]/.test(rawAmount)) {
+              type = isNegative ? 'expense' : 'income';
+            } else {
+              type = /salary|interest|refund|cashback|dividend/i.test(description) ? 'income' : 'expense';
+            }
           }
         }
       }
@@ -549,9 +581,8 @@ export function normalizeStatementTable(
         continue;
       }
 
-      const signed = rawAmount.startsWith('-') ? 'expense' : type;
       const isCardSettlement = /CREDIT CARD PAYMENT|CARD PAYMENT|CC PAYMENT|CREDIT CARD BILL/i.test(description);
-      const isReversal = /REVERSAL|CHARGEBACK/i.test(description);
+      const isReversal = isReversalEntry || /REVERSAL|CHARGEBACK/i.test(description);
       const isRefund = /REFUND|CASHBACK/i.test(description) && !isReversal;
       const isTransfer = /SELF TRANSFER|TRANSFER TO OWN|OWN ACCOUNT|LOAN DISBURS|LOAN CREDIT/i.test(description);
 
@@ -588,7 +619,9 @@ export function normalizeStatementTable(
       } else if (isReversal) {
         classification = 'reversal';
         state = 'ambiguous';
-        warning = 'Possible reversal or chargeback. Review and link to original transaction.';
+        warning = isReversalEntry
+          ? 'Reversal transaction with signed negative amount. Direction verified against statement balance.'
+          : 'Possible reversal or chargeback. Review and link to original transaction.';
         exclusionReason = 'Candidate reversal';
         shouldSelect = false;
       } else if (isRefund) {
@@ -597,7 +630,7 @@ export function normalizeStatementTable(
         warning = 'Possible refund or cashback. Review manually to avoid treating it as salary or income.';
         exclusionReason = 'Candidate refund';
         shouldSelect = false;
-      } else if (signed === 'income') {
+      } else if (type === 'income') {
         classification = 'income';
         state = 'new';
         shouldSelect = true;
@@ -611,6 +644,11 @@ export function normalizeStatementTable(
       }
 
       const balanceValue = balanceCol >= 0 && values[balanceCol] ? values[balanceCol] : null;
+      const rawNecessity = necessityCol >= 0 && values[necessityCol] ? values[necessityCol].trim().toLowerCase() : '';
+      const parsedNecessity = type === 'expense' && (rawNecessity === 'essential' || rawNecessity === 'optional' || rawNecessity === 'luxury')
+        ? rawNecessity
+        : null;
+      const rawCategory = categoryCol >= 0 && values[categoryCol] ? values[categoryCol].trim() : '';
 
       const row: ParsedStatementRow = {
         key: `${index}-${date}-${parsedAmountPaise}`,
@@ -619,7 +657,7 @@ export function normalizeStatementTable(
         description,
         amount: rawAmount.replace(/^-/, ''),
         amountPaise: parsedAmountPaise,
-        type: signed,
+        type,
         paymentMethod: 'online',
         reference,
         balance: balanceValue,
@@ -627,8 +665,8 @@ export function normalizeStatementTable(
         classification,
         confidence: debitCol >= 0 || creditCol >= 0 ? 'high' : 'medium',
         selected: shouldSelect,
-        categoryId: '',
-        necessity: null,
+        categoryId: rawCategory,
+        necessity: parsedNecessity,
         ...(warning ? { warning } : {}),
         ...(exclusionReason ? { exclusionReason } : {}),
       };

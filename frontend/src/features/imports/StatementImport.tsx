@@ -1335,11 +1335,10 @@ export function StatementImport({ userId, onImported }: Props) {
                         </th>
                         <th className="py-2.5 px-3 w-28 font-medium">Date</th>
                         <th className="py-2.5 px-3 font-medium">Description / Narration</th>
-                        <th className="py-2.5 px-3 w-24 font-medium">Type</th>
-                        <th className="py-2.5 px-3 w-32 font-medium text-right">Amount</th>
-                        <th className="py-2.5 px-3 w-36 font-medium">Category</th>
-                        <th className="py-2.5 px-3 w-32 font-medium">Status</th>
-                        <th className="py-2.5 px-3 w-20 text-center font-medium">Actions</th>
+                        <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
+                        <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
+                        <th className="py-2.5 px-3 w-32 text-center font-medium">Status</th>
+                        <th className="py-2.5 px-3 w-16 text-center font-medium">Details</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-hairline)]">
@@ -1362,7 +1361,7 @@ export function StatementImport({ userId, onImported }: Props) {
                               <td className="py-2.5 px-3 font-mono text-[var(--text-secondary)] align-top whitespace-nowrap">
                                 {row.date}
                               </td>
-                              <td className="py-2.5 px-3 align-top max-w-xs xl:max-w-md">
+                              <td className="py-2.5 px-3 align-top min-w-0 max-w-sm lg:max-w-md xl:max-w-lg">
                                 <div className="font-medium text-[var(--text-primary)] line-clamp-2" title={row.description}>
                                   {row.description}
                                 </div>
@@ -1376,7 +1375,7 @@ export function StatementImport({ userId, onImported }: Props) {
                                   {row.exclusionReason && <span className="text-amber-700 dark:text-amber-300 font-medium">⚠️ {row.exclusionReason}</span>}
                                 </div>
                               </td>
-                              <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                              <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                                   row.type === 'expense'
                                     ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
@@ -1390,26 +1389,16 @@ export function StatementImport({ userId, onImported }: Props) {
                                   {row.type === 'expense' ? '-' : '+'}₹{row.amount}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 align-top whitespace-nowrap">
-                                {category ? (
-                                  <span className="text-[var(--text-primary)] font-medium">{category.name}</span>
-                                ) : (
-                                  <span className="text-[var(--text-muted)] italic">Uncategorized</span>
-                                )}
-                                {row.type === 'expense' && (
-                                  <span className="block text-[10px] text-[var(--text-muted)] capitalize">
-                                    {row.necessity || 'Unclassified'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                              <td className="py-2.5 px-3 align-top text-center whitespace-nowrap">
                                 {row.classification && (
-                                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium ${
                                     row.classification === 'new'
                                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                                       : row.classification === 'already_recorded'
                                         ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                        : row.classification === 'reversal'
+                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                                   }`}>
                                     {row.classification.replace(/_/g, ' ')}
                                   </span>
@@ -1420,14 +1409,15 @@ export function StatementImport({ userId, onImported }: Props) {
                                   type="button"
                                   onClick={() => toggleRowExpand(row.key)}
                                   className="px-2 py-1 rounded text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+                                  aria-label={isExpanded ? 'Hide transaction details' : 'View or edit transaction details'}
                                 >
-                                  {isExpanded ? 'Close ▲' : 'Edit ▼'}
+                                  {isExpanded ? 'Hide ▲' : 'Details ▼'}
                                 </button>
                               </td>
                             </tr>
                             {isExpanded && (
                               <tr className="bg-[var(--bg-surface-subtle)]">
-                                <td colSpan={8} className="p-4 border-t border-[var(--border-hairline)]">
+                                <td colSpan={7} className="p-4 border-t border-[var(--border-hairline)]">
                                   <div className="space-y-3">
                                     <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
                                       <label className="text-[10px] font-medium text-[var(--text-muted)]">
@@ -1604,7 +1594,17 @@ export function StatementImport({ userId, onImported }: Props) {
                               {row.classification && (
                                 <>
                                   <span>·</span>
-                                  <span className="capitalize">{row.classification.replace(/_/g, ' ')}</span>
+                                  <span className={`px-1 rounded text-[9px] font-medium ${
+                                    row.classification === 'new'
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                      : row.classification === 'already_recorded'
+                                        ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                                        : row.classification === 'reversal'
+                                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  }`}>
+                                    {row.classification.replace(/_/g, ' ')}
+                                  </span>
                                 </>
                               )}
                             </div>
