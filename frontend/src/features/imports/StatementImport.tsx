@@ -1,32 +1,71 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { v7 as uuidv7 } from 'uuid';
-import { formatPaiseToINR, parseINRToPaise, parseNonNegativeINRToPaise, type CategoryDTO, type CreateTransactionResponse } from '@arth/contracts';
+import { formatPaiseToINR, parseINRToPaise, type CategoryDTO, type CreateTransactionResponse } from '@arth/contracts';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { getCachedCategories, getCachedTransactions, getPendingMutations, getStatementImportBatches, saveStatementImportBatch, type StatementImportBatch } from '@/lib/offline-db';
 import { fetchCategories, fetchTransactions } from '@/lib/api-client';
 import { syncEngine } from '@/features/sync/sync-engine';
-import { CrossAccountReconciliation } from './CrossAccountReconciliation';
 import { normalizeStatementTable, parseCsv, tagDuplicates, computeStatementSummary, type ParsedStatementRow, type StatementColumnMapping, type StatementParseResult, type StatementSummary } from './statement-parser';
 import { getStatementCompatibilityMatrix } from './statement-adapters';
 import { alignOcrRows, requireOcrReview, type OcrCell, type OcrLine } from './statement-ocr';
 import { skippedRowsForImport } from './statement-skip-history';
 import { merchantFingerprint, recordCategoryCorrection, suggestCategory } from '@/features/categorization';
-import { FinancialMessageCapture } from './FinancialMessageCapture';
 
-type Props = { userId: string; onImported: (count: number) => void; onManualEntry: () => void };
+type Props = {
+  userId: string;
+  onImported: (count: number) => void;
+  onManualEntry?: () => void;
+};
+
 type PasswordCallback = (password: string) => void;
-type ExistingLedgerRow = { transaction_date: string; amount_paise: number; type: string; description: string | null; account_id?: string | null; statement_reference?: string | null };
-type FinancialAccount = { id: string; name: string; institution: string; account_type: 'bank' | 'credit_card' | 'cash' | 'wallet' | 'investment' | 'loan'; account_number_last4: string | null; opening_balance_paise: string; current_balance_paise?: string };
-type StoredBatch = { id: string; account_id: string | null; source_name: string; source_format: 'pdf' | 'csv' | 'xlsx' | 'xls'; parser_id: string; statement_start: string | null; statement_end: string | null; opening_balance_paise: string | null; closing_balance_paise: string | null; source_sha256: string | null; status: 'processing' | 'completed' | 'partial' | 'failed' | 'undone'; detected_count: number; imported_count: number; skipped_count: number; duplicate_count: number; skipped_rows?: NonNullable<StatementImportBatch['skipped_rows']>; transaction_ids?: string[]; created_at: string };
+
+type ExistingLedgerRow = {
+  transaction_date: string;
+  amount_paise: number;
+  type: string;
+  description: string | null;
+  account_id?: string | null;
+  statement_reference?: string | null;
+};
+
+type StoredBatch = {
+  id: string;
+  account_id: string | null;
+  source_name: string;
+  source_format: 'pdf' | 'csv' | 'xlsx' | 'xls';
+  parser_id: string;
+  statement_start: string | null;
+  statement_end: string | null;
+  opening_balance_paise: string | null;
+  closing_balance_paise: string | null;
+  source_sha256: string | null;
+  status: 'processing' | 'completed' | 'partial' | 'failed' | 'undone';
+  detected_count: number;
+  imported_count: number;
+  skipped_count: number;
+  duplicate_count: number;
+  skipped_rows?: NonNullable<StatementImportBatch['skipped_rows']>;
+  transaction_ids?: string[];
+  created_at: string;
+};
+
 const MAPPING_FIELDS: Array<[keyof StatementColumnMapping, string]> = [
-  ['date', 'Transaction date'], ['valueDate', 'Value date'], ['description', 'Description / narration'], ['debit', 'Debit amount'], ['credit', 'Credit amount'],
-  ['amount', 'Single amount'], ['type', 'Debit / credit type'], ['reference', 'Reference / UTR'], ['balance', 'Running balance'],
+  ['date', 'Transaction date'],
+  ['valueDate', 'Value date'],
+  ['description', 'Description / narration'],
+  ['debit', 'Debit amount'],
+  ['credit', 'Credit amount'],
+  ['amount', 'Single amount'],
+  ['type', 'Debit / credit type'],
+  ['reference', 'Reference / UTR'],
+  ['balance', 'Running balance'],
 ];
 
-export function StatementImport({ userId, onImported, onManualEntry }: Props) {
+export function StatementImport({ userId, onImported }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<StatementParseResult | null>(null);
   const [mappingHeaderIndex, setMappingHeaderIndex] = useState('0');
   const [mappingColumns, setMappingColumns] = useState<Record<string, string>>({});
@@ -43,18 +82,12 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<StatementImportBatch[]>([]);
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-  const [accountId, setAccountId] = useState('');
-  const [newAccountName, setNewAccountName] = useState('');
-  const [newAccountInstitution, setNewAccountInstitution] = useState('');
-  const [newAccountType, setNewAccountType] = useState<'bank' | 'credit_card'>('bank');
-  const [newAccountLast4, setNewAccountLast4] = useState('');
-  const [newOpeningBalance, setNewOpeningBalance] = useState('0');
-  const [newOpeningBalanceDate, setNewOpeningBalanceDate] = useState('');
-  const [accountFormOpen, setAccountFormOpen] = useState(false);
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
   const [retryingBatchId, setRetryingBatchId] = useState<string | null>(null);
   const [showCompatibility, setShowCompatibility] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'new' | 'already_recorded' | 'possible_duplicate' | 'needs_review'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pdfTask = useRef<{ destroy: () => Promise<void> } | null>(null);
   const parseVersion = useRef(0);
 
@@ -65,74 +98,138 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       setCategories(cached);
       const recoverable = imports.map((item) => item.status === 'processing' ? { ...item, status: 'partial' as const } : item);
       setHistory(recoverable);
-      for (const item of recoverable) if (item.status === 'partial' && imports.find((old) => old.id === item.id)?.status === 'processing') void saveStatementImportBatch(item);
+      for (const item of recoverable) {
+        if (item.status === 'partial' && imports.find((old) => old.id === item.id)?.status === 'processing') {
+          void saveStatementImportBatch(item);
+        }
+      }
       try {
         const fresh = await fetchCategories({ include_archived: false });
-        if (active) { setCategories(fresh.categories); }
-      } catch { /* Cached categories remain available offline. */ }
+        if (active) setCategories(fresh.categories);
+      } catch {
+        /* Cached categories remain available offline */
+      }
       try {
-        const [accountResponse, batchResponse] = await Promise.all([
-          fetch('/api/backend/financial/accounts', { cache: 'no-store' }),
-          fetch('/api/backend/financial/import-batches', { cache: 'no-store' }),
-        ]);
-        if (!accountResponse.ok || !batchResponse.ok) throw new Error('Could not load saved account/import metadata');
-        const accountData = await accountResponse.json() as { accounts: FinancialAccount[] };
+        const batchResponse = await fetch('/api/backend/financial/import-batches', { cache: 'no-store' });
+        if (!batchResponse.ok) throw new Error('Could not load saved import metadata');
         const batchData = await batchResponse.json() as { batches: StoredBatch[] };
         if (!active) return;
-        setAccounts(accountData.accounts || []);
-        const remote = (batchData.batches || []).map((batch) => ({
-          id: batch.id, user_id: userId, source: batch.source_name, created_at: batch.created_at,
-          imported_ids: batch.transaction_ids || [], detected_count: batch.detected_count,
+        const remote: StatementImportBatch[] = (batchData.batches || []).map((batch) => ({
+          id: batch.id,
+          user_id: userId,
+          source: batch.source_name,
+          created_at: batch.created_at,
+          imported_ids: batch.transaction_ids || [],
+          detected_count: batch.detected_count,
           status: batch.status === 'undone' ? 'undone' as const : batch.status === 'completed' ? 'completed' as const : batch.status === 'processing' ? 'processing' as const : 'partial' as const,
-          account_id: batch.account_id, statement_start: batch.statement_start, statement_end: batch.statement_end,
-          opening_balance_paise: batch.opening_balance_paise, closing_balance_paise: batch.closing_balance_paise,
-          parser_id: batch.parser_id, source_format: batch.source_format, source_sha256: batch.source_sha256,
+          account_id: null,
+          statement_start: batch.statement_start,
+          statement_end: batch.statement_end,
+          opening_balance_paise: batch.opening_balance_paise,
+          closing_balance_paise: batch.closing_balance_paise,
+          parser_id: batch.parser_id,
+          source_format: batch.source_format,
+          source_sha256: batch.source_sha256,
           skipped_rows: batch.skipped_rows || [],
         }));
         setHistory((current) => {
           const localById = new Map(current.map((item) => [item.id, item]));
           for (const item of remote) {
             const local = localById.get(item.id);
-          localById.set(item.id, local ? { ...item, ...local, status: item.status, imported_ids: [...new Set([...local.imported_ids, ...item.imported_ids])] } : item);
+            localById.set(item.id, local ? { ...item, ...local, status: item.status, imported_ids: [...new Set([...local.imported_ids, ...item.imported_ids])] } : item);
           }
           return [...localById.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
         });
-        if (accountData.accounts?.length) setAccountId((current) => current || accountData.accounts[0].id);
-      } catch { /* Keep browser history available when persistent metadata is offline. */ }
+      } catch {
+        /* Keep browser history available when persistent metadata is offline */
+      }
     });
     return () => { active = false; };
   }, [userId]);
+
   useEffect(() => () => {
     parseVersion.current++;
     sessionPasswordRef.current = null;
     if (pdfTask.current) void pdfTask.current.destroy().catch(() => {});
   }, []);
-  const selectedAccount = useMemo(() => accounts.find((a) => a.id === accountId), [accounts, accountId]);
+
   const selectedRows = useMemo(() => result?.rows.filter((row) => row.selected) || [], [result]);
+
+  const selectedTotalPaise = useMemo(() => {
+    return selectedRows.reduce((acc, row) => acc + BigInt(row.amountPaise), 0n);
+  }, [selectedRows]);
+
   const summary: StatementSummary | null = useMemo(() => {
     if (!result) return null;
     return computeStatementSummary(
       result.rows,
       result.openingBalancePaise ?? null,
       result.closingBalancePaise ?? null,
-      selectedAccount?.account_type === 'credit_card' ? 'credit_card' : 'bank'
+      'bank'
     );
-  }, [result, selectedAccount?.account_type]);
+  }, [result]);
+
   const totals = useMemo(() => ({
     debits: summary ? BigInt(summary.totalDebitsPaise) : 0n,
     credits: summary ? BigInt(summary.totalCreditsPaise) : 0n,
     duplicates: summary ? summary.skippedByReason.possible_duplicate : 0,
+    alreadyRecorded: summary ? summary.alreadyRecordedCount : 0,
     review: summary ? summary.needsReviewCount : 0,
   }), [summary]);
 
+  const filteredRows = useMemo(() => {
+    if (!result) return [];
+    let list = result.rows;
+
+    if (reviewFilter === 'new') {
+      list = list.filter((r) => r.state === 'new');
+    } else if (reviewFilter === 'already_recorded') {
+      list = list.filter((r) => r.classification === 'already_recorded');
+    } else if (reviewFilter === 'possible_duplicate') {
+      list = list.filter((r) => r.state === 'possible_duplicate' || r.classification === 'possible_duplicate');
+    } else if (reviewFilter === 'needs_review') {
+      list = list.filter((r) => r.state === 'needs_review' || r.state === 'ambiguous');
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((r) =>
+        r.description.toLowerCase().includes(q) ||
+        r.amount.includes(q) ||
+        r.date.includes(q) ||
+        (r.reference && r.reference.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [result, reviewFilter, searchQuery]);
+
   async function readFile(selectedFile: File) {
     const version = ++parseVersion.current;
-    if (pdfTask.current) { await pdfTask.current.destroy().catch(() => {}); pdfTask.current = null; }
+    if (pdfTask.current) {
+      await pdfTask.current.destroy().catch(() => {});
+      pdfTask.current = null;
+    }
     passwordCallback.current = null;
-    setFile(selectedFile); setResult(null); setMappingHeaderIndex('0'); setMappingColumns({}); setError(''); setMessage(''); setPassword(''); setPasswordRequired(false);
-    if (selectedFile.size > 30 * 1024 * 1024) { setError('Files must be 30 MB or smaller.'); return; }
+    setFile(selectedFile);
+    setResult(null);
+    setMappingHeaderIndex('0');
+    setMappingColumns({});
+    setError('');
+    setMessage('');
+    setPassword('');
+    setPasswordRequired(false);
+
+    if (selectedFile.size > 30 * 1024 * 1024) {
+      setError('Statements must be 30 MB or smaller.');
+      return;
+    }
     const ext = selectedFile.name.toLowerCase().split('.').pop();
-    if (!['csv', 'xlsx', 'xls', 'pdf'].includes(ext || '')) { setError('Choose a PDF, CSV, XLSX, or XLS statement.'); return; }
+    if (!['csv', 'xlsx', 'xls', 'pdf'].includes(ext || '')) {
+      setError('Please choose a valid PDF, CSV, XLSX, or XLS statement.');
+      return;
+    }
+
     setProcessing(true);
     try {
       let parsed: StatementParseResult;
@@ -142,50 +239,65 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
         const XLSX = await import('xlsx');
         const workbook = XLSX.read(await selectedFile.arrayBuffer(), { type: 'array', cellDates: false });
         const first = workbook.SheetNames[0];
-        if (!first) throw new Error('The workbook contains no sheets.');
+        if (!first) throw new Error('The spreadsheet contains no sheets.');
         parsed = normalizeStatementTable(XLSX.utils.sheet_to_json(workbook.Sheets[first], { header: 1, raw: false }) as unknown[][], selectedFile.name);
       } else {
         parsed = await parsePdf(selectedFile);
       }
+
       if (version !== parseVersion.current) return;
+
       if (parsed.ocrRequired) {
         setResult(parsed);
-        setMessage('This PDF has no selectable text. You can run local OCR in this browser, then review every extracted field before import.');
+        setMessage('This PDF contains no selectable text (scanned document). You can run local on-device OCR below to extract transactions.');
         return;
       }
       if (parsed.mappingRequired && !parsed.rows.length) {
         setResult(parsed);
-        setMessage('This statement layout needs column mapping. Choose its header row and map the date, narration and amount columns below.');
+        setMessage('Could not automatically determine statement columns. Choose the header row and map columns below.');
         return;
       }
+
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, accountId || null);
-      if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
+      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      if (!ledger.complete) {
+        parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
+      }
+
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
         const suggested = suggestCategory(row.description, available, row.type);
         const match = suggested?.category;
-        return { ...row, categoryId: match?.id || '' };
+        return {
+          ...row,
+          categoryId: match?.id || '',
+          necessity: row.type === 'expense' ? (row.necessity || 'essential') : null,
+        };
       });
+
       if (!parsed.rows.length) {
         setResult(parsed);
-        setMessage('No transaction rows were extracted. Check the source file or map the columns manually.');
+        setMessage('No transaction records could be extracted from this statement. Try exporting as CSV/Excel or mapping columns manually.');
         return;
       }
+
       setResult(parsed);
-      setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted. Review every row before importing.`);
+      setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted. Review each entry before committing to your ledger.`);
     } catch (cause) {
       if (version !== parseVersion.current) return;
       const msg = cause instanceof Error ? cause.message : String(cause);
       if (msg.includes('Password') || msg.includes('encrypted') || msg.includes('password')) {
-        setError('This PDF is encrypted or the password was incorrect. Enter its password above. Passwords are never sent across the network.');
+        setError('This PDF statement is password-protected or the password was incorrect. Enter its password above to decrypt locally.');
       } else if (msg.includes('Invalid PDF') || msg.includes('corrupted') || msg.includes('stream') || msg.includes('format')) {
-        setError('The file could not be parsed as a valid statement. It may be damaged or an unsupported format. Try exporting as CSV or Excel from your bank.');
+        setError('The file could not be parsed as a valid statement. It may be corrupted or in an unsupported layout. Try exporting as CSV or Excel from your bank.');
       } else {
-        setError(msg || 'Could not read this statement. Try CSV or Excel export.');
+        setError(msg || 'Could not parse this statement. Try exporting as CSV or Excel.');
       }
     } finally {
-      if (version === parseVersion.current) { setProcessing(false); setPassword(''); }
+      if (version === parseVersion.current) {
+        setProcessing(false);
+        setPassword('');
+      }
     }
   }
 
@@ -193,31 +305,55 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
     if (!result?.sourceTable || !file) return;
     const selected = (key: string) => mappingColumns[key] === undefined || mappingColumns[key] === '' ? null : Number(mappingColumns[key]);
     const date = selected('date'), description = selected('description');
-    if (!mappingHeaderIndex) { setError('Choose the row containing the statement column headings.'); return; }
-    if (date === null || description === null) { setError('Choose the transaction date and narration columns.'); return; }
-    if (selected('debit') === null && selected('credit') === null && selected('amount') === null) { setError('Choose a debit, credit, or single amount column.'); return; }
+    if (!mappingHeaderIndex) { setError('Select the row containing column headings.'); return; }
+    if (date === null || description === null) { setError('Please map both Transaction Date and Narration/Description columns.'); return; }
+    if (selected('debit') === null && selected('credit') === null && selected('amount') === null) { setError('Map either Debit/Credit columns or a single Amount column.'); return; }
+
     const mapping: StatementColumnMapping = {
-      headerIndex: Number(mappingHeaderIndex), date, valueDate: selected('valueDate'), description,
-      debit: selected('debit'), credit: selected('credit'), amount: selected('amount'), type: selected('type'),
-      reference: selected('reference'), balance: selected('balance'),
+      headerIndex: Number(mappingHeaderIndex),
+      date,
+      valueDate: selected('valueDate'),
+      description,
+      debit: selected('debit'),
+      credit: selected('credit'),
+      amount: selected('amount'),
+      type: selected('type'),
+      reference: selected('reference'),
+      balance: selected('balance'),
     };
-    setProcessing(true); setError('');
+
+    setProcessing(true);
+    setError('');
     try {
       let parsed = normalizeStatementTable(result.sourceTable, file.name, mapping);
       if (parsed.ocrConfidence !== undefined) parsed = requireOcrReview(parsed, parsed.ocrConfidence);
-      if (!parsed.rows.length) { setResult(parsed); setError(parsed.warnings[0] || 'No rows matched those columns. Adjust the mapping and retry.'); return; }
+      if (!parsed.rows.length) {
+        setResult(parsed);
+        setError(parsed.warnings[0] || 'No rows matched those column mappings. Please adjust and retry.');
+        return;
+      }
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, accountId || null);
-      if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
+      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      if (!ledger.complete) {
+        parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
+      }
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
         const suggested = suggestCategory(row.description, available, row.type);
         const match = suggested?.category;
-        return { ...row, categoryId: match?.id || '' };
+        return {
+          ...row,
+          categoryId: match?.id || '',
+          necessity: row.type === 'expense' ? (row.necessity || 'essential') : null,
+        };
       });
-      setResult(parsed); setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted using your column mapping. Review every row before importing.`);
-    } catch (cause) { setError(sanitizeUserFacingError(cause, 'Could not parse those columns.')); }
-    finally { setProcessing(false); }
+      setResult(parsed);
+      setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted using column mapping. Review rows before importing.`);
+    } catch (cause) {
+      setError(sanitizeUserFacingError(cause, 'Could not parse with selected columns.'));
+    } finally {
+      setProcessing(false);
+    }
   }
 
   async function parsePdf(pdfFile: File): Promise<StatementParseResult> {
@@ -227,6 +363,7 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
     pdfTask.current = task;
     let encrypted = false;
     let autoTriedSessionPassword = false;
+
     task.onPassword = (updatePassword: PasswordCallback, reason: number) => {
       encrypted = true;
       if (sessionPasswordRef.current && !autoTriedSessionPassword && reason !== pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
@@ -236,18 +373,23 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       }
       if (reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
         sessionPasswordRef.current = null;
-        setError('That PDF password did not unlock the file. Try again. Passwords are processed only in volatile memory on this device.');
+        setError('Incorrect PDF password. Please try again. Passwords are processed only in volatile memory on this device.');
       } else {
-        setError('This PDF is encrypted. Enter its document password to continue.');
+        setError('This PDF statement is encrypted. Enter its document password to unlock locally.');
       }
       passwordCallback.current = updatePassword;
       setPasswordRequired(true);
     };
+
     const pdf = await task.promise;
-    setPasswordRequired(false); setError(''); passwordCallback.current = null;
+    setPasswordRequired(false);
+    setError('');
+    passwordCallback.current = null;
+
     const table: string[][] = [];
     let headingText = '';
     let selectableTextCount = 0;
+
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const content = await page.getTextContent();
@@ -257,7 +399,8 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
         const [, , , , x, y] = item.transform;
         const lineY = Math.round(y / 3) * 3;
         const group = groups.get(lineY) || [];
-        group.push({ x, text: item.str }); groups.set(lineY, group);
+        group.push({ x, text: item.str });
+        groups.set(lineY, group);
       }
       const lines = [...groups.entries()].sort((a, b) => b[0] - a[0]).map(([, items]) => {
         items.sort((a, b) => a.x - b.x);
@@ -267,13 +410,15 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       headingText += ` ${lines.slice(0, 12).join(' ')}`;
       for (const line of lines) table.push(line.split(/\s{2,}/).map((v) => v.trim()));
     }
+
     if (!encrypted && pdf.numPages > 0) setPasswordRequired(false);
     await task.destroy();
     pdfTask.current = null;
+
     const parsed = normalizeStatementTable(table, `${pdfFile.name} ${headingText}`);
     if (selectableTextCount === 0) {
       parsed.ocrRequired = true;
-      parsed.warnings.push('This PDF contains no selectable text. Local OCR is available as an explicit review-only option.');
+      parsed.warnings.push('This PDF contains no selectable text layer. Local OCR is available as an explicit review-only option.');
     }
     return parsed;
   }
@@ -281,10 +426,15 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
   async function runLocalOcr() {
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) return;
     const version = parseVersion.current;
-    setProcessing(true); setError(''); setMessage('Preparing the local OCR engine…'); setOcrProgress(0);
+    setProcessing(true);
+    setError('');
+    setMessage('Initializing local OCR engine on this device…');
+    setOcrProgress(0);
+
     let task: import('pdfjs-dist').PDFDocumentLoadingTask | null = null;
     let worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | null = null;
     let canvas: HTMLCanvasElement | null = null;
+
     try {
       const pdfjs = await import('pdfjs-dist');
       const tesseract = await import('tesseract.js');
@@ -292,6 +442,7 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       task = pdfjs.getDocument({ data: await file.arrayBuffer() });
       pdfTask.current = task;
       let autoTriedSessionPassword = false;
+
       task.onPassword = (updatePassword: PasswordCallback, reason: number) => {
         if (sessionPasswordRef.current && !autoTriedSessionPassword && reason !== pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
           autoTriedSessionPassword = true;
@@ -300,26 +451,35 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
         }
         if (reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD) {
           sessionPasswordRef.current = null;
-          setError('That PDF password did not unlock the file. Try again. Passwords are processed only in volatile memory on this device.');
+          setError('Incorrect PDF password. Try again. Passwords remain in volatile memory.');
         } else {
-          setError('Enter the document password to unlock it locally for OCR.');
+          setError('Enter document password to decrypt locally for OCR.');
         }
         passwordCallback.current = updatePassword;
         setPasswordRequired(true);
       };
+
       const pdf = await task.promise;
       if (version !== parseVersion.current) return;
-      if (pdf.numPages > 25) throw new Error('Local OCR is limited to 25 pages at a time. Export a smaller statement range or use CSV/Excel.');
-      setPasswordRequired(false); passwordCallback.current = null;
+      if (pdf.numPages > 25) throw new Error('Local OCR is limited to 25 pages. Export a smaller statement range or use CSV/Excel.');
+
+      setPasswordRequired(false);
+      passwordCallback.current = null;
+
       worker = await tesseract.createWorker('eng+hin', tesseract.OEM.LSTM_ONLY, {
-        workerPath: '/ocr/worker.min.js', corePath: '/ocr/tesseract-core-lstm.wasm.js',
-        langPath: `${window.location.origin}/ocr/`, workerBlobURL: false, gzip: true,
+        workerPath: '/ocr/worker.min.js',
+        corePath: '/ocr/tesseract-core-lstm.wasm.js',
+        langPath: `${window.location.origin}/ocr/`,
+        workerBlobURL: false,
+        gzip: true,
         logger: (entry) => { if (Number.isFinite(entry.progress)) setOcrProgress(Math.round(entry.progress * 100)); },
       });
       await worker.setParameters({ preserve_interword_spaces: '1', user_defined_dpi: '180' });
+
       const lines: OcrLine[] = [];
       const pages: OcrCell[][][] = [];
       const headerText: string[] = [];
+
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
         if (version !== parseVersion.current) return;
         setMessage(`Running local OCR on page ${pageNumber} of ${pdf.numPages}…`);
@@ -328,20 +488,27 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
         const scale = Math.min(2.2, 2200 / Math.max(baseViewport.width, baseViewport.height));
         const viewport = page.getViewport({ scale });
         canvas = document.createElement('canvas');
-        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
         const context = canvas.getContext('2d');
-        if (!context) throw new Error('This browser could not prepare a local OCR canvas. Try CSV or Excel export.');
+        if (!context) throw new Error('Could not prepare local OCR canvas. Try CSV or Excel export.');
         await page.render({ canvas, canvasContext: context, viewport }).promise;
+
         const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true });
         const pageRows = new Map<number, Array<{ text: string; left: number; right: number; confidence: number }>>();
-        for (const block of data.blocks || []) for (const paragraph of block.paragraphs) for (const line of paragraph.lines) {
-          for (const word of line.words) {
-            const rowKey = Math.round(((line.bbox.y0 + line.bbox.y1) / 2) / 8) * 8;
-            const words = pageRows.get(rowKey) || [];
-            words.push({ text: word.text, left: word.bbox.x0, right: word.bbox.x1, confidence: word.confidence });
-            pageRows.set(rowKey, words);
+        for (const block of data.blocks || []) {
+          for (const paragraph of block.paragraphs) {
+            for (const line of paragraph.lines) {
+              for (const word of line.words) {
+                const rowKey = Math.round(((line.bbox.y0 + line.bbox.y1) / 2) / 8) * 8;
+                const words = pageRows.get(rowKey) || [];
+                words.push({ text: word.text, left: word.bbox.x0, right: word.bbox.x1, confidence: word.confidence });
+                pageRows.set(rowKey, words);
+              }
+            }
           }
         }
+
         const threshold = viewport.width * 0.025;
         const orderedRows = [...pageRows.entries()].sort((a, b) => b[0] - a[0]).map(([, words]) => {
           const cells: OcrCell[] = [];
@@ -363,6 +530,7 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
         canvas.width = 0; canvas.height = 0; canvas = null;
         page.cleanup();
       }
+
       if (version !== parseVersion.current) return;
       const averageConfidence = lines.length ? lines.reduce((sum, line) => sum + line.confidence, 0) / lines.length : 0;
       let parsed = normalizeStatementTable(alignOcrRows(pages.flat()), `${file.name} ${headerText.slice(0, 20).join(' ')}`);
@@ -370,22 +538,32 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       parsed.rows = parsed.rows.map((row) => {
         const rowIndex = Number(row.key.split('-', 1)[0]);
         const confidence = Math.round(lines[rowIndex]?.confidence ?? averageConfidence);
-        const detail = `Local OCR row confidence ${confidence}%. Verify the date, narration, amount and debit/credit direction.`;
+        const detail = `Local OCR row confidence ${confidence}%. Verify date, narration, amount and debit/credit direction.`;
         return { ...row, ocrConfidence: confidence, confidence: confidence >= 85 ? 'medium' : 'low', warning: detail };
       });
+
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, accountId || null);
-      if (!ledger.complete) parsed.warnings.push('The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.');
+      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      if (!ledger.complete) {
+        parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
+      }
+
       const available = categories.filter((category) => !category.archived_at);
       parsed.rows = parsed.rows.map((row) => {
         const suggested = suggestCategory(row.description, available, row.type);
         const match = suggested?.category;
-        return { ...row, categoryId: match?.id || '', selected: false };
+        return {
+          ...row,
+          categoryId: match?.id || '',
+          selected: false,
+          necessity: row.type === 'expense' ? (row.necessity || 'essential') : null,
+        };
       });
+
       setResult(parsed);
       setMessage(parsed.rows.length
-        ? `${parsed.rows.length} OCR rows extracted locally. All rows require review and remain unselected.`
-        : 'OCR did not produce a recognizable transaction table. Export CSV or Excel, or enter transactions manually.');
+        ? `${parsed.rows.length} OCR rows extracted locally. All rows require manual review and remain unselected by default.`
+        : 'OCR did not produce a recognizable transaction table. Export CSV or Excel, or record transactions manually.');
     } catch (cause) {
       if (version === parseVersion.current) setError(cause instanceof Error ? cause.message : 'Local OCR could not process this PDF. Export CSV or Excel and retry.');
     } finally {
@@ -397,7 +575,7 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
     }
   }
 
-  function submitPassword(event: React.FormEvent) {
+  function submitPassword(event: FormEvent) {
     event.preventDefault();
     if (!password || !passwordCallback.current) return;
     const pwd = password;
@@ -421,79 +599,62 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       pdfTask.current = null;
     }
     setProcessing(false);
-    setError('Statement decryption was cancelled. You can choose another file or retry with the correct password.');
+    setFile(null);
+    setError('Statement decryption was cancelled. You can select another file or retry with the password.');
   }
 
   function updateRow(key: string, patch: Partial<ParsedStatementRow>) {
     setResult((current) => current ? { ...current, rows: current.rows.map((row) => row.key === key ? { ...row, ...patch } : row) } : current);
   }
 
-  async function changeDestinationAccount(nextId: string) {
-    setAccountId(nextId);
-    if (!result) return;
-    const existing = await getExistingTransactions(userId);
-    setResult((current) => {
-      if (!current) return current;
-      const before = new Map(current.rows.map((row) => [row.key, row]));
-      const rows = tagDuplicates(current.rows, existing.rows, nextId || null).map((row) => {
-        const old = before.get(row.key)!;
-        const changedFromDuplicate = old.state === 'possible_duplicate' && row.state !== 'possible_duplicate';
-        const changedToDuplicate = old.state !== 'possible_duplicate' && row.state === 'possible_duplicate';
-        return { ...row, selected: changedFromDuplicate ? true : changedToDuplicate ? false : old.selected };
-      });
-      return { ...current, rows, warnings: existing.complete ? current.warnings.filter((warning) => !warning.startsWith('The full online ledger could not be checked.')) : [...current.warnings.filter((warning) => !warning.startsWith('The full online ledger could not be checked.')), 'The full online ledger could not be checked. Duplicate detection used only transactions cached on this device.'] };
-    });
+  function selectAllRows(selected: boolean) {
+    setResult((current) => current ? {
+      ...current,
+      rows: current.rows.map((row) => ({ ...row, selected })),
+    } : current);
   }
 
-  async function refreshAccounts() {
-    try {
-      const response = await fetch('/api/backend/financial/accounts', { cache: 'no-store' });
-      const data = await response.json() as { accounts?: FinancialAccount[] };
-      if (response.ok && data.accounts) setAccounts(data.accounts);
-    } catch { /* Existing account names and balances remain visible until online refresh succeeds. */ }
-  }
-
-  async function addAccount(event: React.FormEvent) {
-    event.preventDefault(); setError('');
-    if (!newAccountName.trim() || !newAccountInstitution.trim() || (newAccountLast4 && !/^\d{4}$/.test(newAccountLast4))) {
-      setError('Enter an account name, institution, and at most the last four account digits.'); return;
-    }
-    try {
-      const openingBalancePaise = parseNonNegativeINRToPaise(newOpeningBalance);
-      if (openingBalancePaise > 0n && !newOpeningBalanceDate) { setError('Enter the date for a non-zero opening balance.'); return; }
-      const response = await fetch('/api/backend/financial/accounts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ name: newAccountName.trim(), institution: newAccountInstitution.trim(), account_type: newAccountType,
-          account_number_last4: newAccountLast4 || null, opening_balance_paise: openingBalancePaise.toString(),
-          opening_balance_date: newOpeningBalanceDate || null }),
-      });
-      const data = await response.json() as { account?: FinancialAccount; error?: string };
-      if (!response.ok || !data.account) throw new Error(data.error || 'Could not save account.');
-      setAccounts((current) => [data.account!, ...current]); void changeDestinationAccount(data.account.id);
-      setNewAccountName(''); setNewAccountInstitution(''); setNewAccountLast4(''); setNewOpeningBalance('0'); setNewOpeningBalanceDate(''); setAccountFormOpen(false);
-    } catch (cause) { setError(sanitizeUserFacingError(cause, 'Could not save account.')); }
+  function selectNewOnly() {
+    setResult((current) => current ? {
+      ...current,
+      rows: current.rows.map((row) => ({
+        ...row,
+        selected: row.state === 'new' && row.classification !== 'already_recorded' && row.classification !== 'possible_duplicate',
+      })),
+    } : current);
   }
 
   async function persistRemoteBatch(batch: StatementImportBatch, sourceFormat: StoredBatch['source_format'], parserId: string, sourceHash: string | null, importedCount: number) {
     const response = await fetch('/api/backend/financial/import-batches', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        id: batch.id, account_id: batch.account_id || null, source_name: safeSourceName(batch.source),
-        source_format: sourceFormat, parser_id: parserId, parser_version: '1',
-        statement_start: batch.statement_start || null, statement_end: batch.statement_end || null,
-        opening_balance_paise: batch.opening_balance_paise || null, closing_balance_paise: batch.closing_balance_paise || null,
-        source_sha256: sourceHash, status: batch.status, detected_count: batch.detected_count,
-        imported_count: importedCount, skipped_count: Math.max(0, batch.detected_count - importedCount),
+        id: batch.id,
+        account_id: null,
+        source_name: safeSourceName(batch.source),
+        source_format: sourceFormat,
+        parser_id: parserId,
+        parser_version: '1',
+        statement_start: batch.statement_start || null,
+        statement_end: batch.statement_end || null,
+        opening_balance_paise: batch.opening_balance_paise || null,
+        closing_balance_paise: batch.closing_balance_paise || null,
+        source_sha256: sourceHash,
+        status: batch.status,
+        detected_count: batch.detected_count,
+        imported_count: importedCount,
+        skipped_count: Math.max(0, batch.detected_count - importedCount),
         duplicate_count: batch.duplicate_count ?? result?.rows.filter((row) => row.state === 'possible_duplicate').length ?? 0,
         discrepancy_count: batch.discrepancy_count ?? result?.rows.filter((row) => row.state === 'needs_review').length ?? 0,
         skipped_rows: batch.skipped_rows || [],
       }),
     });
-    if (!response.ok) throw new Error('Could not save import history to your account. Retry while online.');
+    if (!response.ok) throw new Error('Could not record import batch on your account. Retrying offline.');
   }
 
   async function retryBatchSync(target: StatementImportBatch) {
-    setRetryingBatchId(target.id); setError('');
+    setRetryingBatchId(target.id);
+    setError('');
     try {
       await syncEngine.processQueue(userId);
       const pending = (await getPendingMutations(userId)).filter((mutation) => target.imported_ids.includes(mutation.entityId));
@@ -501,52 +662,83 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
       await saveStatementImportBatch(updated);
       const syncedCount = Math.max(0, target.imported_ids.length - pending.length);
       if (updated.source_format && updated.parser_id) {
-        await persistRemoteBatch(updated, updated.source_format, updated.parser_id, updated.source_sha256 || null, syncedCount);
+        await persistRemoteBatch(updated, updated.source_format, updated.parser_id, updated.source_sha256 || null, syncedCount).catch(() => {});
       }
       setHistory((current) => current.map((item) => item.id === target.id ? updated : item));
-      setMessage(pending.length ? `${pending.length} transaction${pending.length === 1 ? '' : 's'} still need synchronization. Review the sync status before retrying.` : 'All rows in this batch are synchronized.');
-    } catch (cause) { setError(sanitizeUserFacingError(cause, 'Could not retry statement synchronization.')); }
-    finally { setRetryingBatchId(null); }
+      setMessage(pending.length ? `${pending.length} transaction${pending.length === 1 ? '' : 's'} still pending synchronization.` : 'All rows in this batch are synchronized.');
+    } catch (cause) {
+      setError(sanitizeUserFacingError(cause, 'Could not synchronize statement batch.'));
+    } finally {
+      setRetryingBatchId(null);
+    }
   }
 
   async function importSelected() {
     if (!result || !selectedRows.length) return;
-    if (!accountId || !accounts.some((account) => account.id === accountId)) { setError('Add or select the destination account before importing.'); return; }
     const categoriesById = new Map(categories.map((category) => [category.id, category]));
-    if (selectedRows.some((row) => !categoriesById.has(row.categoryId))) { setError('Choose a valid category for each selected row.'); return; }
-    setImporting(true); setError('');
+    if (selectedRows.some((row) => !categoriesById.has(row.categoryId))) {
+      setError('Choose a valid category for every selected row before importing.');
+      return;
+    }
+
+    setImporting(true);
+    setError('');
     const batchId = uuidv7();
     const importedIds: string[] = [];
     const importedRowKeys = new Set<string>();
     const sourceFormat = (file?.name.toLowerCase().split('.').pop() || 'pdf') as StoredBatch['source_format'];
     const sourceHash = file ? await hashFile(file) : null;
+
     const batchRecord: StatementImportBatch = {
-      id: batchId, user_id: userId, source: file ? safeSourceName(file.name) : 'Statement', created_at: new Date().toISOString(),
-      imported_ids: [], detected_count: result.rows.length, status: 'processing', account_id: accountId,
-      statement_start: result.period?.start || null, statement_end: result.period?.end || null,
-      opening_balance_paise: result.openingBalancePaise || null, closing_balance_paise: result.closingBalancePaise || null,
-      parser_id: result.adapterId, source_format: sourceFormat, source_sha256: sourceHash,
+      id: batchId,
+      user_id: userId,
+      source: file ? safeSourceName(file.name) : 'Statement',
+      created_at: new Date().toISOString(),
+      imported_ids: [],
+      detected_count: result.rows.length,
+      status: 'processing',
+      account_id: null,
+      statement_start: result.period?.start || null,
+      statement_end: result.period?.end || null,
+      opening_balance_paise: result.openingBalancePaise || null,
+      closing_balance_paise: result.closingBalancePaise || null,
+      parser_id: result.adapterId,
+      source_format: sourceFormat,
+      source_sha256: sourceHash,
       duplicate_count: result.rows.filter((row) => row.state === 'possible_duplicate').length,
       discrepancy_count: result.rows.filter((row) => row.state === 'needs_review').length,
       skipped_rows: skippedRowsForImport(result.rows),
     };
+
     try {
       await saveStatementImportBatch(batchRecord);
-      await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, 0);
+      await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, 0).catch(() => {});
+
       for (const row of selectedRows) {
         const category = categoriesById.get(row.categoryId)!;
         const categorySuggestion = suggestCategory(row.description, categories, row.type);
         if (categorySuggestion && categorySuggestion.category.id !== category.id) {
           await recordCategoryCorrection(userId, merchantFingerprint(row.description), category.id);
         }
+
+        const necessity = row.type === 'expense' ? (row.necessity || 'essential') : null;
+
         const response: CreateTransactionResponse = await syncEngine.createTransactionLocalFirst({
-          id: uuidv7(), amount: row.amount, type: row.type, category_id: category.id,
-          transaction_date: row.date, payment_method: row.paymentMethod,
-          necessity: row.type === 'expense' ? 'essential' : null,
+          id: uuidv7(),
+          amount: row.amount,
+          type: row.type,
+          category_id: category.id,
+          transaction_date: row.date,
+          payment_method: row.paymentMethod,
+          necessity,
           description: row.description.slice(0, 500),
-          notes: `Statement import · ${result.bank}${row.reference ? ` · ref ${row.reference}` : ''} · batch ${batchId}`,
-          account_id: accountId, import_batch_id: batchId, statement_reference: row.reference,
-          ingestion_source: 'bank_statement', parser_version: `${result.adapterId}:1`, category_verified: true,
+          notes: `Statement import · ${result.bank}${row.reference ? ` · ref ${row.reference}` : ''} · batch ${batchId.slice(0, 8)}`,
+          account_id: null,
+          import_batch_id: batchId,
+          statement_reference: row.reference,
+          ingestion_source: 'bank_statement',
+          parser_version: `${result.adapterId}:1`,
+          category_verified: true,
           categorization_method: categorySuggestion
             ? categorySuggestion.category.id === category.id ? categorySuggestion.method : 'user_correction'
             : 'manual',
@@ -555,298 +747,863 @@ export function StatementImport({ userId, onImported, onManualEntry }: Props) {
           category_was_corrected: Boolean(categorySuggestion && categorySuggestion.category.id !== category.id),
           categorization_model_version: categorySuggestion?.method === 'weak_supervision' ? 'weak-label-rules-v1' : null,
         }, categories, userId);
+
         importedIds.push(response.transaction.id);
         importedRowKeys.add(row.key);
-        updateRow(row.key, { state: 'imported', selected: false, warning: 'Added to the ledger.' });
+        updateRow(row.key, { state: 'imported', selected: false, warning: 'Added to consolidated ledger.' });
         batchRecord.imported_ids = [...importedIds];
         await saveStatementImportBatch(batchRecord);
       }
+
       await syncEngine.processQueue(userId);
       const pendingForBatch = (await getPendingMutations(userId)).filter((mutation) => importedIds.includes(mutation.entityId));
       const syncedCount = importedIds.length - pendingForBatch.length;
       batchRecord.status = pendingForBatch.length ? 'partial' : 'completed';
       await saveStatementImportBatch(batchRecord);
-      await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, syncedCount);
+      await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, syncedCount).catch(() => {});
+
       setHistory((current) => [batchRecord, ...current.filter((item) => item.id !== batchId)]);
       setMessage(pendingForBatch.length
-        ? `${syncedCount} rows synced; ${pendingForBatch.length} are saved on this device and still need synchronization. Retry sync before importing the statement again.`
-        : `${importedIds.length} rows added to your ledger and synchronized. Batch ${batchId.slice(0, 8)}.`);
-      void refreshAccounts();
+        ? `${syncedCount} rows synced; ${pendingForBatch.length} saved locally and queued for synchronization. Batch ${batchId.slice(0, 8)}.`
+        : `Successfully imported ${importedIds.length} transactions into your consolidated ledger. Batch ${batchId.slice(0, 8)}.`);
       onImported(importedIds.length);
     } catch {
-      setError(`${importedIds.length} of ${selectedRows.length} rows were added before an error. The added rows remain in your ledger; retry only rows still selected after checking the ledger.`);
-      batchRecord.status = 'partial'; batchRecord.imported_ids = [...importedIds];
+      setError(`${importedIds.length} of ${selectedRows.length} transactions were added before an interruption. Successfully added rows remain in your ledger.`);
+      batchRecord.status = 'partial';
+      batchRecord.imported_ids = [...importedIds];
       batchRecord.skipped_rows = skippedRowsForImport(result.rows, importedRowKeys);
       await saveStatementImportBatch(batchRecord);
       await persistRemoteBatch(batchRecord, sourceFormat, result.adapterId, sourceHash, importedIds.length).catch(() => {});
       setHistory((current) => [batchRecord, ...current.filter((item) => item.id !== batchId)]);
-    } finally { setImporting(false); }
+    } finally {
+      setImporting(false);
+    }
   }
 
-  const inputClass = 'w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2 py-1.5 text-xs text-[var(--text-primary)]';
-  const mappingHeaderCells = result?.sourceTable?.[Number(mappingHeaderIndex)] || [];
-  return <section className="space-y-5">
-    <nav aria-label="Transaction capture methods" className="grid gap-2 sm:grid-cols-3">
-      <button type="button" onClick={onManualEntry} className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Manual Entry</strong><span className="text-xs text-[var(--text-muted)]">Record an income or expense</span></button>
-      <a href="#bank-statement-import" className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Bank Statement</strong><span className="text-xs text-[var(--text-muted)]">Upload and review transactions</span></a>
-      <a href="#financial-message-capture" className="min-h-16 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-left"><strong className="block text-sm">Financial Message</strong><span className="text-xs text-[var(--text-muted)]">Paste or share a selected message</span></a>
-    </nav>
-    <div id="financial-message-capture"><FinancialMessageCapture userId={userId} onImported={onImported} onManualEntry={onManualEntry} /></div>
-    <div id="bank-statement-import">
-    <header>
-      <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Documents &amp; Tax</p>
-      <h1 className="mt-1 text-2xl font-semibold">Statement import</h1>
-      <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">Read a statement on this device, review each transaction, then choose what to add to your ledger. Passwords and extracted statement text are not saved or sent to SpendSense.</p>
-    </header>
-
-    <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 space-y-4">
-      <div className="rounded-lg border border-[var(--border-subtle)] p-3 space-y-3">
-        <label className="block text-sm font-medium">Destination account
-          <select className={`${inputClass} mt-1`} value={accountId} onChange={(event) => void changeDestinationAccount(event.target.value)}>
-            <option value="">Choose a bank or card account</option>
-            {accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.institution}{account.account_number_last4 ? ` · ••${account.account_number_last4}` : ''}{account.current_balance_paise !== undefined ? ` · ${account.account_type === 'credit_card' ? 'Card due ' : 'Balance '}${formatPaiseToINR(BigInt(account.current_balance_paise))}` : ''}</option>)}
-          </select>
-        </label>
-        {accounts.length === 0 && <p className="text-xs text-[var(--text-muted)]">Add an account first. SpendSense stores only the last four account digits.</p>}
-        <button type="button" className="rounded-md border px-3 py-2 text-xs" onClick={() => setAccountFormOpen((open) => !open)}>{accountFormOpen ? 'Close account form' : 'Add bank or card account'}</button>
-        {accountFormOpen && <form onSubmit={(event) => void addAccount(event)} className="grid gap-2 sm:grid-cols-2">
-          <label className="text-xs">Account name<input className={inputClass} value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} maxLength={80} required placeholder="Personal savings" /></label>
-          <label className="text-xs">Institution<input className={inputClass} value={newAccountInstitution} onChange={(event) => setNewAccountInstitution(event.target.value)} maxLength={100} required placeholder="Bank name" /></label>
-          <label className="text-xs">Account type<select className={inputClass} value={newAccountType} onChange={(event) => setNewAccountType(event.target.value as 'bank' | 'credit_card')}><option value="bank">Bank account</option><option value="credit_card">Credit card</option></select></label>
-          <label className="text-xs">Last four digits (optional)<input className={inputClass} inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={newAccountLast4} onChange={(event) => setNewAccountLast4(event.target.value)} /></label>
-          <label className="text-xs">Opening balance (₹)<input className={inputClass} inputMode="decimal" value={newOpeningBalance} onChange={(event) => setNewOpeningBalance(event.target.value)} /></label>
-          <label className="text-xs">Opening balance as of<input className={inputClass} type="date" value={newOpeningBalanceDate} onChange={(event) => setNewOpeningBalanceDate(event.target.value)} /></label>
-          <button type="submit" className="w-fit rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-xs font-medium text-[var(--action-primary-fg)]">Save account</button>
-        </form>}
-      </div>
-      <label className="block text-sm font-medium">Choose a statement <input type="file" accept=".pdf,.csv,.xlsx,.xls" className="mt-2 block w-full text-sm" onChange={(event) => { const picked = event.target.files?.[0]; if (picked) void readFile(picked); }} /></label>
-      <p className="text-xs text-[var(--text-muted)]">PDF, CSV, XLSX, or XLS · up to 30 MB. Encrypted PDFs are unlocked locally. Scanned PDFs can use optional English/Hindi OCR in this browser; OCR output always requires review.</p>
-      {processing && <p role="status" className="text-sm">{ocrProgress > 0 ? `Local OCR progress: ${ocrProgress}%` : 'Reading file on this device…'}</p>}
-      {passwordRequired && (
-        <form onSubmit={submitPassword} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Encrypted PDF Statement</h3>
-            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">Password required</span>
-          </div>
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
-            Indian banks password-protect statements (e.g. uppercase PAN or DOB). Decryption is performed entirely within your browser — the password is an ephemeral in-memory credential, never written to disk, cookies, or remote databases.
-          </p>
-          <label className="block text-xs font-medium text-[var(--text-primary)]">
-            Document password
-            <div className="mt-1 flex gap-2">
-              <input
-                className={inputClass}
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="off"
-                placeholder="Enter statement password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="rounded-md border border-[var(--border-subtle)] px-3 text-xs text-[var(--text-secondary)]"
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </label>
-          <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberSessionPassword}
-              onChange={(e) => setRememberSessionPassword(e.target.checked)}
-              className="rounded border-[var(--border-subtle)]"
-            />
-            <span>Remember in volatile browser memory for this session (auto-unlocks same-password statements until tab close)</span>
-          </label>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              className="rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-xs font-medium text-[var(--action-primary-fg)]"
-              type="submit"
-            >
-              Unlock locally
-            </button>
-            <button
-              type="button"
-              onClick={cancelPasswordPrompt}
-              className="rounded-md border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-secondary)]"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-      {error && <p role="alert" className="rounded-md border border-red-300/50 bg-red-50/50 p-3 text-sm text-red-700 dark:text-red-300">{error} {file?.name.toLowerCase().endsWith('.pdf') && 'You can export the statement as CSV or Excel and retry.'}</p>}
-      {message && <p role="status" className="text-sm text-[var(--text-secondary)]">{message}</p>}
-      {result?.ocrRequired && <div className="rounded-lg border border-[var(--border-subtle)] p-4"><p className="text-sm font-medium">Scanned PDF detected</p><p className="mt-1 text-xs text-[var(--text-secondary)]">OCR runs in this browser using bundled English and Hindi language files. The PDF is not uploaded. OCR may misread dates, amounts or debit/credit direction; all extracted rows will require your review.</p><button type="button" disabled={processing} onClick={() => void runLocalOcr()} className="mt-3 rounded-md border px-3 py-2 text-xs disabled:opacity-50">{processing ? 'Processing locally…' : 'Run local OCR'}</button></div>}
-    </div>
-
-    {result && <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-        {[
-          ["Detected", summary?.detectedCount ?? result.rows.length],
-          ["Selected", selectedRows.length],
-          ["New", summary?.newCount ?? 0],
-          ["Already on file", summary?.alreadyRecordedCount ?? 0],
-          ["Duplicates / Review", (summary?.skippedByReason.possible_duplicate ?? totals.duplicates) + (summary?.needsReviewCount ?? totals.review)],
-          ["Parser", `${result.bank} (${result.adapterValidation})`],
-        ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3"><div className="text-[11px] text-[var(--text-muted)]">{label}</div><div className="mt-1 text-sm font-semibold truncate">{value}</div></div>)}
-      </div>
-
-      <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-semibold">Review transactions</h2>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Debits {money(totals.debits)} · Credits {money(totals.credits)} {result.period && `· ${result.period.start} to ${result.period.end}`}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-xs" onClick={() => setResult((current) => current ? { ...current, rows: current.rows.map((row) => ({ ...row, selected: row.state === 'new' })) } : current)}>Select new rows</button>
-            <button type="button" disabled={importing || !selectedRows.length} onClick={() => void importSelected()} className="rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-sm font-medium text-[var(--action-primary-fg)] disabled:opacity-50">{importing ? 'Adding…' : `Add ${selectedRows.length} to ledger`}</button>
-          </div>
-        </div>
-
-        {(result.openingBalancePaise !== null && result.openingBalancePaise !== undefined || result.closingBalancePaise !== null && result.closingBalancePaise !== undefined) && (
-          <div className="mt-3 rounded-md bg-[var(--bg-subtle)] p-3 text-xs text-[var(--text-secondary)] space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium text-[var(--text-primary)]">Statement balance reconciliation</span>
-              {summary?.isReconciled !== null && summary?.isReconciled !== undefined && (
-                <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${summary.isReconciled ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}`}>
-                  {summary.isReconciled ? 'Reconciled · Math matches statement exactly' : `Discrepancy: ${formatPaiseToINR(BigInt(summary.reconciliationDifferencePaise || 0))}`}
-                </span>
-              )}
-            </div>
-            <p>
-              Opening: {result.openingBalancePaise === null || result.openingBalancePaise === undefined ? 'not detected' : money(BigInt(result.openingBalancePaise))} · Closing: {result.closingBalancePaise === null || result.closingBalancePaise === undefined ? 'not detected' : money(BigInt(result.closingBalancePaise))}.
-              Opening balance is inferred from the first dated running-balance row; verify against the printed statement before importing.
-            </p>
-          </div>
-        )}
-
-        {result.warnings.length > 0 && <ul className="mt-3 list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">{result.warnings.slice(0, 8).map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
-        {result.mappingRequired && result.sourceTable && <fieldset className="mt-4 rounded-md border border-[var(--border-subtle)] p-3"><legend className="px-1 text-xs font-medium">Map statement columns in this browser</legend><p className="mb-3 text-[11px] text-[var(--text-secondary)]">Choose the row containing column headings, then map the fields. Unmapped optional columns are ignored. Rows still require review and duplicate checking before import.</p><label className="block max-w-xl text-[10px] text-[var(--text-muted)]">Header row<select className={inputClass} value={mappingHeaderIndex} onChange={(event) => { setMappingHeaderIndex(event.target.value); setMappingColumns({}); }}><option value="">Choose a row</option>{result.sourceTable.slice(0, 30).map((row, index) => <option value={index} key={index}>Row {index + 1}: {row.slice(0, 6).join(' · ').slice(0, 100)}</option>)}</select></label><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{MAPPING_FIELDS.map(([key, label]) => <label key={key} className="text-[10px] text-[var(--text-muted)]">{label}<select className={inputClass} value={mappingColumns[key] || ''} onChange={(event) => setMappingColumns((current) => ({ ...current, [key]: event.target.value }))}><option value="">Not mapped</option>{mappingHeaderCells.map((heading, index) => <option value={index} key={`${index}-${heading}`}>Column {index + 1}: {heading || '(blank)'}</option>)}</select></label>)}</div><button type="button" disabled={processing} onClick={() => void applyManualMapping()} className="mt-3 rounded-md border px-3 py-2 text-xs disabled:opacity-50">{processing ? 'Parsing locally…' : 'Apply mapping and review rows'}</button></fieldset>}
-        <div className="mt-4 space-y-3">
-          {result.rows.map((row) => <article key={row.key} className="rounded-lg border border-[var(--border-hairline)] p-3">
-            <div className="flex items-start gap-3"><input aria-label={`Select ${row.description}`} type="checkbox" checked={row.selected} onChange={(event) => updateRow(row.key, { selected: event.target.checked })} className="mt-2" /><div className="grid flex-1 gap-2 md:grid-cols-[130px_minmax(180px,1fr)_120px_120px_120px_150px]">
-              <label className="text-[10px] text-[var(--text-muted)]">Date<input className={inputClass} type="date" value={row.date} onChange={(event) => updateRow(row.key, { date: event.target.value })} /></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Description<input className={inputClass} value={row.description} onChange={(event) => updateRow(row.key, { description: event.target.value })} /></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Amount (₹)<input className={inputClass} inputMode="decimal" value={row.amount} onChange={(event) => { const value = event.target.value; try { const paise = Number(parseINRToPaise(value)); updateRow(row.key, { amount: value, amountPaise: paise }); } catch { updateRow(row.key, { amount: value }); } }} /></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Type<select className={inputClass} value={row.type} onChange={(event) => updateRow(row.key, { type: event.target.value as 'income' | 'expense', categoryId: categories.find((category) => category.type === event.target.value)?.id || '' })}><option value="expense">Expense</option><option value="income">Income</option></select></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Payment channel<select className={inputClass} value={row.paymentMethod} onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' })}><option value="online">Online</option><option value="cash">Cash</option></select></label>
-              <label className="text-[10px] text-[var(--text-muted)]">Category<select className={inputClass} value={row.categoryId} onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}><option value="">Choose category</option>{categories.filter((category) => category.type === row.type && !category.archived_at).map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select>{(() => { const suggestion = suggestCategory(row.description, categories, row.type); return suggestion ? <span className="mt-1 block text-[10px] text-[var(--text-secondary)]">Suggested: {suggestion.category.name} · {Math.round(suggestion.confidence * 100)}% rule agreement</span> : <span className="mt-1 block text-[10px] text-[var(--text-muted)]">No reliable suggestion · choose a category</span>; })()}</label>
-            </div></div>
-            <div className="ml-7 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
-              {row.classification && (
-                <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                  row.classification === 'new'
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                    : row.classification === 'already_recorded'
-                      ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                      : row.classification === 'internal_transfer' || row.classification === 'credit_card_settlement'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        : row.classification === 'refund' || row.classification === 'reversal'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                }`}>
-                  {row.classification.replace(/_/g, ' ')}
-                </span>
-              )}
-              <span className="capitalize">{row.state.replace('_', ' ')}</span>
-              <span>{row.ocrConfidence === undefined ? `${row.confidence} confidence` : `OCR row confidence ${row.ocrConfidence}%`}</span>
-              {row.valueDate && <span>Value date: {row.valueDate}</span>}
-              {row.reference && <span>Ref: {row.reference}</span>}
-              {row.exclusionReason && <span className="text-amber-700 dark:text-amber-300 font-medium">{row.exclusionReason}</span>}
-              {row.warning && <span className="text-amber-700 dark:text-amber-300">{row.warning}</span>}
-            </div>
-          </article>)}
-        </div>
-      </div>
-    </>}
-    {history.length > 0 && <aside className="rounded-xl border border-[var(--border-hairline)] p-4"><h2 className="font-semibold">Import history</h2><div className="mt-3 space-y-2">{history.map((item) => <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] pt-3"><div className="min-w-[240px] flex-1"><strong className="text-sm">{item.source}</strong><p className="text-xs text-[var(--text-secondary)]">{new Date(item.created_at).toLocaleString('en-IN')} · {item.imported_ids.length}/{item.detected_count} added · {accounts.find((account) => account.id === item.account_id)?.name || 'account unavailable'} · {item.status}</p>{(item.skipped_rows?.length || 0) > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer">{item.skipped_rows!.length} skipped or not imported · view reasons</summary><ul className="mt-2 space-y-1 pl-4">{item.skipped_rows!.map((row, index) => <li key={`${row.transaction_date}-${index}`}>{row.transaction_date} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}</li>)}</ul></details>}{confirmUndoId === item.id && <div className="mt-2 flex items-center gap-2 text-xs"><span>Remove these {item.imported_ids.length} unchanged rows from the active ledger?</span><button onClick={() => void undoBatchFor(item)} className="rounded-md bg-rose-700 px-2 py-1 text-white">Confirm undo</button><button onClick={() => setConfirmUndoId(null)} className="rounded-md border px-2 py-1">Cancel</button></div>}</div><div className="flex gap-2">{(item.status === 'partial' || item.status === 'processing') && <button disabled={retryingBatchId === item.id} onClick={() => void retryBatchSync(item)} className="rounded-md border px-3 py-2 text-xs disabled:opacity-50">{retryingBatchId === item.id ? 'Syncing…' : 'Retry sync'}</button>}{(item.status === 'completed' || item.status === 'partial') && confirmUndoId !== item.id && <button onClick={() => setConfirmUndoId(item.id)} className="rounded-md border border-[var(--border-subtle)] px-3 py-2 text-xs">Undo batch</button>}</div></div>)}</div></aside>}
-    <CrossAccountReconciliation accounts={accounts} onReconciled={() => onImported(0)} />
-    <aside className="rounded-xl border border-[var(--border-hairline)] p-4 text-xs text-[var(--text-secondary)] space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <strong className="text-[var(--text-primary)]">Format &amp; Bank Compatibility</strong>
-          <p className="mt-1">SpendSense uses generic transaction-table matching and identifies common Indian banks from statement text.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowCompatibility((open) => !open)}
-          className="rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--bg-subtle)]"
-        >
-          {showCompatibility ? 'Hide bank compatibility matrix' : 'View bank compatibility matrix'}
-        </button>
-      </div>
-
-      {showCompatibility && (
-        <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[var(--bg-subtle)] text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
-              <tr>
-                <th className="px-3 py-2">Bank / Format</th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Formats</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Known Limitations</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-hairline)]">
-              {getStatementCompatibilityMatrix().map((item) => (
-                <tr key={item.id} className="hover:bg-[var(--bg-surface)]">
-                  <td className="px-3 py-2 font-medium text-[var(--text-primary)]">
-                    {item.label} <span className="text-[10px] text-[var(--text-muted)]">({item.product})</span>
-                  </td>
-                  <td className="px-3 py-2 capitalize">{item.accountType.replace('_', ' ')}</td>
-                  <td className="px-3 py-2 uppercase text-[10px]">{item.supportedFormats.join(', ')}</td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      item.validation === 'fixture_verified'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                    }`}>
-                      {item.validation.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-[11px] text-[var(--text-muted)] max-w-xs">{item.knownLimitations}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </aside>
-    </div>
-  </section>;
-
   async function undoBatchFor(target: StatementImportBatch) {
-    if (!navigator.onLine) { setError('Connect to the internet to safely undo this import batch.'); return; }
+    if (!navigator.onLine) {
+      setError('An active internet connection is required to safely undo a statement batch.');
+      return;
+    }
     setError('');
     try {
       const response = await fetch(`/api/backend/financial/import-batches/${target.id}/undo`, { method: 'POST' });
       const data = await response.json() as { success?: boolean; removed_count?: number; error?: string };
-      if (!response.ok || !data.success) throw new Error(data.error || 'The batch could not be safely undone.');
+      if (!response.ok || !data.success) throw new Error(data.error || 'The statement batch could not be undone.');
       for (const id of target.imported_ids) {
-        try { await syncEngine.deleteTransactionLocalFirst(id, userId); } catch { /* Server batch undo is authoritative; refresh will reconcile local state. */ }
+        try { await syncEngine.deleteTransactionLocalFirst(id, userId); } catch { /* Local deletion fallback */ }
       }
       await syncEngine.processQueue(userId);
       const updated = { ...target, status: 'undone' as const };
       await saveStatementImportBatch(updated);
       setHistory((current) => current.map((item) => item.id === target.id ? updated : item));
       setConfirmUndoId(null);
-      setMessage(`${data.removed_count || 0} rows were safely removed from the active ledger. Batch undo is recorded on your account.`);
-      void refreshAccounts();
-      onImported(data.removed_count || 0);
-    } catch (cause) { setError(sanitizeUserFacingError(cause, 'The batch could not be safely undone.')); }
+      setMessage(`${data.removed_count || target.imported_ids.length} transactions were removed from your ledger.`);
+      onImported(data.removed_count || target.imported_ids.length);
+    } catch (cause) {
+      setError(sanitizeUserFacingError(cause, 'The statement batch could not be undone.'));
+    }
   }
+
+  // Drag and drop handlers
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) void readFile(droppedFile);
+  }
+
+  const inputClass = 'w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-hidden focus:border-[var(--action-primary-bg)] focus:ring-1 focus:ring-[var(--action-primary-bg)]';
+  const mappingHeaderCells = result?.sourceTable?.[Number(mappingHeaderIndex)] || [];
+
+  return (
+    <section className="space-y-5">
+      {/* 1. INITIAL UPLOAD VIEW OR ACTIVE FILE HEADER */}
+      {!result ? (
+        <div className="space-y-4">
+          {/* Upload Area */}
+          <div
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex flex-col items-center justify-center p-8 sm:p-10 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+              isDragging
+                ? 'border-[var(--action-primary-bg)] bg-[var(--action-primary-bg)]/5 ring-4 ring-[var(--action-primary-bg)]/10'
+                : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] hover:border-[var(--border-strong)]'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.csv,.xlsx,.xls"
+              className="hidden"
+              onChange={(event) => {
+                const picked = event.target.files?.[0];
+                if (picked) void readFile(picked);
+              }}
+            />
+            <div className="w-12 h-12 mb-3 rounded-full bg-[var(--bg-canvas)] border border-[var(--border-hairline)] flex items-center justify-center text-xl text-[var(--text-secondary)]">
+              📄
+            </div>
+            <p className="text-sm font-semibold text-[var(--text-primary)] text-center">
+              {file ? file.name : 'Select or drag your bank statement here'}
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)] text-center max-w-sm">
+              Supports PDF, CSV, XLSX, or XLS statements up to 30 MB. All parsing occurs directly on this device.
+            </p>
+
+            {/* Supported Formats Pills */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-mono text-[var(--text-muted)]">
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">PDF</span>
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">CSV</span>
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">XLSX</span>
+              <span className="px-2 py-0.5 rounded bg-[var(--bg-canvas)] border border-[var(--border-hairline)]">XLS</span>
+            </div>
+          </div>
+
+          {/* Privacy & Security Guarantee Banner */}
+          <div className="flex items-start gap-2.5 p-3 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-xs text-[var(--text-secondary)]">
+            <span className="text-sm shrink-0">🔒</span>
+            <div className="space-y-0.5">
+              <p className="font-medium text-[var(--text-primary)]">Strict Local Privacy</p>
+              <p>
+                Statements are parsed in volatile browser memory. Passwords, extracted transactions, and balances are never uploaded or retained by SpendSense.
+              </p>
+            </div>
+          </div>
+
+          {/* Conditional PDF Password Input */}
+          {passwordRequired && (
+            <form onSubmit={submitPassword} className="rounded-xl border border-amber-300/60 bg-amber-500/5 p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🔐</span>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Encrypted PDF Statement</h3>
+                </div>
+                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  Password required
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Indian bank statements are password-protected (e.g. uppercase PAN, Date of Birth). Decryption occurs exclusively on this device.
+              </p>
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-[var(--text-primary)]">
+                  Document Password
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      className={inputClass}
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="off"
+                      placeholder="Enter statement password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="px-3 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberSessionPassword}
+                    onChange={(e) => setRememberSessionPassword(e.target.checked)}
+                    className="rounded border-[var(--border-subtle)]"
+                  />
+                  <span>Remember in browser memory for this session (auto-unlocks same-password statements until tab close)</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="submit"
+                  className="rounded-md bg-[var(--action-primary-bg)] px-4 py-2 text-xs font-medium text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
+                >
+                  Unlock Locally
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelPasswordPrompt}
+                  className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Processing Indicator */}
+          {processing && (
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-sm text-[var(--text-secondary)]">
+              <div className="w-4 h-4 border-2 border-[var(--action-primary-bg)] border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>{ocrProgress > 0 ? `Local OCR in progress: ${ocrProgress}%…` : 'Reading and parsing statement on this device…'}</span>
+            </div>
+          )}
+
+          {/* Error & Message Alerts */}
+          {error && (
+            <div role="alert" className="p-3.5 rounded-lg border border-red-300/50 bg-red-50/50 dark:bg-red-950/20 text-xs text-red-700 dark:text-red-300">
+              {error}
+            </div>
+          )}
+          {message && !error && (
+            <div role="status" className="p-3 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] text-xs text-[var(--text-secondary)]">
+              {message}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* 2. STATEMENT REVIEW WORKFLOW */
+        <div className="space-y-4">
+          {/* Active File Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-lg shrink-0">📄</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate max-w-xs sm:max-w-md">
+                    {file?.name || 'Statement'}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
+                    {result.bank}
+                  </span>
+                </div>
+                {result.period && (
+                  <p className="text-xs text-[var(--text-secondary)] truncate">
+                    Period: {result.period.start} to {result.period.end}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setResult(null);
+                setFile(null);
+                setError('');
+                setMessage('');
+              }}
+              className="px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md transition-colors cursor-pointer"
+            >
+              Choose different file
+            </button>
+          </div>
+
+          {/* Scanned PDF Prompt */}
+          {result.ocrRequired && (
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 space-y-2">
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Scanned PDF Detected</h4>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                This document contains scanned images without a selectable text layer. You can run local on-device OCR using bundled English and Hindi models. Extracted rows will remain unselected for careful review.
+              </p>
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() => void runLocalOcr()}
+                className="mt-2 rounded-md bg-[var(--action-primary-bg)] px-3.5 py-2 text-xs font-medium text-[var(--action-primary-fg)] disabled:opacity-50 cursor-pointer"
+              >
+                {processing ? 'Processing OCR…' : 'Run Local OCR'}
+              </button>
+            </div>
+          )}
+
+          {/* Metric Summary Cards */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">Detected</div>
+              <div className="mt-0.5 text-base font-bold text-[var(--text-primary)]">{result.rows.length}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">Selected to Add</div>
+              <div className="mt-0.5 text-base font-bold text-emerald-600 dark:text-emerald-400">{selectedRows.length}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">New Records</div>
+              <div className="mt-0.5 text-base font-bold text-[var(--text-primary)]">{summary?.newCount ?? 0}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">Already on File</div>
+              <div className="mt-0.5 text-base font-bold text-slate-500">{totals.alreadyRecorded}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">Duplicates / Review</div>
+              <div className="mt-0.5 text-base font-bold text-amber-600 dark:text-amber-400">{totals.duplicates + totals.review}</div>
+            </div>
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
+              <div className="text-[11px] text-[var(--text-muted)]">Total Flow</div>
+              <div className="mt-0.5 text-xs font-semibold text-[var(--text-primary)] truncate">
+                -{formatPaiseToINR(totals.debits)} / +{formatPaiseToINR(totals.credits)}
+              </div>
+            </div>
+          </div>
+
+          {/* Running Balance Reconciliation Card */}
+          {(result.openingBalancePaise !== null && result.openingBalancePaise !== undefined || result.closingBalancePaise !== null && result.closingBalancePaise !== undefined) && (
+            <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] p-3.5 text-xs text-[var(--text-secondary)] space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-[var(--text-primary)]">Statement Balance Math</span>
+                {summary?.isReconciled !== null && summary?.isReconciled !== undefined && (
+                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${
+                    summary.isReconciled
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                  }`}>
+                    {summary.isReconciled ? '✓ Reconciled · Math matches statement exactly' : `Discrepancy: ${formatPaiseToINR(BigInt(summary.reconciliationDifferencePaise || 0))}`}
+                  </span>
+                )}
+              </div>
+              <p>
+                Opening: {result.openingBalancePaise ? formatPaiseToINR(BigInt(result.openingBalancePaise)) : 'Not detected'} · Closing: {result.closingBalancePaise ? formatPaiseToINR(BigInt(result.closingBalancePaise)) : 'Not detected'}.
+              </p>
+            </div>
+          )}
+
+          {/* Warnings List */}
+          {result.warnings.length > 0 && (
+            <ul className="list-disc pl-5 text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+              {result.warnings.slice(0, 5).map((w, idx) => <li key={idx}>{w}</li>)}
+            </ul>
+          )}
+
+          {/* Optional Column Mapping Card */}
+          {result.mappingRequired && result.sourceTable && (
+            <fieldset className="rounded-xl border border-[var(--border-subtle)] p-4 space-y-3">
+              <legend className="px-1 text-xs font-semibold text-[var(--text-primary)]">Map Statement Columns</legend>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Identify the header row and map the respective columns. Transactions will re-extract and deduplicate against your ledger.
+              </p>
+              <label className="block max-w-xl text-xs font-medium text-[var(--text-primary)]">
+                Header row
+                <select className={`${inputClass} mt-1`} value={mappingHeaderIndex} onChange={(event) => { setMappingHeaderIndex(event.target.value); setMappingColumns({}); }}>
+                  <option value="">Select header row</option>
+                  {result.sourceTable.slice(0, 20).map((row, index) => (
+                    <option value={index} key={index}>Row {index + 1}: {row.slice(0, 5).join(' · ').slice(0, 80)}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {MAPPING_FIELDS.map(([key, label]) => (
+                  <label key={key} className="text-[11px] text-[var(--text-muted)]">
+                    {label}
+                    <select className={`${inputClass} mt-0.5`} value={mappingColumns[key] || ''} onChange={(event) => setMappingColumns((current) => ({ ...current, [key]: event.target.value }))}>
+                      <option value="">Not mapped</option>
+                      {mappingHeaderCells.map((heading, index) => (
+                        <option value={index} key={`${index}-${heading}`}>Column {index + 1}: {heading || '(blank)'}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={processing}
+                onClick={() => void applyManualMapping()}
+                className="rounded-md bg-[var(--action-primary-bg)] px-3.5 py-2 text-xs font-medium text-[var(--action-primary-fg)] disabled:opacity-50 cursor-pointer"
+              >
+                {processing ? 'Parsing…' : 'Apply Mapping & Review'}
+              </button>
+            </fieldset>
+          )}
+
+          {/* Review Toolbar & Bulk Controls */}
+          <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Review &amp; Edit Transactions</h3>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  All confirmed transactions will enter your single consolidated personal Ledger.
+                </p>
+              </div>
+
+              {/* Commit Action Button */}
+              <button
+                type="button"
+                disabled={importing || !selectedRows.length}
+                onClick={() => void importSelected()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--action-primary-bg)] px-5 py-2.5 text-xs sm:text-sm font-bold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {importing ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <span>Adding {selectedRows.length} to ledger…</span>
+                  </>
+                ) : (
+                  <span>Add {selectedRows.length} to Ledger ({formatPaiseToINR(selectedTotalPaise)})</span>
+                )}
+              </button>
+            </div>
+
+            {/* Filter Tabs & Search Bar */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-2 border-t border-[var(--border-hairline)]">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('all')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    reviewFilter === 'all'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  All ({result.rows.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('new')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    reviewFilter === 'new'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  New ({summary?.newCount ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('already_recorded')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    reviewFilter === 'already_recorded'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Already on File ({totals.alreadyRecorded})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('possible_duplicate')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    reviewFilter === 'possible_duplicate'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Duplicates ({totals.duplicates})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('needs_review')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    reviewFilter === 'needs_review'
+                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]'
+                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Needs Review ({totals.review})
+                </button>
+              </div>
+
+              {/* Search filter input */}
+              <div className="w-full md:w-64">
+                <input
+                  type="text"
+                  placeholder="Filter by description or amount…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            {/* Selection Shortcut Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-[var(--text-muted)]">
+              <div className="flex items-center gap-2">
+                <span>Select:</span>
+                <button
+                  type="button"
+                  onClick={() => selectAllRows(true)}
+                  className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
+                >
+                  Select all ({result.rows.length})
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={selectNewOnly}
+                  className="text-[var(--action-primary-bg)] hover:underline cursor-pointer font-medium"
+                >
+                  Select new only
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => selectAllRows(false)}
+                  className="text-[var(--text-secondary)] hover:underline cursor-pointer"
+                >
+                  Deselect all
+                </button>
+              </div>
+              <span>Showing {filteredRows.length} of {result.rows.length} rows</span>
+            </div>
+
+            {/* Transaction Review Cards / Rows */}
+            <div className="mt-3 space-y-3">
+              {filteredRows.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                  No transactions match the selected filter.
+                </div>
+              ) : (
+                filteredRows.map((row) => (
+                  <article
+                    key={row.key}
+                    className={`rounded-lg border p-3 transition-colors ${
+                      row.selected
+                        ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]'
+                        : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] opacity-85'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Selection Checkbox */}
+                      <input
+                        aria-label={`Select ${row.description}`}
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={(event) => updateRow(row.key, { selected: event.target.checked })}
+                        className="mt-2.5 h-4 w-4 rounded border-[var(--border-subtle)] text-[var(--action-primary-bg)] focus:ring-[var(--action-primary-bg)] cursor-pointer"
+                      />
+
+                      {/* Editable Row Form Grid */}
+                      <div className="grid flex-1 gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-[130px_minmax(180px,1.5fr)_110px_100px_130px_110px_110px]">
+                        {/* 1. Date */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Date
+                          <input
+                            className={`${inputClass} mt-0.5`}
+                            type="date"
+                            value={row.date}
+                            onChange={(event) => updateRow(row.key, { date: event.target.value })}
+                          />
+                        </label>
+
+                        {/* 2. Description */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Description
+                          <input
+                            className={`${inputClass} mt-0.5`}
+                            value={row.description}
+                            onChange={(event) => updateRow(row.key, { description: event.target.value })}
+                          />
+                        </label>
+
+                        {/* 3. Amount */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Amount (₹)
+                          <input
+                            className={`${inputClass} mt-0.5 font-mono`}
+                            inputMode="decimal"
+                            value={row.amount}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              try {
+                                const paise = Number(parseINRToPaise(value));
+                                updateRow(row.key, { amount: value, amountPaise: paise });
+                              } catch {
+                                updateRow(row.key, { amount: value });
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {/* 4. Direction */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Direction
+                          <select
+                            className={`${inputClass} mt-0.5`}
+                            value={row.type}
+                            onChange={(event) => {
+                              const nextType = event.target.value as 'income' | 'expense';
+                              updateRow(row.key, {
+                                type: nextType,
+                                categoryId: categories.find((c) => c.type === nextType && !c.archived_at)?.id || '',
+                                necessity: nextType === 'expense' ? (row.necessity || 'essential') : null,
+                              });
+                            }}
+                          >
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                          </select>
+                        </label>
+
+                        {/* 5. Category */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Category
+                          <select
+                            className={`${inputClass} mt-0.5`}
+                            value={row.categoryId}
+                            onChange={(event) => updateRow(row.key, { categoryId: event.target.value })}
+                          >
+                            <option value="">Choose category</option>
+                            {categories.filter((c) => c.type === row.type && !c.archived_at).map((c) => (
+                              <option value={c.id} key={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        {/* 6. Necessity (for Expenses) */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Necessity
+                          {row.type === 'expense' ? (
+                            <select
+                              className={`${inputClass} mt-0.5`}
+                              value={row.necessity || 'essential'}
+                              onChange={(event) => updateRow(row.key, { necessity: event.target.value as 'essential' | 'optional' | 'luxury' })}
+                            >
+                              <option value="essential">Essential</option>
+                              <option value="optional">Optional</option>
+                              <option value="luxury">Luxury</option>
+                            </select>
+                          ) : (
+                            <input
+                              className={`${inputClass} mt-0.5 opacity-50 cursor-not-allowed`}
+                              disabled
+                              value="—"
+                            />
+                          )}
+                        </label>
+
+                        {/* 7. Payment Channel */}
+                        <label className="text-[10px] font-medium text-[var(--text-muted)]">
+                          Channel
+                          <select
+                            className={`${inputClass} mt-0.5`}
+                            value={row.paymentMethod}
+                            onChange={(event) => updateRow(row.key, { paymentMethod: event.target.value as 'online' | 'cash' })}
+                          >
+                            <option value="online">Online</option>
+                            <option value="cash">Cash</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Row Metadata & Status Pills */}
+                    <div className="ml-7 mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-[var(--text-muted)]">
+                      {/* Classification Badge */}
+                      {row.classification && (
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                          row.classification === 'new'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : row.classification === 'already_recorded'
+                              ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                              : row.classification === 'internal_transfer' || row.classification === 'credit_card_settlement'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                : row.classification === 'refund' || row.classification === 'reversal'
+                                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          {row.classification.replace(/_/g, ' ')}
+                        </span>
+                      )}
+
+                      {/* State Badge */}
+                      <span className="capitalize">{row.state.replace(/_/g, ' ')}</span>
+
+                      {/* Suggestion Note */}
+                      {(() => {
+                        const suggestion = suggestCategory(row.description, categories, row.type);
+                        if (suggestion) {
+                          return (
+                            <span className="text-[10px] text-[var(--text-secondary)]">
+                              Suggested: <strong className="font-semibold text-[var(--text-primary)]">{suggestion.category.name}</strong> ({Math.round(suggestion.confidence * 100)}% rule confidence)
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {row.reference && <span className="font-mono">Ref: {row.reference}</span>}
+                      {row.valueDate && <span>Value: {row.valueDate}</span>}
+                      {row.exclusionReason && <span className="text-amber-700 dark:text-amber-300 font-medium">⚠️ {row.exclusionReason}</span>}
+                      {row.warning && <span className="text-amber-700 dark:text-amber-300">{row.warning}</span>}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. IMPORT HISTORY SECTION */}
+      {history.length > 0 && (
+        <aside className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Past Statement Batches</h3>
+            <span className="text-xs text-[var(--text-muted)]">{history.length} batch{history.length === 1 ? '' : 'es'}</span>
+          </div>
+
+          <div className="space-y-2">
+            {history.slice(0, 5).map((item) => (
+              <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] pt-3 text-xs">
+                <div className="min-w-[240px] flex-1">
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm font-medium text-[var(--text-primary)]">{item.source}</strong>
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                      item.status === 'completed'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : item.status === 'undone'
+                          ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                    {new Date(item.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} · {item.imported_ids.length} of {item.detected_count} transactions imported · Batch {item.id.slice(0, 8)}
+                  </p>
+
+                  {(item.skipped_rows?.length || 0) > 0 && (
+                    <details className="mt-1.5 text-xs">
+                      <summary className="cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+                        {item.skipped_rows!.length} skipped rows · view reasons
+                      </summary>
+                      <ul className="mt-1.5 space-y-1 pl-4 text-[11px] text-[var(--text-muted)]">
+                        {item.skipped_rows!.map((row, index) => (
+                          <li key={`${row.transaction_date}-${index}`}>
+                            {row.transaction_date} · {formatPaiseToINR(BigInt(row.amount_paise))} · {row.state.replace('_', ' ')} · {skipReasonLabel(row.reason)}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {confirmUndoId === item.id && (
+                    <div className="mt-2.5 flex items-center gap-2 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-xs">
+                      <span className="text-rose-700 dark:text-rose-300">
+                        Remove all {item.imported_ids.length} transactions in this batch from your active ledger?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void undoBatchFor(item)}
+                        className="rounded-md bg-rose-700 hover:bg-rose-800 text-white px-2.5 py-1 font-medium cursor-pointer"
+                      >
+                        Confirm Undo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmUndoId(null)}
+                        className="rounded-md border border-[var(--border-subtle)] px-2 py-1 text-[var(--text-secondary)] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(item.status === 'partial' || item.status === 'processing') && (
+                    <button
+                      type="button"
+                      disabled={retryingBatchId === item.id}
+                      onClick={() => void retryBatchSync(item)}
+                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer disabled:opacity-50"
+                    >
+                      {retryingBatchId === item.id ? 'Syncing…' : 'Retry Sync'}
+                    </button>
+                  )}
+                  {(item.status === 'completed' || item.status === 'partial') && confirmUndoId !== item.id && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmUndoId(item.id)}
+                      className="rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
+                    >
+                      Undo Batch
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+      )}
+
+      {/* 4. BANK & FORMAT COMPATIBILITY MATRIX */}
+      <aside className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 text-xs text-[var(--text-secondary)] space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="font-semibold text-[var(--text-primary)]">Supported Banks &amp; Statement Formats</h4>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+              SpendSense automatically detects statement layouts for major Indian banks and generic financial tables.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCompatibility((open) => !open)}
+            className="rounded-md border border-[var(--border-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+          >
+            {showCompatibility ? 'Hide bank list' : 'View supported banks'}
+          </button>
+        </div>
+
+        {showCompatibility && (
+          <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[var(--bg-surface-subtle)] text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
+                <tr>
+                  <th className="px-3 py-2">Bank / Issuer</th>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Formats</th>
+                  <th className="px-3 py-2">Validation Status</th>
+                  <th className="px-3 py-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-hairline)]">
+                {getStatementCompatibilityMatrix().map((item) => (
+                  <tr key={item.id} className="hover:bg-[var(--bg-surface-subtle)]">
+                    <td className="px-3 py-2 font-medium text-[var(--text-primary)]">
+                      {item.label} <span className="text-[10px] text-[var(--text-muted)]">({item.product})</span>
+                    </td>
+                    <td className="px-3 py-2 capitalize">{item.accountType.replace(/_/g, ' ')}</td>
+                    <td className="px-3 py-2 uppercase text-[10px] font-mono">{item.supportedFormats.join(', ')}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        item.validation === 'fixture_verified'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      }`}>
+                        {item.validation.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-[11px] text-[var(--text-muted)] max-w-xs">{item.knownLimitations}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </aside>
+    </section>
+  );
 }
 
-function money(paise: bigint) { return formatPaiseToINR(paise); }
 function skipReasonLabel(reason: NonNullable<StatementImportBatch['skipped_rows']>[number]['reason']) {
-  return ({ possible_duplicate: 'possible duplicate; review manually', ambiguous: 'classification needs review', balance_mismatch: 'balance or extraction review needed', deselected: 'not selected for import', import_error: 'not added because import was interrupted' } as const)[reason];
+  return ({
+    possible_duplicate: 'possible duplicate; verified manually',
+    ambiguous: 'classification needed user review',
+    balance_mismatch: 'balance or extraction review needed',
+    deselected: 'not selected by user',
+    import_error: 'interrupted during import',
+  } as const)[reason];
 }
 
 async function getExistingTransactions(userId: string): Promise<{ rows: ExistingLedgerRow[]; complete: boolean }> {
@@ -858,7 +1615,9 @@ async function getExistingTransactions(userId: string): Promise<{ rows: Existing
       if (!response.has_more) return { rows, complete: true };
     }
     return { rows, complete: false };
-  } catch { /* Offline operation can still use the device's ledger cache. */ }
+  } catch {
+    /* Offline operation uses device local cache */
+  }
   if (rows.length) return { rows, complete: false };
   return { rows: await getCachedTransactions(userId), complete: false };
 }
@@ -872,5 +1631,7 @@ async function hashFile(file: File): Promise<string | null> {
     if (!globalThis.crypto?.subtle) return null;
     const digest = await globalThis.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }

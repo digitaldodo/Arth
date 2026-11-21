@@ -34,6 +34,7 @@ export interface ParsedStatementRow {
   ocrConfidence?: number;
   selected: boolean;
   categoryId: string;
+  necessity?: 'essential' | 'optional' | 'luxury' | null;
   warning?: string;
   exclusionReason?: string;
 }
@@ -406,6 +407,7 @@ export function normalizeStatementTable(
         confidence: debitCol >= 0 || creditCol >= 0 ? 'high' : 'medium',
         selected: shouldSelect,
         categoryId: '',
+        necessity: signed === 'expense' ? 'essential' : null,
         ...(warning ? { warning } : {}),
         ...(exclusionReason ? { exclusionReason } : {}),
       };

@@ -881,12 +881,12 @@ export function TransactionLedger({
 
             {/* Action Buttons: Statement Import, PDF Export & Record Entry */}
             <div className="flex items-center gap-2">
-              {onNavigateToStatementImport && (
+              {handleOpenImport && (
                 <button
                   type="button"
-                  onClick={onNavigateToStatementImport}
-                  title="Import transactions from bank or credit card statements"
-                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                  onClick={handleOpenImport}
+                  title="Import transactions from bank statement (PDF, CSV, XLSX, XLS)"
+                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
                 >
                   <span className="text-xs" aria-hidden="true">📥</span>
                   <span>Import Bank Statement</span>
@@ -902,18 +902,6 @@ export function TransactionLedger({
                 <span className="text-xs" aria-hidden="true">📄</span>
                 <span>Download PDF</span>
               </button>
-
-              {handleOpenImport && (
-                <button
-                  type="button"
-                  onClick={handleOpenImport}
-                  title="Import transactions from bank statement (PDF, CSV, XLSX, XLS)"
-                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
-                >
-                  <span className="text-xs" aria-hidden="true">📥</span>
-                  <span>Import Bank Statement</span>
-                </button>
-              )}
 
               <button
                 type="button"

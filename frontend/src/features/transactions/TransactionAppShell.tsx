@@ -644,7 +644,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
             {visitedViews.has('documents') && <div className={activeView === 'documents' ? 'view-enter' : 'hidden'}>
               <DocumentsTaxCentre userId={user.id} />
-              <StatementImport userId={user.id} onImported={() => setRefreshTrigger((prev) => prev + 1)} onManualEntry={() => setIsQuickAddOpen(true)} />
             </div>}
 
             {visitedViews.has('data-sync') && <div className={activeView === 'data-sync' ? 'view-enter' : 'hidden'}>

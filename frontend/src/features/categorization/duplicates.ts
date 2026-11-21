@@ -44,7 +44,7 @@ export function assessPossibleDuplicate(
     const sameNarration = Boolean(candidateNarration && candidateNarration === normalizedNarration(item.description));
     const existingReference = item.statement_reference?.trim().toLowerCase();
     const conflictingReferences = Boolean(candidateReference && existingReference && candidateReference !== existingReference);
-    const accountMatches = candidate.accountId ? (!item.account_id || sameAccount) : !item.account_id;
+    const accountMatches = candidate.accountId && item.account_id ? sameAccount : true;
     if (sameReference && sameAmount && sameType && accountMatches) {
       return { possibleDuplicate: true, confidence: 'high', evidence: ['same reference', 'same amount', 'same direction'] };
     }
