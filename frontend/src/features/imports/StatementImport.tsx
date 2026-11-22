@@ -26,7 +26,10 @@ import { merchantFingerprint, recordCategoryCorrection, suggestCategory } from '
 import { Badge } from '@/components/ui/Badge';
 import { categorizeTransactionWithLayers } from '@/features/categorization/layered-categorization';
 import { saveUserMerchantRule } from '@/features/categorization/user-merchant-rules';
-import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
+import { extractCounterpartyAndPaymentMethod, normalizeMerchantKey } from '@/features/categorization/upi-parser';
+import { detectRecurringPatterns, type RecurringPatternResult } from '@/features/categorization/recurring-detector';
+import { classifyNecessity } from '@/features/categorization/necessity-classifier';
+import { computeSourceFingerprint } from './historical-reconciliation';
 
 type Props = {
   userId: string;
@@ -37,13 +40,112 @@ type Props = {
 type PasswordCallback = (password: string) => void;
 
 type ExistingLedgerRow = {
+  id?: string;
   transaction_date: string;
   amount_paise: number;
   type: string;
   description: string | null;
+  cleanMerchant?: string;
   account_id?: string | null;
   statement_reference?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  necessity?: 'essential' | 'optional' | 'luxury' | null;
+  source_fingerprint?: string | null;
 };
+
+function isAttentionRow(r: ParsedStatementRow): boolean {
+  if (r.state === 'imported') return false;
+  if (r.userSkipped || r.state === 'skipped') return true;
+  if (r.state === 'ambiguous') return true;
+  if (r.classification === 'extraction_problem') return true;
+  if (!r.date || isNaN(Date.parse(r.date))) return true;
+  if (!r.amountPaise || r.amountPaise <= 0) return true;
+  return false;
+}
+
+function isAlreadyInLedgerRow(r: ParsedStatementRow): boolean {
+  if (r.state === 'imported') return false;
+  if (r.includedAnyway) return false;
+  if (isAttentionRow(r)) return false;
+  return (
+    r.matchedLedger != null ||
+    r.classification === 'already_recorded' ||
+    r.classification === 'possible_duplicate'
+  );
+}
+
+function enrichStatementRows(
+  rows: ParsedStatementRow[],
+  existingLedger: ExistingLedgerRow[],
+  categories: readonly CategoryDTO[],
+  userId?: string,
+  institution?: string | null
+): ParsedStatementRow[] {
+  // 1. Tag duplicates and match with ledger via 4-tier hierarchy
+  const tagged = tagDuplicates(rows, existingLedger, null, userId);
+
+  // 2. Detect recurring payment patterns across historical ledger + newly extracted rows
+  const recurringPatterns = detectRecurringPatterns([
+    ...existingLedger.map((r) => ({
+      transaction_date: r.transaction_date,
+      amount_paise: r.amount_paise,
+      type: r.type,
+      description: r.description,
+      cleanMerchant: r.cleanMerchant,
+    })),
+    ...tagged.map((r) => ({
+      transaction_date: r.date,
+      amount_paise: r.amountPaise,
+      type: r.type,
+      description: r.description,
+      cleanMerchant: r.cleanMerchant,
+    })),
+  ]);
+
+  // 3. Layered categorization and strict 3-tier necessity classification
+  const available = categories.filter((category) => !category.archived_at);
+
+  return tagged.map((row) => {
+    const merchantKey = normalizeMerchantKey(row.cleanMerchant || row.description || '');
+    const recPattern = recurringPatterns.get(merchantKey) || null;
+
+    const layered = categorizeTransactionWithLayers(
+      row.description,
+      available,
+      row.type,
+      userId,
+      row.cleanMerchant
+    );
+
+    const necResult = classifyNecessity({
+      narration: row.description,
+      cleanMerchant: row.cleanMerchant,
+      categoryName: layered.categoryName,
+      type: row.type,
+      userId,
+      recurringPattern: recPattern,
+      historicalTransactions: existingLedger,
+    });
+
+    const fp = computeSourceFingerprint({
+      userId,
+      transactionDate: row.date,
+      amountPaise: row.amountPaise,
+      type: row.type,
+      normalizedMerchant: merchantKey,
+      institution,
+    });
+
+    return {
+      ...row,
+      categoryId: layered.categoryId || '',
+      necessity: row.type === 'expense' ? (layered.necessity || necResult.necessity || row.necessity || null) : null,
+      recurringPattern: recPattern,
+      sourceFingerprint: fp,
+    };
+  });
+}
 
 type StoredBatch = {
   id: string;
@@ -104,7 +206,10 @@ export function StatementImport({ userId, onImported }: Props) {
   const [reviewFilter, setReviewFilter] = useState<'all' | 'new' | 'already_recorded' | 'possible_duplicate' | 'needs_review'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRowKeys, setExpandedRowKeys] = useState<Set<string>>(new Set());
-  const [activeSection, setActiveSection] = useState<'to_review' | 'imported' | 'attention'>('to_review');
+  const [sectionReviewOpen, setSectionReviewOpen] = useState(true);
+  const [sectionImportedOpen, setSectionImportedOpen] = useState(false);
+  const [sectionAlreadyInLedgerOpen, setSectionAlreadyInLedgerOpen] = useState(true);
+  const [sectionAttentionOpen, setSectionAttentionOpen] = useState(false);
   const [dateCorrectionMap, setDateCorrectionMap] = useState<Record<string, string>>({});
   const [rememberMerchantPrompt, setRememberMerchantPrompt] = useState<{
     rowKey: string;
@@ -213,27 +318,18 @@ export function StatementImport({ userId, onImported }: Props) {
 
   const attentionRows = useMemo(() => {
     if (!result?.rows) return [];
-    return result.rows.filter((r) => {
-      if (r.state === 'imported') return false;
-      return (
-        r.state === 'needs_review' ||
-        r.state === 'possible_duplicate' ||
-        r.classification === 'extraction_problem' ||
-        r.classification === 'possible_duplicate' ||
-        r.classification === 'already_recorded' ||
-        r.classification === 'internal_transfer' ||
-        r.classification === 'credit_card_settlement' ||
-        !r.date ||
-        r.exclusionReason != null
-      );
-    });
+    return result.rows.filter(isAttentionRow);
+  }, [result?.rows]);
+
+  const alreadyInLedgerRows = useMemo(() => {
+    if (!result?.rows) return [];
+    return result.rows.filter(isAlreadyInLedgerRow);
   }, [result?.rows]);
 
   const toReviewRows = useMemo(() => {
     if (!result?.rows) return [];
-    const attentionKeys = new Set(attentionRows.map((r) => r.key));
-    return result.rows.filter((r) => r.state !== 'imported' && !attentionKeys.has(r.key));
-  }, [result?.rows, attentionRows]);
+    return result.rows.filter((r) => r.state !== 'imported' && !isAttentionRow(r) && !isAlreadyInLedgerRow(r));
+  }, [result?.rows]);
 
   const selectedRows = useMemo(() => toReviewRows.filter((row) => row.selected), [toReviewRows]);
 
@@ -259,30 +355,24 @@ export function StatementImport({ userId, onImported }: Props) {
     review: summary ? summary.needsReviewCount : 0,
   }), [summary]);
 
-  const filteredRows = useMemo(() => {
-    if (!result) return [];
-    let list: ParsedStatementRow[] = [];
-    if (activeSection === 'to_review') {
-      list = toReviewRows;
-    } else if (activeSection === 'imported') {
-      list = importedRows;
-    } else {
-      list = attentionRows;
-    }
-
+  const filterList = (list: ParsedStatementRow[]) => {
     const q = typeof searchQuery === 'string' ? searchQuery.toLowerCase().trim() : '';
-    if (q) {
-      list = list.filter((r) =>
-        (r.description || '').toLowerCase().includes(q) ||
-        (r.cleanMerchant || '').toLowerCase().includes(q) ||
-        (r.amount || '').includes(q) ||
-        (r.date || '').includes(q) ||
-        (r.reference && String(r.reference).toLowerCase().includes(q))
-      );
-    }
+    if (!q) return list;
+    return list.filter((r) =>
+      (r.description || '').toLowerCase().includes(q) ||
+      (r.cleanMerchant || '').toLowerCase().includes(q) ||
+      (r.amount || '').includes(q) ||
+      (r.date || '').includes(q) ||
+      (r.reference && String(r.reference).toLowerCase().includes(q))
+    );
+  };
 
-    return list;
-  }, [result, activeSection, toReviewRows, importedRows, attentionRows, searchQuery]);
+  const filteredReviewRows = useMemo(() => filterList(toReviewRows), [toReviewRows, searchQuery]);
+  const filteredImportedRows = useMemo(() => filterList(importedRows), [importedRows, searchQuery]);
+  const filteredAlreadyInLedgerRows = useMemo(() => filterList(alreadyInLedgerRows), [alreadyInLedgerRows, searchQuery]);
+  const filteredAttentionRows = useMemo(() => filterList(attentionRows), [attentionRows, searchQuery]);
+
+  const filteredRows = filteredReviewRows;
 
   async function readFile(selectedFile: File) {
     const version = ++parseVersion.current;
@@ -348,20 +438,10 @@ export function StatementImport({ userId, onImported }: Props) {
       }
 
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      parsed.rows = enrichStatementRows(parsed.rows, ledger.rows, categories, userId, parsed.bank);
       if (!ledger.complete) {
         parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
       }
-
-      const available = categories.filter((category) => !category.archived_at);
-      parsed.rows = parsed.rows.map((row) => {
-        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
-        return {
-          ...row,
-          categoryId: layered.categoryId || '',
-          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
-        };
-      });
 
       if (!parsed.rows.length) {
         setResult(parsed);
@@ -430,19 +510,10 @@ export function StatementImport({ userId, onImported }: Props) {
       }
 
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      parsed.rows = enrichStatementRows(parsed.rows, ledger.rows, categories, userId, parsed.bank);
       if (!ledger.complete) {
         parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
       }
-      const available = categories.filter((category) => !category.archived_at);
-      parsed.rows = parsed.rows.map((row) => {
-        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
-        return {
-          ...row,
-          categoryId: layered.categoryId || '',
-          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
-        };
-      });
       setResult(parsed);
       setMessage(`${parsed.rows.length} transaction${parsed.rows.length === 1 ? '' : 's'} extracted using column mapping. Review rows before importing.`);
     } catch (cause) {
@@ -647,21 +718,11 @@ export function StatementImport({ userId, onImported }: Props) {
       }
 
       const ledger = await getExistingTransactions(userId);
-      parsed.rows = tagDuplicates(parsed.rows, ledger.rows, null);
+      parsed.rows = enrichStatementRows(parsed.rows, ledger.rows, categories, userId, parsed.bank);
       if (!ledger.complete) {
         parsed.warnings.push('The complete server ledger could not be verified offline. Duplicate detection used transactions cached locally on this device.');
       }
-
-      const available = categories.filter((category) => !category.archived_at);
-      parsed.rows = parsed.rows.map((row) => {
-        const layered = categorizeTransactionWithLayers(row.description, available, row.type, userId, row.cleanMerchant);
-        return {
-          ...row,
-          categoryId: layered.categoryId || '',
-          selected: false,
-          necessity: row.type === 'expense' ? (layered.necessity || row.necessity || null) : null,
-        };
-      });
+      parsed.rows = parsed.rows.map((row) => ({ ...row, selected: false }));
 
       setResult(parsed);
       setMessage(parsed.rows.length
@@ -755,6 +816,8 @@ export function StatementImport({ userId, onImported }: Props) {
       state: 'new',
       classification: 'new',
       selected: true,
+      includedAnyway: true,
+      userSkipped: false,
       exclusionReason: undefined,
       warning: undefined,
     });
@@ -763,7 +826,26 @@ export function StatementImport({ userId, onImported }: Props) {
   function permanentlySkipRow(key: string) {
     updateRow(key, {
       selected: false,
+      userSkipped: true,
+      state: 'skipped',
       exclusionReason: 'Permanently skipped by user',
+    });
+  }
+
+  function skipReviewRow(key: string) {
+    permanentlySkipRow(key);
+  }
+
+  function resolveAmbiguousDirection(key: string, nextType: 'income' | 'expense') {
+    updateRow(key, {
+      type: nextType,
+      state: 'new',
+      classification: 'new',
+      selected: true,
+      includedAnyway: true,
+      userSkipped: false,
+      exclusionReason: undefined,
+      warning: undefined,
     });
   }
 
@@ -952,7 +1034,7 @@ export function StatementImport({ userId, onImported }: Props) {
       const updatedHistory = [batchRecord, ...history.filter((item) => item.id !== batchId)];
       setHistory(updatedHistory);
       void refreshPendingCounts(updatedHistory);
-      setActiveSection('imported');
+      setSectionImportedOpen(true);
       setMessage(pendingForBatch.length
         ? `${syncedCount} of ${importedIds.length} transactions synced; ${pendingForBatch.length} saved locally and queued for cloud sync. Batch ${batchId.slice(0, 8)}.`
         : `Successfully imported ${importedIds.length} transactions into your consolidated ledger. Batch ${batchId.slice(0, 8)}.`);
@@ -1357,69 +1439,92 @@ export function StatementImport({ userId, onImported }: Props) {
             </fieldset>
           )}
 
-          {/* Three-Section Review Workflow */}
-          <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 sm:p-5 space-y-4">
-            {/* Section Tabs Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-hairline)] pb-3">
+          {/* Four-Section Unified Review Workflow */}
+          <div className="space-y-4">
+            {/* Remembered Rule Notification Banner */}
+            {rememberedSuccessMsg && (
+              <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
+                <span>✓ {rememberedSuccessMsg}</span>
+                <button type="button" onClick={() => setRememberedSuccessMsg(null)} className="text-xs cursor-pointer font-bold ml-2">✕</button>
+              </div>
+            )}
+
+            {/* Overall Statement Progress & Search Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs">
               <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-[var(--text-primary)]">Statement Sections:</span>
                 <button
                   type="button"
-                  onClick={() => setActiveSection('to_review')}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'to_review'
-                      ? 'bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-xs'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
+                  onClick={() => setSectionReviewOpen(!sectionReviewOpen)}
+                  className="px-2.5 py-1 rounded-md bg-[var(--action-primary-bg)]/10 text-[var(--action-primary-bg)] font-semibold hover:bg-[var(--action-primary-bg)]/20 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <span>Section A — To Review</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    activeSection === 'to_review'
-                      ? 'bg-[var(--action-primary-fg)]/20 text-[var(--action-primary-fg)]'
-                      : 'bg-[var(--bg-canvas)] text-[var(--text-muted)]'
-                  }`}>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)]">
                     {toReviewRows.length}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveSection('imported')}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'imported'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
+                  onClick={() => setSectionImportedOpen(!sectionImportedOpen)}
+                  className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <span>Section B — Imported</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    activeSection === 'imported'
-                      ? 'bg-white/20 text-white'
-                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  }`}>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
                     {importedRows.length}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveSection('attention')}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'attention'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
+                  onClick={() => setSectionAlreadyInLedgerOpen(!sectionAlreadyInLedgerOpen)}
+                  className="px-2.5 py-1 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 font-semibold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  <span>Section C — Skipped / Needs Attention</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    activeSection === 'attention'
-                      ? 'bg-white/20 text-white'
-                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                  }`}>
+                  <span>Section C — Already in Ledger</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-sky-600 text-white">
+                    {alreadyInLedgerRows.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSectionAttentionOpen(!sectionAttentionOpen)}
+                  className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Section D — Skipped &amp; Needs Attention</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-600 text-white">
                     {attentionRows.length}
                   </span>
                 </button>
               </div>
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Filter across all sections…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
 
-              {/* Action button visible when in review tab */}
-              {activeSection === 'to_review' && (
+            {/* SECTION A — TO REVIEW */}
+            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setSectionReviewOpen(!sectionReviewOpen)}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-bold text-sm cursor-pointer"
+                    aria-label={sectionReviewOpen ? 'Collapse Section A' : 'Expand Section A'}
+                  >
+                    {sectionReviewOpen ? '▼' : '▶'}
+                  </button>
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <span>Section A — To Review</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[var(--action-primary-bg)]/15 text-[var(--action-primary-bg)]">
+                      {toReviewRows.length}
+                    </span>
+                  </h3>
+                </div>
+
                 <button
                   type="button"
                   disabled={importing || !selectedRows.length}
@@ -1432,22 +1537,12 @@ export function StatementImport({ userId, onImported }: Props) {
                       <span>Importing {selectedRows.length} transactions…</span>
                     </>
                   ) : (
-                    <span>Import selected transactions ({selectedRows.length}) · {formatPaiseToINR(selectedTotalPaise)}</span>
+                    <span>Import Selected ({selectedRows.length}) Transactions · {formatPaiseToINR(selectedTotalPaise)}</span>
                   )}
                 </button>
-              )}
-            </div>
-
-            {/* Remembered Rule Notification Banner */}
-            {rememberedSuccessMsg && (
-              <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
-                <span>✓ {rememberedSuccessMsg}</span>
-                <button type="button" onClick={() => setRememberedSuccessMsg(null)} className="text-xs cursor-pointer font-bold ml-2">✕</button>
               </div>
-            )}
 
-            {/* SECTION A: TO REVIEW */}
-            {activeSection === 'to_review' && (
+              {sectionReviewOpen && (
               <div className="space-y-3">
                 <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
                   <div className="text-xs text-[var(--text-secondary)]">
@@ -1923,229 +2018,442 @@ export function StatementImport({ userId, onImported }: Props) {
                 )}
               </div>
             )}
+          </div>
 
-            {/* SECTION B: IMPORTED TRANSACTIONS */}
-            {activeSection === 'imported' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
-                      <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-                        {importedRows.length} Transaction{importedRows.length === 1 ? '' : 's'} Committed to Consolidated Ledger
-                      </h4>
-                    </div>
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                      These transactions are permanently persisted on your device and queued for cloud synchronization. They will never appear in Section A (To Review).
-                    </p>
-                  </div>
+            {/* SECTION B — IMPORTED */}
+            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setSectionImportedOpen(!sectionImportedOpen)}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-bold text-sm cursor-pointer"
+                    aria-label={sectionImportedOpen ? 'Collapse Section B' : 'Expand Section B'}
+                  >
+                    {sectionImportedOpen ? '▼' : '▶'}
+                  </button>
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <span>Section B — Imported</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      {importedRows.length}
+                    </span>
+                  </h3>
+                </div>
+
+                {importedRows.length > 0 && (
                   <a
                     href="/dashboard"
-                    className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs shrink-0 cursor-pointer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
                   >
                     View in Transaction Ledger →
                   </a>
-                </div>
-
-                {importedRows.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
-                    No transactions have been committed from this statement session yet. Switch to Section A to select and import records.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
-                        <tr>
-                          <th className="py-2.5 px-3 w-28 font-medium">Date</th>
-                          <th className="py-2.5 px-3 font-medium">Merchant / Counterparty</th>
-                          <th className="py-2.5 px-3 w-24 text-center font-medium">Channel</th>
-                          <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
-                          <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
-                          <th className="py-2.5 px-3 w-36 font-medium">Category</th>
-                          <th className="py-2.5 px-3 w-24 text-center font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-hairline)]">
-                        {importedRows.map((row) => {
-                          const category = categories.find((c) => c.id === row.categoryId);
-                          return (
-                            <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
-                              <td className="py-2 px-3 font-mono text-[var(--text-secondary)] whitespace-nowrap">
-                                {row.date}
-                              </td>
-                              <td className="py-2 px-3 min-w-0 max-w-sm">
-                                <div className="font-medium text-[var(--text-primary)]">
-                                  {row.cleanMerchant || row.description || 'Transaction'}
-                                </div>
-                                {row.reference && (
-                                  <span className="font-mono text-[10px] text-[var(--text-muted)]">Ref: {row.reference}</span>
-                                )}
-                              </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                <Badge variant={row.paymentMethod === 'upi' ? 'upi' : row.paymentMethod === 'online' ? 'online' : 'cash'} size="xs">
-                                  {row.paymentMethod === 'upi' ? 'UPI' : row.paymentMethod === 'online' ? 'Online' : 'Cash'}
-                                </Badge>
-                              </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                  row.type === 'expense'
-                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                }`}>
-                                  {row.type === 'expense' ? 'Expense' : 'Income'}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-right font-mono font-semibold whitespace-nowrap">
-                                <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                                  {row.type === 'expense' ? '-' : '+'}₹{row.amount}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-[var(--text-secondary)]">
-                                {category ? category.name : <span className="text-[var(--text-muted)] italic">Uncategorized</span>}
-                              </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                                  ✓ Imported
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
                 )}
               </div>
-            )}
 
-            {/* SECTION C: SKIPPED / NEEDS ATTENTION */}
-            {activeSection === 'attention' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-1 text-xs">
-                  <h4 className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                    <span>⚠️</span>
-                    <span>Skipped &amp; Attention Rows ({attentionRows.length})</span>
-                  </h4>
-                  <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
-                    Transactions listed below are excluded from automatic ledger import. This includes entries with ambiguous dates, candidate transfers or credit-card bill settlements, duplicates already on file, or user-skipped entries. Every row displays an explicit reason.
-                  </p>
-                </div>
-
-                {attentionRows.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
-                    No transactions skipped or requiring attention in this statement.
+              {sectionImportedOpen && (
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+                        <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                          {importedRows.length} Transaction{importedRows.length === 1 ? '' : 's'} Committed to Consolidated Ledger
+                        </h4>
+                      </div>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                        These transactions are permanently persisted on your device and queued for cloud synchronization. They will never appear in Section A (To Review).
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
-                        <tr>
-                          <th className="py-2.5 px-3 w-36 font-medium">Date / Resolution</th>
-                          <th className="py-2.5 px-3 font-medium">Narration / Counterparty</th>
-                          <th className="py-2.5 px-3 w-28 text-right font-medium">Amount</th>
-                          <th className="py-2.5 px-3 w-44 font-medium">Reason Excluded</th>
-                          <th className="py-2.5 px-3 w-44 text-right font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-hairline)]">
-                        {attentionRows.map((row) => {
-                          const isMissingDate = !row.date || row.classification === 'extraction_problem';
-                          let reasonLabel = 'Review Needed';
-                          let reasonClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
 
-                          if (isMissingDate) {
-                            reasonLabel = 'Ambiguous Date';
-                            reasonClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
-                          } else if (row.classification === 'internal_transfer') {
-                            reasonLabel = 'Candidate Transfer';
-                          } else if (row.classification === 'credit_card_settlement') {
-                            reasonLabel = 'Candidate Card Settlement';
-                          } else if (row.classification === 'possible_duplicate') {
-                            reasonLabel = 'Possible Duplicate';
-                            reasonClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
-                          } else if (row.classification === 'already_recorded') {
-                            reasonLabel = 'Already on File';
-                            reasonClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
-                          } else if (row.exclusionReason) {
-                            reasonLabel = row.exclusionReason;
-                          }
-
-                          return (
-                            <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
-                              <td className="py-2.5 px-3 align-top whitespace-nowrap">
-                                {isMissingDate ? (
-                                  <div className="space-y-1.5">
-                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium block">
-                                      {row.rawDate ? `Raw: "${row.rawDate}"` : 'Date needed'}
-                                    </span>
-                                    <input
-                                      type="date"
-                                      value={dateCorrectionMap[row.key] || ''}
-                                      onChange={(e) => setDateCorrectionMap((prev) => ({ ...prev, [row.key]: e.target.value }))}
-                                      className="w-32 rounded border border-amber-400 bg-[var(--bg-canvas)] px-2 py-1 text-xs font-mono text-[var(--text-primary)]"
-                                    />
+                  {importedRows.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                      No transactions have been committed from this statement session yet. Import records from Section A above.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-28 font-medium">Date</th>
+                            <th className="py-2.5 px-3 font-medium">Merchant / Counterparty</th>
+                            <th className="py-2.5 px-3 w-24 text-center font-medium">Channel</th>
+                            <th className="py-2.5 px-3 w-24 text-center font-medium">Direction</th>
+                            <th className="py-2.5 px-3 w-32 text-right font-medium">Amount</th>
+                            <th className="py-2.5 px-3 w-36 font-medium">Category</th>
+                            <th className="py-2.5 px-3 w-24 text-center font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-hairline)]">
+                          {filteredImportedRows.map((row) => {
+                            const category = categories.find((c) => c.id === row.categoryId);
+                            return (
+                              <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
+                                <td className="py-2 px-3 font-mono text-[var(--text-secondary)] whitespace-nowrap">
+                                  {row.date}
+                                </td>
+                                <td className="py-2 px-3 min-w-0 max-w-sm">
+                                  <div className="font-medium text-[var(--text-primary)]">
+                                    {row.cleanMerchant || row.description || 'Transaction'}
                                   </div>
-                                ) : (
-                                  <span className="font-mono text-[var(--text-secondary)]">{row.date}</span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 align-top min-w-0 max-w-sm">
-                                <div className="font-medium text-[var(--text-primary)] leading-tight">
-                                  {row.cleanMerchant || row.description || 'Unspecified Transaction'}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
-                                  {row.reference && <span className="font-mono">Ref: {row.reference}</span>}
-                                  {row.warning && <span className="text-amber-700 dark:text-amber-300">Note: {row.warning}</span>}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3 align-top text-right font-mono font-semibold whitespace-nowrap">
-                                <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                                  {row.type === 'expense' ? '-' : '+'}₹{row.amount}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 align-top">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${reasonClass}`}>
-                                  {reasonLabel}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 align-top text-right whitespace-nowrap space-x-1.5">
-                                {isMissingDate ? (
-                                  <button
-                                    type="button"
-                                    disabled={!dateCorrectionMap[row.key]}
-                                    onClick={() => confirmRowDate(row.key)}
-                                    className="rounded bg-[var(--action-primary-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors disabled:opacity-40 cursor-pointer"
-                                  >
-                                    Confirm Date &amp; Move to Review
-                                  </button>
-                                ) : (
-                                  <>
+                                  {row.reference && (
+                                    <span className="font-mono text-[10px] text-[var(--text-muted)]">Ref: {row.reference}</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  <Badge variant={row.paymentMethod === 'upi' ? 'upi' : row.paymentMethod === 'online' ? 'online' : 'cash'} size="xs">
+                                    {row.paymentMethod === 'upi' ? 'UPI' : row.paymentMethod === 'online' ? 'Online' : 'Cash'}
+                                  </Badge>
+                                </td>
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                    row.type === 'expense'
+                                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  }`}>
+                                    {row.type === 'expense' ? 'Expense' : 'Income'}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-semibold whitespace-nowrap">
+                                  <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                    {row.type === 'expense' ? '-' : '+'}₹{row.amount}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-[var(--text-secondary)]">
+                                  {category ? category.name : <span className="text-[var(--text-muted)] italic">Uncategorized</span>}
+                                </td>
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                    ✓ Imported
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION C — ALREADY IN LEDGER */}
+            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setSectionAlreadyInLedgerOpen(!sectionAlreadyInLedgerOpen)}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-bold text-sm cursor-pointer"
+                    aria-label={sectionAlreadyInLedgerOpen ? 'Collapse Section C' : 'Expand Section C'}
+                  >
+                    {sectionAlreadyInLedgerOpen ? '▼' : '▶'}
+                  </button>
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <span>Section C — Already in Ledger</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                      {alreadyInLedgerRows.length}
+                    </span>
+                  </h3>
+                </div>
+              </div>
+
+              {sectionAlreadyInLedgerOpen && (
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800/60 space-y-1.5 text-xs">
+                    <h4 className="font-semibold text-sky-900 dark:text-sky-200 flex items-center gap-1.5">
+                      <span>ℹ️</span>
+                      <span>Reconciled Transactions on File ({alreadyInLedgerRows.length})</span>
+                    </h4>
+                    <p className="text-sky-800 dark:text-sky-300 leading-relaxed">
+                      These statement transactions match existing records in your ledger. Custom user edits (custom merchant names, user-assigned categories, custom necessity ratings) are completely preserved and will not be overwritten. If an entry is actually a distinct transaction, click &ldquo;Include Anyway&rdquo; to move it to Section A.
+                    </p>
+                  </div>
+
+                  {alreadyInLedgerRows.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                      No duplicate or previously recorded transactions identified in this statement.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-48 font-medium">Statement Transaction</th>
+                            <th className="py-2.5 px-3 w-48 font-medium">Matched Ledger Record</th>
+                            <th className="py-2.5 px-3 font-medium">Match Method &amp; Confidence</th>
+                            <th className="py-2.5 px-3 w-36 text-right font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-hairline)]">
+                          {filteredAlreadyInLedgerRows.map((row) => {
+                            const match = row.matchedLedger;
+                            const ledgerRec = match?.matchedLedger;
+                            const isConfirmed = match?.matchConfidence === 'confirmed';
+                            const isLikely = match?.matchConfidence === 'likely';
+                            const scorePct = match?.confidenceScore !== undefined ? Math.round(match.confidenceScore) : (isConfirmed ? 100 : 80);
+
+                            return (
+                              <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
+                                <td className="py-3 px-3 align-top">
+                                  <div className="font-medium text-[var(--text-primary)]">
+                                    {row.cleanMerchant || row.description || 'Transaction'}
+                                  </div>
+                                  <div className="font-mono text-[11px] text-[var(--text-secondary)] mt-0.5">
+                                    {row.date} · <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-emerald-600 dark:text-emerald-400 font-semibold'}>{row.type === 'expense' ? '-' : '+'}₹{row.amount}</span>
+                                  </div>
+                                  {row.reference && (
+                                    <div className="font-mono text-[10px] text-[var(--text-muted)] mt-0.5">Ref: {row.reference}</div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 align-top">
+                                  {ledgerRec ? (
+                                    <div>
+                                      <div className="font-medium text-[var(--text-primary)]">
+                                        {ledgerRec.description || 'Ledger Record'}
+                                      </div>
+                                      <div className="font-mono text-[11px] text-[var(--text-secondary)] mt-0.5">
+                                        {ledgerRec.transaction_date} · ₹{(ledgerRec.amount_paise / 100).toFixed(2)}
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px]">
+                                        {ledgerRec.category_name && (
+                                          <span className="px-1.5 py-0.2 rounded bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-secondary)]">
+                                            {ledgerRec.category_name}
+                                          </span>
+                                        )}
+                                        {ledgerRec.necessity && (
+                                          <span className={`px-1.5 py-0.2 rounded font-medium capitalize ${
+                                            ledgerRec.necessity === 'essential'
+                                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                              : ledgerRec.necessity === 'optional'
+                                              ? 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                                              : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                          }`}>
+                                            {ledgerRec.necessity}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[var(--text-muted)] italic text-[11px]">Matching ledger row</div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 align-top">
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                        isConfirmed
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                          : isLikely
+                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                          : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                      }`}>
+                                        {isConfirmed ? '✓ Confirmed Match' : isLikely ? '⚠️ Likely Match' : '⚠️ Possible Duplicate'} ({scorePct}%)
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] text-[var(--text-muted)] leading-tight">
+                                      {match?.matchMethod || row.warning || 'Identified via statement reconciliation'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3 align-top text-right whitespace-nowrap">
+                                  {isConfirmed ? (
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                        On File
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => includeRowInReview(row.key)}
+                                        className="text-[10px] text-[var(--action-primary-bg)] hover:underline cursor-pointer"
+                                        title="Force inclusion into Section A if this is actually a separate transaction"
+                                      >
+                                        Include Anyway
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => includeRowInReview(row.key)}
+                                      className="rounded bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] px-2.5 py-1 text-xs font-semibold text-[var(--action-primary-fg)] transition-colors cursor-pointer shadow-xs"
+                                    >
+                                      Include Anyway
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION D — SKIPPED & NEEDS ATTENTION */}
+            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setSectionAttentionOpen(!sectionAttentionOpen)}
+                    className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-bold text-sm cursor-pointer"
+                    aria-label={sectionAttentionOpen ? 'Collapse Section D' : 'Expand Section D'}
+                  >
+                    {sectionAttentionOpen ? '▼' : '▶'}
+                  </button>
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    <span>Section D — Skipped &amp; Needs Attention</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      {attentionRows.length}
+                    </span>
+                  </h3>
+                </div>
+              </div>
+
+              {sectionAttentionOpen && (
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-1 text-xs">
+                    <h4 className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <span>⚠️</span>
+                      <span>Skipped &amp; Attention Rows ({attentionRows.length})</span>
+                    </h4>
+                    <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                      Transactions listed below are excluded from automatic ledger import because they have ambiguous dates, unresolvable amounts, conflicting debit/credit indicators, or were skipped. Every row shows an explicit reason and recovery actions.
+                    </p>
+                  </div>
+
+                  {attentionRows.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border-hairline)] rounded-lg">
+                      No transactions skipped or requiring attention in this statement.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-[var(--border-hairline)]">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-b border-[var(--border-hairline)]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-44 font-medium">Date / Resolution</th>
+                            <th className="py-2.5 px-3 font-medium">Narration / Counterparty</th>
+                            <th className="py-2.5 px-3 w-36 text-right font-medium">Amount / Direction</th>
+                            <th className="py-2.5 px-3 w-44 font-medium">Reason Excluded</th>
+                            <th className="py-2.5 px-3 w-44 text-right font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border-hairline)]">
+                          {filteredAttentionRows.map((row) => {
+                            const isMissingDate = !row.date || row.classification === 'extraction_problem';
+                            const isDirectionConflict = /conflict|ambiguous direction/i.test(row.warning || '') || /direction/i.test(row.exclusionReason || '');
+                            let reasonLabel = 'Review Needed';
+                            let reasonClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+
+                            if (isMissingDate) {
+                              reasonLabel = 'Ambiguous Date';
+                              reasonClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+                            } else if (isDirectionConflict) {
+                              reasonLabel = 'Ambiguous Direction';
+                              reasonClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+                            } else if (row.userSkipped || row.state === 'skipped') {
+                              reasonLabel = 'User Skipped';
+                              reasonClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
+                            } else if (row.classification === 'internal_transfer') {
+                              reasonLabel = 'Candidate Transfer';
+                            } else if (row.classification === 'credit_card_settlement') {
+                              reasonLabel = 'Candidate Card Settlement';
+                            } else if (row.exclusionReason) {
+                              reasonLabel = row.exclusionReason;
+                            }
+
+                            return (
+                              <tr key={row.key} className="hover:bg-[var(--bg-surface-subtle)]">
+                                <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                                  {isMissingDate ? (
+                                    <div className="space-y-1.5">
+                                      <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium block">
+                                        {row.rawDate ? `Raw: "${row.rawDate}"` : 'Date needed'}
+                                      </span>
+                                      <input
+                                        type="date"
+                                        value={dateCorrectionMap[row.key] || ''}
+                                        onChange={(e) => setDateCorrectionMap((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                                        className="w-32 rounded border border-amber-400 bg-[var(--bg-canvas)] px-2 py-1 text-xs font-mono text-[var(--text-primary)]"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="font-mono text-[var(--text-secondary)]">{row.date}</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 align-top min-w-0 max-w-sm">
+                                  <div className="font-medium text-[var(--text-primary)] leading-tight">
+                                    {row.cleanMerchant || row.description || 'Unspecified Transaction'}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[10px] text-[var(--text-muted)]">
+                                    {row.reference && <span className="font-mono">Ref: {row.reference}</span>}
+                                    {row.warning && <span className="text-amber-700 dark:text-amber-300">Note: {row.warning}</span>}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 align-top text-right whitespace-nowrap">
+                                  <div className="font-mono font-semibold text-xs">
+                                    <span className={row.type === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                                      {row.type === 'expense' ? '-' : '+'}₹{row.amount}
+                                    </span>
+                                  </div>
+                                  {isDirectionConflict && (
+                                    <div className="flex items-center justify-end gap-1 mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => resolveAmbiguousDirection(row.key, 'expense')}
+                                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 hover:bg-rose-200 cursor-pointer"
+                                      >
+                                        Expense
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => resolveAmbiguousDirection(row.key, 'income')}
+                                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-200 cursor-pointer"
+                                      >
+                                        Income
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 align-top">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${reasonClass}`}>
+                                    {reasonLabel}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 align-top text-right whitespace-nowrap space-x-1.5">
+                                  {isMissingDate ? (
+                                    <button
+                                      type="button"
+                                      disabled={!dateCorrectionMap[row.key]}
+                                      onClick={() => confirmRowDate(row.key)}
+                                      className="rounded bg-[var(--action-primary-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] transition-colors disabled:opacity-40 cursor-pointer"
+                                    >
+                                      Confirm Date &amp; Move to Review
+                                    </button>
+                                  ) : (
                                     <button
                                       type="button"
                                       onClick={() => includeRowInReview(row.key)}
                                       className="rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] cursor-pointer"
                                     >
-                                      Include in Review
+                                      {row.userSkipped || row.state === 'skipped' ? 'Restore to Review' : 'Include in Review'}
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => permanentlySkipRow(row.key)}
-                                      className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:text-rose-600 cursor-pointer"
-                                    >
-                                      Skip
-                                    </button>
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

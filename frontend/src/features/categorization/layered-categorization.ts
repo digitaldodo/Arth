@@ -79,9 +79,17 @@ const VERIFIED_MERCHANTS: VerifiedMerchantInfo[] = [
   // Entertainment & Subscriptions
   {
     categoryName: 'Entertainment',
-    defaultNecessity: 'luxury',
+    defaultNecessity: 'optional',
     aliases: [
       /\b(?:netflix|spotify|hotstar|disney|amazon\s*prime|prime\s*video|sony\s*liv|zee5|bookmyshow|pvr|inox|cinema|theatre|gaming|steam|playstation|youtube\s*premium|apple\.com\/bill)\b/i,
+    ],
+  },
+  // Luxury & High-End Indulgence
+  {
+    categoryName: 'Luxury & Indulgence',
+    defaultNecessity: 'luxury',
+    aliases: [
+      /\b(?:tanishq|malabar\s*gold|kalyan\s*jewellers|joyalukkas|gucci|louis\s*vuitton|prada|rolex|taj\s*hotel|oberoi|marriott|leela|fine\s*dining|golf\s*club|concierge)\b/i,
     ],
   },
   // Healthcare & Pharmacy

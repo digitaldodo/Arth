@@ -1,10 +1,17 @@
 import { detectStatementAdapter, findHeaderColumn } from './statement-adapters';
-import { assessPossibleDuplicate } from '@/features/categorization/duplicates';
+import { assessPossibleDuplicate } from '../categorization/duplicates';
 import type { PaymentMethod } from '@arth/contracts';
-import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
+import { extractCounterpartyAndPaymentMethod } from '../categorization/upi-parser';
+
+import {
+  reconcileStatementWithLedger,
+  type StatementReconciliationMatch,
+  type ExistingLedgerTransaction,
+} from './historical-reconciliation';
+import type { RecurringPatternResult } from '../categorization/recurring-detector';
 
 export type StatementKind = 'income' | 'expense';
-export type ImportReviewState = 'new' | 'possible_duplicate' | 'ambiguous' | 'needs_review' | 'imported';
+export type ImportReviewState = 'new' | 'possible_duplicate' | 'ambiguous' | 'needs_review' | 'imported' | 'skipped';
 
 export type RowClassification =
   | 'new'
@@ -43,6 +50,11 @@ export interface ParsedStatementRow {
   necessity?: 'essential' | 'optional' | 'luxury' | null;
   warning?: string;
   exclusionReason?: string;
+  matchedLedger?: StatementReconciliationMatch;
+  sourceFingerprint?: string;
+  includedAnyway?: boolean;
+  userSkipped?: boolean;
+  recurringPattern?: RecurringPatternResult | null;
 }
 
 export interface StatementSummary {
@@ -1026,14 +1038,21 @@ export function normalizeStatementTable(
 export function tagDuplicates(
   rows: ParsedStatementRow[],
   existing: Array<{
+    id?: string;
     transaction_date: string;
     amount_paise: number;
     type: string;
     description: string | null;
+    cleanMerchant?: string;
     account_id?: string | null;
     statement_reference?: string | null;
+    category_id?: string | null;
+    category_name?: string | null;
+    necessity?: string | null;
+    source_fingerprint?: string | null;
   }>,
   accountId: string | null = null,
+  userId?: string,
 ): ParsedStatementRow[] {
   const normalizeDescription = (value: unknown) => keyText(value).replace(/\b(?:upi|neft|imps|rtgs)\b/g, '').trim();
   const duplicateIndexes = new Set<number>();
@@ -1065,49 +1084,63 @@ export function tagDuplicates(
     if (missingReference.length && group.length > 1) group.forEach(({ index }) => duplicateIndexes.add(index));
   }
 
-  const markAlreadyRecorded = (row: ParsedStatementRow, reason: string): ParsedStatementRow => {
-    if (row.state === 'imported') return row;
-    const state = row.state === 'ambiguous' || row.state === 'needs_review' ? row.state : 'possible_duplicate';
-    return {
-      ...row,
-      state,
-      classification: 'already_recorded',
-      selected: false,
-      warning: [row.warning, reason].filter(Boolean).join(' '),
-      exclusionReason: 'Already recorded in active ledger',
-    };
-  };
+  // Run authoritative 4-tier historical reconciliation
+  const candidateRows = rows.map((r) => ({
+    key: r.key,
+    id: undefined,
+    date: r.date,
+    amountPaise: r.amountPaise,
+    type: r.type,
+    description: r.description,
+    cleanMerchant: r.cleanMerchant,
+    reference: r.reference,
+    sourceFingerprint: r.sourceFingerprint,
+  }));
 
-  const markPossibleDuplicate = (row: ParsedStatementRow, reason: string): ParsedStatementRow => {
-    if (row.state === 'imported') return row;
-    const state = row.state === 'ambiguous' || row.state === 'needs_review' ? row.state : 'possible_duplicate';
-    return {
-      ...row,
-      state,
-      classification: 'possible_duplicate',
-      selected: false,
-      warning: [row.warning, reason].filter(Boolean).join(' '),
-      exclusionReason: 'Identical statement transaction exists',
-    };
-  };
+  const reconciliationOutcomes = reconcileStatementWithLedger(candidateRows, existing, { userId });
+  const outcomeByRowKey = new Map(reconciliationOutcomes.map((o) => [o.rowKey, o]));
 
   return rows.map((row, rowIndex) => {
-    const rowReference = typeof row.reference === 'string' ? row.reference.trim().toLowerCase() : '';
-    const ledgerAssessment = assessPossibleDuplicate({
-      date: row.date, amountPaise: row.amountPaise, type: row.type,
-      description: row.description, accountId, reference: rowReference || null,
-    }, existing);
-    const duplicate = ledgerAssessment.possibleDuplicate;
+    if (row.state === 'imported') return row;
 
-    if (duplicate) {
-      return markAlreadyRecorded(row, 'A matching ledger row exists. Confirm this is the same transaction before importing.');
+    const outcome = outcomeByRowKey.get(row.key);
+    if (outcome && outcome.match) {
+      if (outcome.status === 'confirmed_match' || outcome.status === 'likely_match') {
+        return {
+          ...row,
+          state: 'possible_duplicate',
+          classification: 'already_recorded',
+          selected: false,
+          matchedLedger: outcome.match,
+          warning: outcome.match.matchMethod,
+          exclusionReason: 'Already recorded in active ledger',
+        };
+      }
+      if (outcome.status === 'possible_duplicate') {
+        return {
+          ...row,
+          state: 'possible_duplicate',
+          classification: 'possible_duplicate',
+          selected: false,
+          matchedLedger: outcome.match,
+          warning: outcome.match.matchMethod,
+          exclusionReason: 'Possible duplicate — review required',
+        };
+      }
     }
+
+    // Intra-statement duplicate check
     if (duplicateIndexes.has(rowIndex)) {
-      return markPossibleDuplicate(
-        row,
-        'Another row in this statement has the same reference or exact date, amount, direction and narration. They may still be separate events; review and select each one intentionally.',
-      );
+      return {
+        ...row,
+        state: 'possible_duplicate',
+        classification: 'possible_duplicate',
+        selected: false,
+        warning: 'Another row in this statement has the same reference or exact date, amount, direction and narration.',
+        exclusionReason: 'Identical statement transaction exists',
+      };
     }
+
     return row;
   });
 }

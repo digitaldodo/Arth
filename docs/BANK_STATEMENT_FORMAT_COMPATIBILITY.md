@@ -144,5 +144,10 @@ All statement import functionality is verified through automated test suites in 
    - 28 automated tests covering multi-line narration merging, value date preservation, cross-source deduplication (SMS vs manual vs statement), and ephemeral password scrubbing.
 
 5. `tests/date-recovery-statement.test.ts` & `tests/upi-parser.test.ts`:
-   - **Date Extraction Resilience:** Tests ordinal dates (`21st Nov 2026`), embedded date prefixes (`Dt: 21/11/2026`), OCR substitutions (`2l/11/2O26`), and compact formats (`21112026`). Verifies that rows with ambiguous dates are preserved in Section C rather than discarded.
+   - **Date Extraction Resilience:** Tests ordinal dates (`21st Nov 2026`), embedded date prefixes (`Dt: 21/11/2026`), OCR substitutions (`2l/11/2O26`), and compact formats (`21112026`). Verifies that rows with ambiguous dates are preserved in Section D rather than discarded.
    - **UPI Intelligence & Payment Method Disambiguation:** 8 tests validating slash/dash formats (`UPI-FLIPKART`, `UPI/P2M/...`), VPA handle identification, RRN extraction, GST and URL filtering, and acronym-preserving title casing for major Indian banking channels.
+
+6. `tests/historical-statement-reconciliation.test.ts` & `tests/statement-import-redesign.test.ts`:
+   - **4-Tier Identity Hierarchy:** Verifies Priority 1 reference matching, Priority 2 SpendSense ID, Priority 3 deterministic source fingerprint, and Priority 4 fuzzy matching with Indian corporate aliases (Bundl Technologies $\leftrightarrow$ Swiggy).
+   - **Full-Year Scenario:** Validates that when a user already has January in their ledger with manual edits and uploads a full-year statement, January rows match Section C (Already in Ledger) with 100% confidence, existing ledger edits are completely preserved, and February–November rows appear in Section A (To Review).
+   - **4-Section UI Architecture:** Validates row conservation across the four vertical sections (To Review, Imported, Already in Ledger, Skipped & Needs Attention) and state transitions ("Include Anyway", "Skip", "Restore to Review", "Import Selected").
