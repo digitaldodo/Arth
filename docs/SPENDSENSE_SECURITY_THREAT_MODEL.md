@@ -1,4 +1,4 @@
-# Arth document and financial-data threat model
+# SpendSense document and financial-data threat model
 
 ## Scope and security boundaries
 

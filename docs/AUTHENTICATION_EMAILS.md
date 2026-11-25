@@ -1,4 +1,4 @@
-# Arth — Production Authentication Email Guide
+# SpendSense — Production Authentication Email Guide
 
 > **Aesthetic Direction**: Ledger Minimal  
 > **Target Platform**: Supabase Auth + SSR Next.js App Router  
@@ -9,7 +9,7 @@
 
 ## 1. Overview & Visual Standards
 
-Arth uses a disciplined, minimal design aesthetic inspired by Swiss typography and physical accounting ledgers (**Ledger Minimal**). These authentication email templates replace the default Supabase email designs with restrained, production-grade templates tailored for high deliverability, security reassurance, and cross-client compatibility.
+SpendSense uses a disciplined, minimal design aesthetic inspired by Swiss typography and physical accounting ledgers (**Ledger Minimal**). These authentication email templates replace the default Supabase email designs with restrained, production-grade templates tailored for high deliverability, security reassurance, and cross-client compatibility.
 
 ### Key Visual & Technical Principles
 - **Monochrome & Warm Palette**: Soft warm background (`#FBFBF9`), pure white content container (`#FFFFFF`), dark stone text (`#1C1917`), neutral supporting copy (`#57534E`), and subtle hairline borders (`#E7E5E4`).
@@ -24,12 +24,12 @@ Arth uses a disciplined, minimal design aesthetic inspired by Swiss typography a
 
 | # | Flow Name | Template File | Supabase Dashboard Section | Subject Line | Supabase Variables Used |
 |---|---|---|---|---|---|
-| 1 | **Password Reset** | [`supabase/templates/recovery.html`](../supabase/templates/recovery.html) | **Reset Password** | `Reset your Arth password` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
-| 2 | **Signup Confirmation** | [`supabase/templates/confirmation.html`](../supabase/templates/confirmation.html) | **Confirm Signup** | `Confirm your Arth email address` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
-| 3 | **Magic Link** | [`supabase/templates/magic_link.html`](../supabase/templates/magic_link.html) | **Magic Link** | `Your Arth sign-in link` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
-| 4 | **Email Address Change** | [`supabase/templates/email_change.html`](../supabase/templates/email_change.html) | **Change Email Address** | `Confirm your new email address for Arth` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
-| 5 | **User Invitation** | [`supabase/templates/invite.html`](../supabase/templates/invite.html) | **Invite User** | `You have been invited to Arth` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
-| 6 | **Reauthentication (OTP)** | [`supabase/templates/reauthentication.html`](../supabase/templates/reauthentication.html) | **Reauthentication** | `Your Arth verification code` | `{{ .Token }}` |
+| 1 | **Password Reset** | [`supabase/templates/recovery.html`](../supabase/templates/recovery.html) | **Reset Password** | `Reset your SpendSense password` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
+| 2 | **Signup Confirmation** | [`supabase/templates/confirmation.html`](../supabase/templates/confirmation.html) | **Confirm Signup** | `Confirm your SpendSense email address` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
+| 3 | **Magic Link** | [`supabase/templates/magic_link.html`](../supabase/templates/magic_link.html) | **Magic Link** | `Your SpendSense sign-in link` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
+| 4 | **Email Address Change** | [`supabase/templates/email_change.html`](../supabase/templates/email_change.html) | **Change Email Address** | `Confirm your new email address for SpendSense` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
+| 5 | **User Invitation** | [`supabase/templates/invite.html`](../supabase/templates/invite.html) | **Invite User** | `You have been invited to SpendSense` | `{{ .ConfirmationURL }}`, `{{ .Email }}` |
+| 6 | **Reauthentication (OTP)** | [`supabase/templates/reauthentication.html`](../supabase/templates/reauthentication.html) | **Reauthentication** | `Your SpendSense verification code` | `{{ .Token }}` |
 
 ---
 
@@ -48,7 +48,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Reset Password** tab.
 2. In the **Subject** field, enter:
    ```
-   Reset your Arth password
+   Reset your SpendSense password
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/recovery.html`](../supabase/templates/recovery.html).
 4. Click **Save** in the bottom-right corner.
@@ -57,7 +57,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Confirm Signup** tab.
 2. In the **Subject** field, enter:
    ```
-   Confirm your Arth email address
+   Confirm your SpendSense email address
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/confirmation.html`](../supabase/templates/confirmation.html).
 4. Click **Save**.
@@ -68,7 +68,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Magic Link** tab.
 2. In the **Subject** field, enter:
    ```
-   Your Arth sign-in link
+   Your SpendSense sign-in link
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/magic_link.html`](../supabase/templates/magic_link.html).
 4. Click **Save**.
@@ -77,7 +77,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Change Email Address** tab.
 2. In the **Subject** field, enter:
    ```
-   Confirm your new email address for Arth
+   Confirm your new email address for SpendSense
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/email_change.html`](../supabase/templates/email_change.html).
 4. Click **Save**.
@@ -86,7 +86,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Invite User** tab.
 2. In the **Subject** field, enter:
    ```
-   You have been invited to Arth
+   You have been invited to SpendSense
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/invite.html`](../supabase/templates/invite.html).
 4. Click **Save**.
@@ -95,7 +95,7 @@ Follow these steps to apply the upgraded templates in your live hosted Supabase 
 1. Click on the **Reauthentication** tab.
 2. In the **Subject** field, enter:
    ```
-   Your Arth verification code
+   Your SpendSense verification code
    ```
 3. In the **Body (HTML)** editor, clear the default content and paste the entire contents of [`supabase/templates/reauthentication.html`](../supabase/templates/reauthentication.html).
 4. Click **Save**.
@@ -129,8 +129,8 @@ Before sending emails in production, ensure your Supabase project's redirect URL
 2. Click **Forgot password?**.
 3. Enter your test account email address and click **Send Reset Link**.
 4. Check your inbox:
-   - Confirm the subject line reads: `Reset your Arth password`.
-   - Verify that the Arth brand header, title, and email address appear crisp and formatted.
+   - Confirm the subject line reads: `Reset your SpendSense password`.
+   - Verify that the SpendSense brand header, title, and email address appear crisp and formatted.
    - Click the **Reset password** action button.
    - Confirm that your browser navigates to `/auth/callback?next=/auth/update-password` and lands on `/auth/update-password`.
    - Enter a new password, submit, and verify successful password update.
@@ -140,7 +140,7 @@ Before sending emails in production, ensure your Supabase project's redirect URL
 2. Provide a new unique username (e.g. `test_user_01`), a valid inbox email, and a password.
 3. Submit the registration form.
 4. Check the inbox:
-   - Verify the subject line reads: `Confirm your Arth email address`.
+   - Verify the subject line reads: `Confirm your SpendSense email address`.
    - Verify that the card displays the recipient's email address.
    - Click **Confirm email address**.
    - Confirm the route handler at `/auth/confirm` verifies the token and establishes the session, redirecting to the main dashboard `/`.
@@ -159,4 +159,4 @@ Before sending emails in production, ensure your Supabase project's redirect URL
 
 - By default, Supabase provides a built-in email service intended for development with a strict rate limit (typically 3–4 emails per hour).
 - For production reliability, connect a custom SMTP provider (e.g. **Resend**, **SendGrid**, or **Postmark**) under **Authentication → Settings → SMTP Settings** in the Supabase Dashboard.
-- When configuring custom SMTP, set the **Sender Name** to `Arth` and the **Sender Email** to your verified domain (e.g. `auth@yourdomain.com`).
+- When configuring custom SMTP, set the **Sender Name** to `SpendSense` and the **Sender Email** to your verified domain (e.g. `auth@yourdomain.com`).

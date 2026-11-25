@@ -1,4 +1,4 @@
-# Arth — UX Architecture, Information Architecture & User Flows
+# SpendSense — UX Architecture, Information Architecture & User Flows
 
 > **Document Version**: 1.0 — Phase 01A  
 > **Status**: Completed / Ready for Owner Review  
@@ -9,7 +9,7 @@
 
 ## 1. Product UX Principles
 
-Arth is designed around disciplined, deliberate manual finance tracking. Unlike automated aggregation apps that encourage passive detachment, Arth views manual recording as an intentional habit. The user experience must actively support, streamline, and respect this daily habit.
+SpendSense is designed around disciplined, deliberate manual finance tracking. Unlike automated aggregation apps that encourage passive detachment, SpendSense views manual recording as an intentional habit. The user experience must actively support, streamline, and respect this daily habit.
 
 1. **Frictionless Entry Above All Else**  
    Entering a transaction must take under 5 seconds on a mobile device with one hand. Any barrier, superfluous tap, or lagging transition degrades compliance.
@@ -36,7 +36,7 @@ Arth is designed around disciplined, deliberate manual finance tracking. Unlike 
 
 ## 2. Prioritized User Goals (Job Stories)
 
-The following jobs represent the complete operational surface of Arth for the initial releases. They are ranked by **Frequency**, **Importance**, and **Expected Ease of Completion**.
+The following jobs represent the complete operational surface of SpendSense for the initial releases. They are ranked by **Frequency**, **Importance**, and **Expected Ease of Completion**.
 
 | Priority | Job Story | Frequency | Importance | Target Completion Time / Ease |
 |---|---|---|---|---|
@@ -99,7 +99,7 @@ The mobile navigation is organized into **4 primary domain tabs + 1 central Hero
 #### Desktop & Tablet Layout (≥ 768px): Header Tabs + Action Controls
 
 On desktop and tablet screens:
-- **Left Header**: App Logo ("Arth") + Primary Navigation Tabs: **Ledger | People | Categories**.
+- **Left Header**: App Logo ("SpendSense") + Primary Navigation Tabs: **Ledger | People | Categories**.
 - **Right Header**: Direct "+ Add Transaction" button, Theme Toggle, User Profile badge, and Sign Out action.
 
 ### 3.3 Returning from Secondary Tasks Without Context Loss
@@ -152,11 +152,11 @@ flowchart TD
 sequenceDiagram
     autonumber
     actor User
-    participant App as Arth Web / PWA
+    participant App as SpendSense Web / PWA
     participant Auth as Supabase Auth
     participant DB as Supabase PostgreSQL
 
-    User->>App: Opens Arth URL
+    User->>App: Opens SpendSense URL
     App->>Auth: Check session (unauthenticated)
     App->>User: Display clean login screen (Google OAuth / Magic Link)
     User->>Auth: Signs in with Google
@@ -176,7 +176,7 @@ sequenceDiagram
 
 **Step-by-Step Experience**:
 1. **Welcome Screen**: Clean, distraction-free authentication.
-2. **First Dashboard View**: A polite, encouraging banner: *"Welcome to Arth. Your financial slate is clean."* A single high-visibility card: `[ + Record your first transaction ]`. Default categories (Food, Housing, Transport, etc.) are already seeded automatically in the background.
+2. **First Dashboard View**: A polite, encouraging banner: *"Welcome to SpendSense. Your financial slate is clean."* A single high-visibility card: `[ + Record your first transaction ]`. Default categories (Food, Housing, Transport, etc.) are already seeded automatically in the background.
 3. **First Entry**: User enters an amount (e.g. ₹150 for lunch), taps "Food & Dining", taps "Essential", and hits `Save`.
 4. **Immediate Payoff**: The dashboard populates instantly with real numbers. The empty state disappears cleanly.
 
@@ -458,7 +458,7 @@ To maintain extreme clarity, every screen adheres to this strict 3-level disclos
 
 | State | Context | Visual & Interactive Behavior |
 |---|---|---|
-| **First-Time Empty Dashboard** | New user with 0 transactions | Warm, welcoming card: *"Welcome to Arth. Your financial ledger is clean."* Simple 1-sentence tip on manual tracking discipline. Large centered button: `[ + Record Your First Transaction ]`. No empty or broken charts. |
+| **First-Time Empty Dashboard** | New user with 0 transactions | Warm, welcoming card: *"Welcome to SpendSense. Your financial ledger is clean."* Simple 1-sentence tip on manual tracking discipline. Large centered button: `[ + Record Your First Transaction ]`. No empty or broken charts. |
 | **Empty Transaction History** | Filter applied or 0 total transactions | Clean slate illustration/icon. Title: *"No transactions found"*. Subtitle: *"Try clearing your search filters or record a new entry."* Button: `[ Clear Filters ]`. |
 | **Loading State (Initial & Transitions)** | Page fetch / Route change | High-fidelity Skeleton loaders matching exact card and row geometries. No generic spinner blocking the whole page. Pulsing neutral shimmer. |
 | **Invalid Form Fields** | Amount is 0 or Category unselected | Inline contextual message below the specific field in high-contrast alert text. Save button remains disabled. Screen does not shake violently; subtle red outline on field. |
@@ -555,4 +555,4 @@ To maintain strict architectural boundaries, the following concerns are **delibe
 - [ ] PWA manifest configured for standalone mobile installation.
 
 ---
-*End of ARTH_UX_BLUEPRINT.md — Ready for Review.*
+*End of SPENDSENSE_UX_BLUEPRINT.md — Ready for Review.*

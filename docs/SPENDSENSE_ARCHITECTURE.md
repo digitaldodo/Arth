@@ -1,4 +1,4 @@
-# Arth — Architecture Document
+# SpendSense — Architecture Document
 
 > Version 0.1 — Phase 00 Baseline  
 > Last updated: 2026-10-25
@@ -7,7 +7,7 @@
 
 ## 1. System overview
 
-Arth is a single-user personal finance tracking Progressive Web App structured as a modular monorepo (`pnpm-workspace`). The user manually enters income and expense transactions. There is no bank integration, no automatic import, and no multi-tenancy. 
+SpendSense is a single-user personal finance tracking Progressive Web App structured as a modular monorepo (`pnpm-workspace`). The user manually enters income and expense transactions. There is no bank integration, no automatic import, and no multi-tenancy. 
 
 The architecture enforces strict separation between:
 1. **Frontend (`frontend/`)**: Next.js 16 App Router application managing UI, navigation, theme, client-side caching, and API client communication. Pure presentation layer with zero direct database access or service credentials.
@@ -294,7 +294,7 @@ The People tracker provides debt and loan tracking with strict financial invaria
 
 ### 2.5 Real Data Dashboard & Financial Aggregation (Phase 01M)
 
-The Dashboard is the primary Home destination of Arth, answering four core financial questions for any selected period:
+The Dashboard is the primary Home destination of SpendSense, answering four core financial questions for any selected period:
 1. **How much money came in?** Total Income in integer paise (`type = 'income'`).
 2. **How much money went out?** Total Expenses in integer paise (`type = 'expense'`).
 3. **What is my net cash flow?** Income minus expenses for the period (can be positive, negative, or zero). Explicitly labeled as "Net Cash Flow", never "Account Balance".
@@ -320,7 +320,7 @@ Key architectural invariants:
 - **Username & Display Name**:
   - During registration, username is captured, validated (3-30 chars, alphanumeric, hyphens, underscores), and passed via Supabase user metadata.
   - PostgreSQL trigger `fn_handle_new_user()` (Migration 0013) extracts and prioritizes `raw_user_meta_data->>'username'` as `display_name` in `public.profiles`.
-- **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`. Passwords are never stored in Arth application tables.
+- **Session Management**: HTTP-only, secure, `SameSite=Lax` cookies managed server-side via `@supabase/ssr`. Passwords are never stored in SpendSense application tables.
 - **OAuth Callback & Origin Resolution**:
   - Centralized in `frontend/src/lib/auth-config.ts` (`getAppOrigin`, `getAuthCallbackUrl`, `sanitizeRedirectPath`).
   - Production origin strictly resolves from `NEXT_PUBLIC_APP_URL` or proxy headers; never falls back to `localhost` in production.
@@ -482,7 +482,7 @@ Transaction write (client)
 
 ### 6.0 Baseline Installability (Phase 01N — Implemented)
 
-Arth provides baseline Progressive Web App installability via the Next.js App Router:
+SpendSense provides baseline Progressive Web App installability via the Next.js App Router:
 - **Web App Manifest**: Exported via `frontend/src/app/manifest.ts` using `MetadataRoute.Manifest` with `id: '/'`, `scope: '/'`, `start_url: '/'`, `display: 'standalone'`, and Ledger Minimal branding (`#FBFBF9` background, `#1C1917` theme color, `lang: 'en-IN'`). Served at `/manifest.webmanifest`.
 - **Application Icons**: Crisp PNG icons in `frontend/public/icons/`:
   - `icon-192x192.png` (192×192 standard launcher)
@@ -490,13 +490,13 @@ Arth provides baseline Progressive Web App installability via the Next.js App Ro
   - `icon-512x512-maskable.png` (512×512 maskable, with all critical geometry strictly enclosed inside the center 80% safe zone circle)
   - `apple-touch-icon.png` (180×180 iOS home screen)
   - `favicon.ico` (browser tab icon)
-- **Viewport & Apple Meta**: Configured in `frontend/src/app/layout.tsx` with light/dark `themeColor` media queries, `viewportFit: 'cover'`, and `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Arth' }`.
-- **Subtle Install Experience**: Managed via `usePwaInstall` hook and `InstallPromptCard` rendered in Settings/More (`activeView === 'more'`). Captures `beforeinstallprompt`, provides clean "Install Arth" action, detects standalone mode via `matchMedia('(display-mode: standalone)')`, and provides manual installation steps for iOS/iPadOS Safari without intrusive unsolicited modals.
+- **Viewport & Apple Meta**: Configured in `frontend/src/app/layout.tsx` with light/dark `themeColor` media queries, `viewportFit: 'cover'`, and `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'SpendSense' }`.
+- **Subtle Install Experience**: Managed via `usePwaInstall` hook and `InstallPromptCard` rendered in Settings/More (`activeView === 'more'`). Captures `beforeinstallprompt`, provides clean "Install SpendSense" action, detects standalone mode via `matchMedia('(display-mode: standalone)')`, and provides manual installation steps for iOS/iPadOS Safari without intrusive unsolicited modals.
 - **Strict Scope Boundaries**: Phase 01N implements **zero** service workers, zero offline caching, and zero IndexedDB/Dexie usage.
 
 ### 6.1 Service Worker & Offline-First Architecture
 
-Arth implements a complete local-first storage and synchronization architecture:
+SpendSense implements a complete local-first storage and synchronization architecture:
 
 #### 6.1.1 Service Worker & Caching
 - **Service Worker (`public/sw.js`)**: Generated at build time with stable cache keys and cache cleanup routines.
@@ -751,4 +751,4 @@ No database migration or new environment variable is required. Assumptions are s
 
 ---
 
-*End of ARTH_ARCHITECTURE.md*
+*End of SPENDSENSE_ARCHITECTURE.md*

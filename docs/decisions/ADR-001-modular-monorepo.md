@@ -2,14 +2,14 @@
 
 - **Status**: Accepted
 - **Date**: 2026-10-25
-- **Deciders**: Arth System Architects & Engineering Pair
-- **Consulted**: `ANTIGRAVITY.md`, `docs/ARTH_ARCHITECTURE.md`, `docs/ARTH_BUILD_PLAN.md`
+- **Deciders**: SpendSense System Architects & Engineering Pair
+- **Consulted**: `ANTIGRAVITY.md`, `docs/SPENDSENSE_ARCHITECTURE.md`, `docs/SPENDSENSE_BUILD_PLAN.md`
 
 ---
 
 ## 1. Context and Problem Statement
 
-In the initial Phase 00 audit, Arth was conceived as a unified Next.js application where Route Handlers and Server Actions co-existed with React components. However, personal finance applications demand rigorous boundaries around:
+In the initial Phase 00 audit, SpendSense was conceived as a unified Next.js application where Route Handlers and Server Actions co-existed with React components. However, personal finance applications demand rigorous boundaries around:
 
 1. **Security Isolation**: High-privilege credentials (`SUPABASE_SERVICE_ROLE_KEY` and Google Service Account private keys) must never risk client-side leaking or accidental bundling into client bundles.
 2. **Authoritative Financial Logic**: Transaction validation, outbox event generation, and paise conversions must be authoritatively owned by a dedicated service rather than scattered across frontend components or Next.js server actions.
@@ -105,4 +105,4 @@ arth/
 2. **Outbox Worker Process**: Running the Phase 02 Google Sheets outbox sync worker as an in-process Fastify background job versus a standalone Node process in `backend/`.
 
 ---
-*Documented in accordance with Arth Architecture Protocol.*
+*Documented in accordance with SpendSense Architecture Protocol.*

@@ -1,15 +1,15 @@
-# Arth — Database Operations, Reliability & ACID Architecture
+# SpendSense — Database Operations, Reliability & ACID Architecture
 
 > Version 1.0 — Phase 01L Hardening  
 > Last updated: 2026-10-25
 
-This document establishes operational procedures, disaster recovery protocols, performance benchmarks, and architectural proofs for Arth's PostgreSQL database.
+This document establishes operational procedures, disaster recovery protocols, performance benchmarks, and architectural proofs for SpendSense's PostgreSQL database.
 
 ---
 
 ## 1. ACID Guarantees & Implementation Architecture
 
-Arth handles personal financial data. Correctness, financial consistency, and tenant isolation take precedence over speculative optimizations.
+SpendSense handles personal financial data. Correctness, financial consistency, and tenant isolation take precedence over speculative optimizations.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -139,7 +139,7 @@ Indexes are added deliberately based on proven query patterns. Every index has a
 | **Daily Physical Backups** | Supabase Managed | Supabase Platform | Free / Pro | Free: 7 days; Pro: 30 days | Operational (Default Supabase managed) |
 | **Point-in-Time Recovery (PITR)** | Supabase Managed | **Must be enabled by Owner** | **Supabase Pro ($25/mo)** | Configurable (7 to 28 days) | **Not Active on Free Tier** (requires manual Pro activation) |
 | **Logical Backup (`pg_dump`)** | Application / Admin | Owner (or automated script) | Any plan | Owner controlled | Documented procedure |
-| **External Ledger (Sheets)** | Application Outbox | Arth Outbox Worker (Phase 02) | Free / Any | Permanent | **Planned (Phase 02)** (not operational today) |
+| **External Ledger (Sheets)** | Application Outbox | SpendSense Outbox Worker (Phase 02) | Free / Any | Permanent | **Planned (Phase 02)** (not operational today) |
 
 > [!IMPORTANT]
 > **Operational Readiness & Drill Status**:

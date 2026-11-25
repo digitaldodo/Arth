@@ -1,13 +1,13 @@
 # Supabase Cron Migration & Setup Guide
 
-This document describes the architectural migration of Arth's scheduled background jobs from Vercel Cron to Supabase PostgreSQL Cron (`pg_cron`), why Vercel Hobby deployments failed with the original configuration, and the one-time setup required in Supabase.
+This document describes the architectural migration of SpendSense's scheduled background jobs from Vercel Cron to Supabase PostgreSQL Cron (`pg_cron`), why Vercel Hobby deployments failed with the original configuration, and the one-time setup required in Supabase.
 
 ---
 
 ## 1. Root Cause of Previous Vercel Hobby Deployment Failures
 
 ### The Hobby Tier Limitation
-In `vercel.json`, Arth previously defined:
+In `vercel.json`, SpendSense previously defined:
 ```json
 "crons": [
   {
@@ -149,7 +149,7 @@ In your Vercel Project Settings at [https://vercel.com/anshkmrn-8908s-projects/a
 > **Database Pausing on the Free Plan**:
 > - Supabase free projects **automatically pause after 7 days of inactivity** (no database connections or web traffic).
 > - **`pg_cron` will NOT execute while the project database is paused.**
-> - **Recovery Behavior**: The moment you visit the Arth app or make a transaction, Supabase automatically unpauses the database. The database trigger immediately records your transaction to the durable outbox, the event-driven worker synchronizes it to Google Sheets, and `pg_cron` resumes its 5-minute background recovery schedule.
+> - **Recovery Behavior**: The moment you visit the SpendSense app or make a transaction, Supabase automatically unpauses the database. The database trigger immediately records your transaction to the durable outbox, the event-driven worker synchronizes it to Google Sheets, and `pg_cron` resumes its 5-minute background recovery schedule.
 > - PostgreSQL is always authoritative: transactions are never lost or invalidated while the project is sleeping.
 
 ---

@@ -20,9 +20,9 @@ d:\Forge\Per\          ← workspace root
 ├── ANTIGRAVITY.md     ← this file (agent instructions)
 ├── AGENTS.md          ← alias / symlink to this file
 ├── docs/
-│   ├── ARTH_ARCHITECTURE.md
-│   ├── ARTH_BUILD_PLAN.md
-│   └── ARTH_ROADMAP.md
+│   ├── SPENDSENSE_ARCHITECTURE.md
+│   ├── SPENDSENSE_BUILD_PLAN.md
+│   └── SPENDSENSE_ROADMAP.md
 ├── src/
 │   ├── app/           ← Next.js App Router pages & layouts
 │   ├── components/    ← shared React components

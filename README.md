@@ -1,271 +1,227 @@
-# Arth (अर्थ) — Modular Monorepo Architecture
+# SpendSense — Personal Finance Intelligence Platform
 
-Arth is a fast, online personal finance tracker engineered for manual transaction capture, authoritative PostgreSQL persistence with exact integer-paise calculations, baseline PWA installability, Google Sheets asynchronous dual-write synchronization, CSV/JSON/PDF exports, and financial clarity inspired by Swiss editorial ledger design (**Concept 1: Ledger Minimal**).
+**SpendSense** is an Indian personal finance tracking, structured statement import, tax planning, and financial decision-support platform designed around exact integer-paise (`BIGINT`) accounting, `Asia/Kolkata` (`IST`) calendar semantics, and Row-Level Security (`RLS`) isolation.
 
-The repository is structured as a **modular monorepo** with strict physical boundaries between frontend presentation, backend business logic, shared contracts, and database migrations.
+> **Compatibility note:** The platform originated internally as *Arth*. To keep existing deployments, client offline stores, Android upgrades, and workspaces intact, internal technical identifiers—including the repository name (`digitaldodo/Arth`), npm workspace scopes (`@arth/*`), IndexedDB store (`arth_offline_db`), Android package ID (`com.digitaldodo.arth`), custom URI scheme (`arth://auth/callback`), and private storage bucket (`arth-private-documents`)—are preserved unchanged.
 
 ---
 
-## Architectural Principles
+## What SpendSense Does & Problem It Solves
 
-- **Separation of Concerns**: Pure Next.js frontend with zero direct database connections; Fastify backend service authoritatively enforces validation and business logic.
-- **Shared API Contracts**: Type-safe request/response DTOs defined in `@arth/contracts` consumed by both applications.
-- **Authoritative Database**: PostgreSQL (via Supabase) is the single authoritative source of truth for financial storage.
-- **Amounts in Integer Paise**: Financial values are stored as integers representing paise (1 INR = 100 paise) as `BIGINT` in PostgreSQL to prevent floating-point rounding errors.
-- **Deterministic Timezones**: Stored as UTC `TIMESTAMPTZ` in Supabase; formatted in `Asia/Kolkata` (IST) for user interfaces.
-- **Ledger Minimal Design System**: High-contrast, typography-driven financial clarity featuring warm archival paper in light mode (`#FBFBF9`) and restrained obsidian in dark mode (`#0C0A09`).
-- **Outbox Pattern & Google Sheets Sync**: Transaction mutations write to an authoritative PostgreSQL `outbox_events` table, drained asynchronously by a background worker daemon into personal user Google Sheets with `FOR UPDATE SKIP LOCKED` lease-locking and weekly reconciliation.
-- **Lossless Data Export**: Complete transaction and taxonomy backups in CSV (RFC-4180 with formula-injection protection) and JSON (`version: 1`), plus branded A4 PDF ledger statements.
-- **Two-Layer Security**: Backend API authentication/authorization + PostgreSQL Row Level Security (RLS) enforcement.
+Managing personal finances in India often requires stitching together disconnected bank exports, spreadsheets, UPI SMS alerts, loan EMI estimators, and annual tax spreadsheets. Mistakes in floating-point rounding, inconsistent statement formats, or double-counted commitments easily distort day-to-day spending capacity.
+
+SpendSense consolidates financial tracking and decision support into a single auditable ledger built with:
+
+- **Exact integer-paise (`BIGINT`) arithmetic** across PostgreSQL, Fastify, and TypeScript (`1 INR = 100 paise`).
+- **Time-ordered UUID v7 idempotency** for reliable retries and offline sync.
+- **Strict user isolation** via Supabase Auth JWT verification and PostgreSQL Row-Level Security (`auth.uid() = user_id`).
+- **Structured document workflows** rather than brittle screen scraping or live bank credential sharing.
+
+---
+
+## Features & Implementation Status
+
+SpendSense combines a production ledger core with modular financial decision-support engines that are actively being integrated.
+
+### Implemented Core Features
+
+- **Transaction Ledger & Necessity Classification**: Income and expense tracking with custom categories, drag-and-drop category reordering, reversible soft deletes (`deleted_at`), idempotent mutations, and three-tier necessity tagging (`essential`, `optional`, `luxury`).
+- **Dashboard & Balance Snapshots**: Period-filtered and lifetime cash-flow summaries across online and cash accounts, anchored to configurable starting-balance snapshots (`balances_configured_at`).
+- **People & Money Tracker**: Counterparty obligation ledger and atomic settlement tracking backed by PostgreSQL row locks (`fn_record_person_settlement`).
+- **Structured Statement Import & Reconciliation**: Client-side parsing for Indian bank and UPI statements across PDF (`pdfjs-dist`), Excel/CSV (`xlsx`), and OCR fallback (`tesseract.js`), with password-protected PDF support, duplicate checks, and deterministic rule/merchant categorization (`personalized-categories`, migration `0028`).
+- **Offline-First PWA & App Lock**: Local IndexedDB (`arth_offline_db`) storage with outbox synchronization, service-worker static shell caching, and optional device biometric lock (WebAuthn on installed mobile PWAs; `BiometricGateActivity` on Android).
+- **Native Android Companion**: Kotlin + Jetpack Compose + Room application (`android/`) plus signed direct-download release packaging (`SpendSense Installer` helper in `android/installer/`).
+
+### Scaffolded & In-Progress Decision-Support Modules
+
+- **Safe-to-Spend & Spending Forecast** ([`packages/financial-modules/src/modules/safe-to-spend/`](./packages/financial-modules/src/modules/safe-to-spend/), [`spending-forecast/`](./packages/financial-modules/src/modules/spending-forecast/)): Domain calculations exist; the interactive shell view (`safe-to-spend`) currently shows a coming-soon placeholder pending end-to-end integration.
+- **EMI Affordability & Stress Testing** ([`packages/financial-modules/src/modules/emi-affordability/`](./packages/financial-modules/src/modules/emi-affordability/)): Fixed-point amortization and stress scenarios exist as pure modules; the `emi-planner` shell view currently renders a placeholder.
+- **Goal Planning & Purchase Simulation** ([`packages/financial-modules/src/modules/goal-planner/`](./packages/financial-modules/src/modules/goal-planner/), [`purchase-simulator/`](./packages/financial-modules/src/modules/purchase-simulator/)): Domain module scaffolds exist; `goal-planner` view renders a placeholder pending persistence and API wiring.
+- **Tax Planning & Document Verification** ([`backend/src/modules/tax/`](./backend/src/modules/tax/)): Ruleset-versioned deterministic Old vs. New Regime engine (`AY2024-25` through `TY2026-27`, documented in [`docs/SPENDSENSE_TAX_RULES_SOURCES.md`](./docs/SPENDSENSE_TAX_RULES_SOURCES.md)) is implemented in backend modules; `specialRateIncomeRupees > 0n` is currently unimplemented/rejected, `taxRoutes` is not yet registered in `backend/src/app.ts`, and Form 16/AIS/26AS verification UI is under active development.
+- **ML Transaction Categorization** ([`ml/transaction-categorization/`](./ml/transaction-categorization/)): Offline FastText training and evaluation tooling exist; runtime FastText model artifacts are disabled/unbundled and live inference uses deterministic rules.
+- **FIRE Planner, Behavioral Insights & Account Aggregator** ([`packages/financial-modules/`](./packages/financial-modules/)): Module scaffolds present; corresponding shell tabs (`fire-planning`, `insights`) display coming-soon placeholders.
+
+### Retired / Out-of-Scope Capabilities
+
+- **Google Sheets Synchronization**: Retired (`drainUserOutbox` in [`frontend/src/lib/server/sheets-worker.ts`](./frontend/src/lib/server/sheets-worker.ts) is a no-op).
+- **Live Bank Credential Scraping**: Explicitly outside the scope of the platform.
+
+---
+
+## Architecture & Technology Stack
+
+SpendSense follows a strict modular monorepo layout managed with `pnpm` workspaces (`pnpm@10.24.0`) and contract-driven API boundaries:
+
+```text
+Browser / Mobile PWA / Android App
+        │  HTTPS + Bearer JWT / SSR Cookies
+        ▼
+Next.js 16 Frontend & BFF Proxy (frontend/ — @arth/frontend)
+        │  Server-side BFF forwarding (zero direct financial DB writes from browser)
+        ▼
+Fastify 5 API & Domain Services (backend/ — @arth/backend)
+        │  User-scoped JWT PostgREST + PostgreSQL RPCs (RLS enforced)
+        ▼
+Supabase PostgreSQL + Auth + Storage (supabase/)
+```
+
+| Layer | Technology |
+|---|---|
+| **Frontend / PWA** | Next.js `16.4.6` (App Router), React `19.3.0`, TypeScript, Tailwind CSS v4, `@supabase/ssr`, `@simplewebauthn/browser` |
+| **Document Parsing & Export** | `pdfjs-dist`, `xlsx`, `tesseract.js`, `jspdf` |
+| **Backend API** | Fastify `^5.2.1`, Node.js (`>=20.0.0`), TypeScript, `jose` (HS256 / JWKS JWT verification), `@supabase/supabase-js` |
+| **Shared Packages** | `@arth/contracts` (API DTOs & enums), `packages/financial-modules/` (domain engines) |
+| **Database & Storage** | Supabase PostgreSQL with append-only migrations (`supabase/migrations/`), RLS policies, private bucket storage |
+| **Native Android** | Kotlin, Jetpack Compose, Room (`android/`), plus signed helper installer (`android/installer/`) |
+| **ML Tooling** | Python evaluation & FastText training pipelines (`ml/transaction-categorization/`) |
+| **Hosting Targets** | Vercel (`vercel.json` for frontend) and Render (`render.yaml` for backend) |
 
 ---
 
 ## Repository Structure
 
 ```text
-arth/
-├── frontend/                     # Next.js 16 App Router (@arth/frontend)
-│   ├── src/
-│   │   ├── app/                  # App Router layouts, pages, globals.css, manifest.ts
-│   │   │   ├── api/backend/auth/ # BFF thin proxy forwarding Bearer JWTs to Fastify
-│   │   │   ├── auth/callback/    # Supabase PKCE OAuth callback handler
-│   │   │   ├── auth/logout/      # Session invalidation & cookie clearance
-│   │   │   ├── auth/update-password/ # Dedicated password update & recovery screen
-│   │   │   ├── login/            # Redesigned dual-auth (Email/Password + Google OAuth)
-│   │   │   ├── manifest.ts       # W3C Web App Manifest (standalone, theme colors)
-│   │   │   └── page.tsx          # Authenticated session display & foundation
-│   │   ├── components/
-│   │   │   ├── ui/               # Reusable UI primitives (ThemeToggle)
-│   │   │   └── layout/           # Shared page layouts & navigation
-│   │   ├── features/             # Feature-sliced modules
-│   │   │   ├── dashboard/        # Net cash flow summary, composition, recent activity
-│   │   │   ├── transactions/     # Ledger, Quick Add entry modal & AppShell
-│   │   │   ├── categories/       # Category taxonomy, ordering, and archive
-│   │   │   ├── people/           # People & Money tracker with settlement engine
-│   │   │   └── pwa/              # PWA install prompt card & hook
-│   │   └── lib/
-│   │       ├── api-client/       # Typed backend API client
-│   │       ├── format.ts         # Paise-to-INR & date formatters
-│   │       └── supabase/         # SSR Supabase client (HTTP-only cookies)
-│   ├── tests/                    # Frontend test suite (proxies, date logic, PWA manifest)
-│   ├── public/                   # Static assets & icons (192, 512, maskable, apple)
-│   ├── package.json
-│   ├── next.config.ts
-│   └── tsconfig.json
-│
-├── backend/                      # Fastify TypeScript Service (@arth/backend)
-│   ├── src/
-│   │   ├── app.ts                # Fastify factory function & plugin registration
-│   │   ├── server.ts             # Server entry point (starts on port 3001)
-│   │   ├── config/               # Environment configuration & JWT validation config
-│   │   ├── plugins/              # Shared Fastify plugins (CORS, auth/JWT verifier)
-│   │   └── modules/              # Domain modules
-│   │       ├── auth/             # Protected auth endpoints (GET /api/v1/auth/me)
-│   │       └── health/           # Health check endpoint (GET /health)
-│   ├── tests/                    # Automated backend tests (auth, health, schema audit)
-│   ├── package.json
-│   └── tsconfig.json
-│
+.
+├── frontend/                   # Next.js 16 web app, PWA manifest, BFF routes & UI features
+├── backend/                    # Fastify REST API service, auth plugin & domain services
 ├── packages/
-│   └── contracts/                # Shared API Contracts (@arth/contracts)
-│       ├── src/
-│       │   ├── auth.ts           # AuthIdentityResponse contract
-│       │   ├── health.ts         # HealthCheckResponse contract
-│       │   └── index.ts          # Unified exports
-│       ├── package.json
-│       └── tsconfig.json
-│
-├── android/                      # Native Kotlin + Jetpack Compose Android App
-│   ├── app/                      # Feature modules, Room DB, WorkManager sync, SMS parser
-│   ├── build.gradle              # Multi-flavor Gradle build (local vs play)
-│   └── src/                      # Kotlin source sets (main, local, play)
-│
-├── supabase/                     # Database Infrastructure
-│   ├── migrations/               # Numbered, append-only SQL migrations
-│   ├── tests/                    # Database-level pgTAP tests
-│   └── config.toml               # Supabase CLI local emulation configuration
-│
-├── docs/                         # Specifications & Architectural Documentation
-│   ├── decisions/                # Architecture Decision Records (ADR-001)
-│   ├── ARTH_ARCHITECTURE.md      # System, database, & synchronization architecture
-│   ├── ARTH_BUILD_PLAN.md        # Phased implementation plan & progress log
-│   ├── ARTH_DESIGN_SYSTEM.md     # Ledger Minimal tokens and component rules
-│   ├── ARTH_UX_BLUEPRINT.md      # Navigation, IA, and progressive disclosure flows
-│   ├── GOOGLE_OAUTH_SETUP.md     # Google Cloud Console & Supabase Auth configuration
-│   └── design-concepts/          # Screen prototype & automated verification shots
-│
-├── .env.example                  # Non-secret environment variable templates
-├── .gitignore                    # Git exclusion rules
-├── AGENTS.md                     # Agent entrypoint pointer
-├── ANTIGRAVITY.md                # Canonical project instructions and rules
-├── package.json                  # Root monorepo configuration
-├── pnpm-workspace.yaml           # Workspace package definitions
-└── pnpm-lock.yaml                # Monorepo dependency lockfile
+│   ├── contracts/              # Shared TypeScript API contracts & request/response DTOs
+│   └── financial-modules/      # Modular financial calculators (EMI, Safe-to-Spend, Goals, Tax, etc.)
+├── supabase/
+│   ├── migrations/             # Append-only PostgreSQL schema & RLS migrations
+│   └── templates/              # Branded SpendSense Supabase authentication email templates
+├── ml/
+│   └── transaction-categorization/  # Offline categorization dataset & FastText training scripts
+├── android/                    # Native Kotlin + Jetpack Compose Android app & Installer helper
+├── docs/                       # Architecture, design system, tax sources & operational guides
+├── scripts/                    # Validation & brand-asset generation utilities
+├── package.json                # Root pnpm workspace scripts
+├── pnpm-workspace.yaml         # Workspace package definitions
+├── render.yaml                 # Render backend deployment blueprint
+└── vercel.json                 # Vercel frontend build configuration
 ```
 
 ---
 
-## Prerequisites
+## Installation & Local Development
 
-- **Node.js**: v22.17.1+ (LTS)
-- **pnpm**: v10.24.0+
-- **Git**
+### Prerequisites
 
----
+- **Node.js** `>= 20.0.0`
+- **pnpm** `10.24.0` (`corepack enable` recommended)
+- **Supabase** project (or local Supabase CLI) with migrations from `supabase/migrations/` applied
+- Optional: Android Studio / JDK for `android/`, Python 3 for `ml/` and brand validation scripts
 
-## Getting Started
+### Setup
 
-### 1. Install Dependencies
-
-Install all dependencies across the monorepo:
+1. Clone the repository and install workspace dependencies:
 
 ```bash
+git clone https://github.com/digitaldodo/Arth.git
+cd Arth
 pnpm install
 ```
 
-### 2. Configure Environment Variables
+2. Copy `.env.example` to `.env.local` (or configure service-specific environment files in `frontend/` and `backend/`) using placeholder values replaced by your own project credentials. Never commit `.env*` files with real secrets.
 
-Copy the root environment template:
-
-```bash
-cp .env.example .env.local
-```
-
-### 3. Run Development Servers
-
-Run both frontend and backend concurrently:
+3. Build shared workspace contracts and start the development servers:
 
 ```bash
+pnpm build:contracts
 pnpm dev
 ```
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Backend: [http://localhost:3001](http://localhost:3001) (Health: `GET /health`)
-
-Or run services independently:
+Or run services individually:
 
 ```bash
-# Frontend only (Next.js)
-pnpm dev:frontend
-
-# Backend only (Fastify with tsx watch)
-pnpm dev:backend
+pnpm dev:backend    # Starts Fastify backend
+pnpm dev:frontend   # Starts Next.js frontend
 ```
 
-### 4. Database Setup & Migrations (Local Development)
-
-The database schema and RLS policies are version-controlled under `supabase/migrations/`:
+Production builds:
 
 ```bash
-# Start local Supabase container stack (requires Docker Desktop running)
-pnpx supabase start
-
-# Apply all migrations & test triggers against local database
-pnpx supabase db reset
-
-# Run pgTAP database security and constraint test suite
-pnpx supabase test db
+pnpm build          # Builds contracts -> backend -> frontend
 ```
 
 ---
 
-## Database Architecture & Constraints
+## Environment Variable Configuration
 
-- **`public.profiles`**: Auto-provisioned on signup via `auth.users` trigger. Defaults to `Asia/Kolkata` and `INR`.
-- **`public.categories`**: Separates `income` vs `expense` taxonomy. Uniqueness per `(user_id, type, lower(name))` where active. Supports non-destructive archiving via `archived_at`.
-- **`public.transactions`**: Stores amounts as positive integer paise (`BIGINT > 0`). Enforces composite foreign key `(category_id, user_id, type)` preventing cross-user or mismatched category assignments. Requires necessity for expenses and strictly `NULL` for income.
-- **`public.outbox_events`**: Atomic transactional outbox populated via `trg_transactions_outbox` capturing create, update, soft-delete, and restoration events for Google Sheets sync. Immutable to authenticated users.
-- **`public.people` & obligations**: Isolated debt and loan tracker. Tables `public.people`, `public.person_money_records`, and `public.person_money_settlements` maintain tenant isolation with composite foreign keys. Settlement concurrency and idempotency are secured via row-locked stored procedure `fn_record_person_settlement`. Direct mutations are revoked from authenticated users. Cascading deletion is blocked (`ON DELETE RESTRICT`) to preserve financial audit history.
+Refer to [`.env.example`](./.env.example) for full descriptions. Configure non-secret placeholders locally and set real secrets only in deployment dashboards (Vercel / Render):
 
----
+### Frontend (`frontend/` — `@arth/frontend`)
 
-## Authentication & Session Architecture
+- `NEXT_PUBLIC_APP_URL` — Canonical app URL (e.g. `http://localhost:3000`)
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (`https://<project-ref>.supabase.co`)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase public anon key
+- `INTERNAL_API_URL` — Server-side Fastify base URL (defaults to `http://localhost:3001` locally)
+- `NEXT_PUBLIC_API_URL` — Optional public API fallback URL
+- `SUPABASE_SERVICE_ROLE_KEY` — *(Server-only)* Supabase service-role secret; never prefix with `NEXT_PUBLIC_`
 
-Arth uses a defense-in-depth, zero-trust session architecture:
-- **Client Authentication**: Google OAuth with PKCE flow initiated from `frontend/src/app/login/page.tsx`.
-- **Session Security**: Session tokens are held in `HttpOnly`, `SameSite=Lax`, and `Secure` (production) cookies managed by `@supabase/ssr`.
-- **BFF Thin Proxy**: Browser requests hit Next.js Route Handlers (`/api/backend/*`), which extract the server-held `access_token` and forward it as `Authorization: Bearer <token>` to Fastify.
-- **Backend Verification**: Fastify (`backend/src/plugins/auth.ts`) validates JWTs with `jose` (symmetric HS256 secret or asymmetric JWKS), verifying signatures, issuer, audience (`authenticated`), and expiration, and decorates `request.user`.
+### Backend (`backend/` — `@arth/backend`)
 
-### Supabase Google OAuth Setup
-1. In your [Supabase Dashboard](https://supabase.com/dashboard), navigate to **Authentication &rarr; Providers &rarr; Google**.
-2. Enable Google provider and input your **Google Client ID** and **Google Client Secret** from Google Cloud Console.
-3. Add the redirect URL: `https://<project-ref>.supabase.co/auth/v1/callback`.
-4. In your `.env.local`, set:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
-   SUPABASE_JWT_SECRET=<your-jwt-secret>
-   ```
+- `PORT` — HTTP listener port (e.g. `3001`)
+- `HOST` — Bind address (e.g. `0.0.0.0`)
+- `NODE_ENV` — `development`, `test`, or `production`
+- `CORS_ORIGIN` — Allowed frontend origin(s)
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_ANON_KEY` — Supabase anon key for user-scoped PostgREST clients
+- `SUPABASE_JWT_SECRET` — *(Recommended)* JWT secret for local HS256 verification (falls back to Supabase JWKS when omitted)
+- `JWT_AUDIENCE` — Expected JWT audience claim (defaults to `authenticated`)
 
 ---
 
-## Available Monorepo Scripts
+## Testing & Quality Checks
 
-| Command | Description |
-|---|---|
-| `pnpm dev` | Runs frontend and backend concurrently in development mode |
-| `pnpm dev:frontend` | Runs only the Next.js frontend development server |
-| `pnpm dev:backend` | Runs only the Fastify backend service with auto-reload |
-| `pnpm build` | Builds all packages: `@arth/contracts` &rarr; `@arth/backend` &rarr; `@arth/frontend` |
-| `pnpm build:frontend` | Builds the production Next.js frontend application |
-| `pnpm build:backend` | Compiles the TypeScript backend service to `dist/` |
-| `pnpm typecheck` | Runs recursive static type checking across all workspace packages |
-| `pnpm lint` | Runs ESLint across the frontend codebase |
-| `pnpm test` | Runs all automated test suites across backend (101 tests) and frontend (43 tests) — 144 tests passing |
-| `pnpm start:frontend` | Runs the compiled production Next.js server on port 3000 |
-| `pnpm start:backend` | Runs the compiled production Fastify service on port 3001 |
+Run workspace checks from the repository root:
 
----
+```bash
+pnpm typecheck      # Type-check all pnpm workspaces
+pnpm lint           # Lint frontend workspace
+pnpm test:backend   # Run backend unit & route test suite
+pnpm test:frontend  # Run frontend Vitest test suite
+```
 
-## Production Deployment & Hosting
+Additional module checks:
 
-Arth is designed for cost-effective, high-reliability deployment using managed platforms:
-
-### 1. Fastify Backend &rarr; Render (Managed Node.js Web Service)
-- **Blueprint**: Root [`render.yaml`](./render.yaml) defines the service specification.
-- **Build Command**: `pnpm install --frozen-lockfile && pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build`
-- **Start Command**: `pnpm --filter @arth/backend start`
-- **Health Check Path**: `/health`
-- **Required Environment Variables**:
-  - `NODE_ENV=production`
-  - `HOST=0.0.0.0`
-  - `SUPABASE_URL=https://<your-project-ref>.supabase.co`
-  - `SUPABASE_ANON_KEY=<your-anon-key>`
-  - `CORS_ORIGIN=https://<your-frontend-domain>`
-
-### 2. Next.js Frontend &rarr; Vercel (Next.js Platform)
-- **Configuration**: Root [`vercel.json`](./vercel.json) configures monorepo build delegation.
-- **Build Command**: `pnpm --filter @arth/contracts build && pnpm --filter @arth/frontend build`
-- **Output Directory**: `.next`
-- **Required Environment Variables**:
-  - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
-  - `NEXT_PUBLIC_SUPABASE_URL=https://<your-project-ref>.supabase.co`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>`
-  - `INTERNAL_API_URL=https://<your-render-backend-url>` (e.g. `https://arth-backend.onrender.com`)
-
-### 3. Supabase Database & Auth (PostgreSQL)
-- **Migrations**: 12 numbered migrations (`0001` through `0012`) applied via `supabase db push`.
-- **Site URL & Redirects**:
-  - Site URL: `https://<your-frontend-domain>`
-  - Redirect URLs: `https://<your-frontend-domain>/auth/callback`
-  - Google Cloud Console Authorized Redirect URI: `https://<supabase-project-ref>.supabase.co/auth/v1/callback`
+- Financial modules: `pnpm --filter @arth/financial-modules test` (or `node --test` inside `packages/financial-modules/`)
+- Categorization ML evaluation: run Python unit tests under `ml/transaction-categorization/`
 
 ---
 
-## Phase Status
+## Project Status & Roadmap
 
-- **Phase 00**: Architecture & Auditing (Completed)
-- **Phase 01A–01D**: Visual Direction & Screen Prototype (Ledger Minimal approved)
-- **Phase 01E**: Project Scaffold & Tooling Setup (Completed)
-- **Phase 01F**: Modular Monorepo Architecture & Backend Foundation (Completed)
-- **Phase 01G**: Supabase Database Schema, Migrations & Row-Level Security (Completed)
-- **Phase 01H**: Authentication Flow & Backend Session Verification (Completed)
-- **Phase 01I**: Transaction Entry & Outbox Engine (Completed)
-- **Phase 01J**: Category Management & Custom Ordering (Completed)
-- **Phase 01K**: People & Money Tracker (Completed)
-- **Phase 01L**: Database Reliability, ACID & CRUD Performance Hardening (Completed)
-- **Phase 01L.1**: Close Database Reliability Gaps (Completed)
-- **Phase 01M**: Real Data Dashboard (Completed)
-- **Phase 01N**: PWA Manifest & Baseline Installability (Completed)
-- **Phase 01O**: Production Deployment & Release Readiness (Code & Config Ready / Dashboard Provisioning Pending)
+SpendSense has a verified, offline-capable transaction ledger, structured statement ingestion, People & Money tracking, native Android packaging, and published tax rule documentation (`docs/SPENDSENSE_TAX_RULES_SOURCES.md`). Active development focuses on wiring the scaffolded Safe-to-Spend, EMI Affordability, Goal Planner/Purchase Simulation, and Tax Document Verification modules into full end-to-end backend routes and frontend flows.
+
+---
+
+## Documentation Index
+
+### Architecture, Design & Product Specs
+- [SpendSense Architecture](./docs/SPENDSENSE_ARCHITECTURE.md)
+- [SpendSense Build Plan](./docs/SPENDSENSE_BUILD_PLAN.md)
+- [SpendSense Roadmap](./docs/SPENDSENSE_ROADMAP.md)
+- [ADR-001: Modular Monorepo Architecture](./docs/decisions/ADR-001-modular-monorepo.md)
+- [Design System: Ledger Minimal](./docs/SPENDSENSE_DESIGN_SYSTEM.md)
+- [UX Architecture & User Flows](./docs/SPENDSENSE_UX_BLUEPRINT.md)
+- [Visual Direction Exploration](./docs/SPENDSENSE_VISUAL_DIRECTION.md)
+- [Interactive Prototype Review](./docs/SPENDSENSE_PROTOTYPE_REVIEW.md)
+- [Brand Identity & Asset Inventory](./docs/SPENDSENSE_BRAND_IDENTITY.md)
+
+### Financial Engines, Statements & Security
+- [Indian Tax Rules & Statutory Sources](./docs/SPENDSENSE_TAX_RULES_SOURCES.md)
+- [Bank Statement Format Compatibility](./docs/BANK_STATEMENT_FORMAT_COMPATIBILITY.md)
+- [Bank Statement Import Implementation](./docs/BANK_STATEMENT_IMPORT_IMPLEMENTATION.md)
+- [Categorization & Provenance Docs](./docs/SPENDSENSE_TRANSACTION_INTELLIGENCE_ARCHITECTURE.md)
+- [Document & Financial-Data Threat Model](./docs/SPENDSENSE_SECURITY_THREAT_MODEL.md)
+- [App Lock Security & Platform Limits](./docs/APP_LOCK_SECURITY.md)
+
+### Operations, Auth & Android
+- [Database Operations & ACID Architecture](./docs/DATABASE_OPERATIONS.md)
+- [Manual Deployment & Verification Guide](./MANUAL_DEPLOYMENT.md)
+- [Email Template Configuration](./docs/SPENDSENSE_EMAIL_TEMPLATE_CONFIGURATION.md)
+- [Google OAuth Setup](./docs/GOOGLE_OAUTH_SETUP.md)
+- [Email Confirmation Setup](./docs/EMAIL_CONFIRMATION_SETUP.md)
+- [Android Setup](./ANDROID_SETUP.md) & [Direct APK Distribution](./docs/ANDROID_DIRECT_DISTRIBUTION.md)
+- [Android Privacy & Play Policy](./ANDROID_PRIVACY_AND_PLAY_POLICY.md) & [Android Testing Guide](./ANDROID_TESTING.md)

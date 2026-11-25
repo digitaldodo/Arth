@@ -1,4 +1,4 @@
-# Arth document, statement and tax implementation checklist
+# SpendSense document, statement and tax implementation checklist
 
 Working checklist for the continuation of the Smart Statement Import and Document-Assisted Tax Planning request. Source of truth is the user-provided implementation brief; this checklist does not imply a feature is shipped.
 
@@ -30,7 +30,7 @@ Working checklist for the continuation of the Smart Statement Import and Documen
 - [x] Cross-document conflict display with side-by-side values, document names, and tax periods; conflicting verified values block calculation until resolved.
 - [x] Period-scoped verified-field selection, same-period conflict blocking, and a tax readiness checklist; estimate profiles retain only verified fields whose tax-field key and exact amount match an input.
 - [x] What-If Scenario Simulator: sandbox inputs where the user can tweak salary, deductions, or regime without overwriting the saved/verified tax profile in the database.
-- [x] Ruleset-versioned deterministic tax engine for AY2024-25 through AY2026-27 and TY2026-27; each estimate exposes effective date, last verification date, official sources, and claimed/allowed/maximum lines for supported deductions. Cites official statutes documented in `docs/ARTH_TAX_RULES_SOURCES.md`.
+- [x] Ruleset-versioned deterministic tax engine for AY2024-25 through AY2026-27 and TY2026-27; each estimate exposes effective date, last verification date, official sources, and claimed/allowed/maximum lines for supported deductions. Cites official statutes documented in `docs/SPENDSENSE_TAX_RULES_SOURCES.md`.
 - [x] Explainable regime comparison, tax credits and bounded break-even calculation.
 - [x] Official tax calculator fixture benchmark (`official-tax-calculator.test.ts`) covering all supported slabs, rebate 87A marginal relief, and surcharge marginal relief.
 - [x] Explicit ledger/document/tax reconciliation with user-confirmed tax treatment.

@@ -1,4 +1,4 @@
-# Arth Android Release Automation
+# SpendSense Android Release Automation
 
 The direct Android release workflow builds and verifies the signed `localRelease` APK and publishes versioned artifacts to GitHub Releases. It will stop before publishing if the persistent signing secrets are missing or if the APK manifest contains an SMS permission.
 

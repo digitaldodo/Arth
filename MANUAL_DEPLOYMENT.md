@@ -1,6 +1,6 @@
-# Arth Production Deployment & Verification Guide
+# SpendSense Production Deployment & Verification Guide
 
-This document provides exact, step-by-step instructions for completing the deployment of Arth's PWA session persistence, balance snapshot accounting, database-level non-negative balance invariants, and dashboard lifetime analytics.
+This document provides exact, step-by-step instructions for completing the deployment of SpendSense's PWA session persistence, balance snapshot accounting, database-level non-negative balance invariants, and dashboard lifetime analytics.
 
 ---
 
@@ -27,7 +27,7 @@ This document provides exact, step-by-step instructions for completing the deplo
 
 ### Step-by-Step Execution via Supabase Dashboard
 
-1. Navigate to the **[Supabase Dashboard](https://supabase.com/dashboard)** and select your **Arth** project.
+1. Navigate to the **[Supabase Dashboard](https://supabase.com/dashboard)** and select your **SpendSense** (legacy project name: **Arth**) project.
 2. In the left navigation menu, click the **SQL Editor** tab (`>_` icon).
 3. Click **+ New Query** in the top bar.
 4. Copy the complete text of `supabase/migrations/0025_balance_snapshot_and_non_negative_balances.sql` (if not previously applied) and run it.
@@ -179,12 +179,12 @@ WHERE proname IN ('fn_account_balances', 'fn_validate_transaction_balance', 'fn_
 
 ## 4. Android PWA Update Procedure
 
-When Arth is opened on an Android device:
+When SpendSense is opened on an Android device:
 1. **Background Service Worker Update**:
    - The browser automatically detects the new service worker (`sw.js` with new build version) in the background.
 2. **Activating the Update**:
-   - Close the Arth PWA from Android's **Recent Apps / App Switcher** screen.
-   - Reopen Arth from your home screen.
+   - Close the SpendSense PWA from Android's **Recent Apps / App Switcher** screen.
+   - Reopen SpendSense from your home screen.
    - The new service worker activates and serves the hardened application shell.
 
 > [!CAUTION]
@@ -197,11 +197,11 @@ When Arth is opened on an Android device:
 Once the Supabase migration and Vercel deployment are complete, perform this 5-minute sanity check:
 
 - [ ] **1. Sign-In & Session Continuity**:
-  - Open Arth. Confirm you are signed in without requiring re-authentication.
-  - Return to the Android home screen, reopen Arth: confirm session is instantly restored.
+  - Open SpendSense. Confirm you are signed in without requiring re-authentication.
+  - Return to the Android home screen, reopen SpendSense: confirm session is instantly restored.
 - [ ] **2. Android Back Gesture**:
   - Open a sub-screen (e.g. Ledger, People Tracker, or More).
-  - Use the Android system back gesture. Confirm that Arth navigates to the previous view or minimizes to the home screen—it must **never** take you to a login screen or log you out.
+  - Use the Android system back gesture. Confirm that SpendSense navigates to the previous view or minimizes to the home screen—it must **never** take you to a login screen or log you out.
 - [ ] **3. Starting-Balance Snapshot Invariant**:
   - Check your Account Balances.
   - Confirm that transactions recorded prior to your `balances_configured_at` baseline date (e.g., 23–30 October) remain visible in the ledger and reports, but are **not** deducted from your configured starting balance snapshot.

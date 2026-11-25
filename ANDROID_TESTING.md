@@ -1,6 +1,6 @@
-# Arth Native Android App — Testing & Quality Assurance Guide
+# SpendSense Native Android App — Testing & Quality Assurance Guide
 
-This document details the test suites, APK validation procedures, ADB commands, and verification matrix for the native Arth Android application.
+This document details the test suites, APK validation procedures, ADB commands, and verification matrix for the native SpendSense Android application.
 
 ---
 
@@ -79,5 +79,5 @@ To test SMS detection on an Android emulator:
 & "C:\Users\Ansh\AppData\Local\Android\Sdk\platform-tools\adb.exe" emu sms send "VK-HDFCBK" "Sent Rs 850.00 from HDFC Bank A/c xx1234 to Swiggy on 03-Nov-26 via UPI. Ref 430829182391"
 ```
 1. Verify system notification triggers.
-2. Open Arth and verify the transaction appears in the **Pending SMS Reviews** banner.
+2. Open SpendSense and verify the transaction appears in the **Pending SMS Reviews** banner.
 3. Confirm the transaction, assign "Food", and check that it reflects in the Dashboard balances.

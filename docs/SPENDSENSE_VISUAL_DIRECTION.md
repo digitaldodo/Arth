@@ -1,17 +1,17 @@
-# Arth — Visual Direction Exploration
+# SpendSense — Visual Direction Exploration
 
 > **Document Version**: 1.0 — Phase 01B  
 > **Status**: Completed / Ready for Owner Review  
 > **Date**: 2026-10-25  
-> **Interactive Preview**: [`docs/design-concepts/preview.html`](file:///d:/Forge/Per/docs/design-concepts/preview.html)  
+> **Interactive Preview**: [`docs/design-concepts/preview.html`](./design-concepts/preview.html)  
 
 ---
 
 ## 1. Scope, Purpose & Design Principles
 
-This document explores and defines three genuinely distinct visual directions for **Arth** before establishing the final tokenized design system or scaffolding production UI. 
+This document explores and defines three genuinely distinct visual directions for **SpendSense** before establishing the final tokenized design system or scaffolding production UI. 
 
-Arth is a private, disciplined personal finance tracker built around intentional manual transaction entry. The visual design must serve and elevate this core daily practice.
+SpendSense is a private, disciplined personal finance tracker built around intentional manual transaction entry. The visual design must serve and elevate this core daily practice.
 
 ### Non-Negotiable Visual Principles
 
@@ -219,7 +219,7 @@ Inspired by modern Scandinavian industrial product design (Bang & Olufsen, Teena
 
 ## 4. Visual Concept Previews & Comparison Matrix
 
-An interactive HTML comparison studio has been created at [`docs/design-concepts/preview.html`](file:///d:/Forge/Per/docs/design-concepts/preview.html). You can open this file in any browser to toggle concepts, switch light/dark themes, and inspect all three views interactively.
+An interactive HTML comparison studio has been created at [`docs/design-concepts/preview.html`](./design-concepts/preview.html). You can open this file in any browser to toggle concepts, switch light/dark themes, and inspect all three views interactively.
 
 ### Preview A: Mobile Dashboard Overview
 - **Header**: Month & Year (`October 2026`) + App Identity + Profile trigger.
@@ -246,7 +246,7 @@ An interactive HTML comparison studio has been created at [`docs/design-concepts
 
 ## 5. Integration of Established UX Blueprint & Decisions
 
-The visual concepts strictly honor the approved flows from `ARTH_UX_BLUEPRINT.md`:
+The visual concepts strictly honor the approved flows from `SPENDSENSE_UX_BLUEPRINT.md`:
 
 ### Evaluation of the Mobile Navigation & Central (+) Button
 - **Analysis**: We evaluated two variations for the center `(+)` action:
@@ -279,7 +279,7 @@ All three concepts are designed to comfortably exceed **WCAG 2.2 Level AA**:
 ### **Recommendation: Concept 1 ("Ledger Minimal") with subtle warmth from Concept 2**
 
 #### Why Concept 1 is Recommended:
-1. **Aligned with Personal Finance Discipline**: Arth is not a social app or a gaming dashboard. A clean, high-contrast, Swiss editorial aesthetic honors the seriousness of manual accounting.
+1. **Aligned with Personal Finance Discipline**: SpendSense is not a social app or a gaming dashboard. A clean, high-contrast, Swiss editorial aesthetic honors the seriousness of manual accounting.
 2. **Longevity & Timelessness**: Monospaced tabular numerals and hairline borders never go out of style. Bubbly gradients and trendy fintech aesthetics cause visual fatigue after months of daily use.
 3. **Data Density Without Clutter**: Concept 1 allows the highest data density while maintaining the cleanest whitespace.
 
@@ -290,7 +290,7 @@ We can blend the **monospaced precision and hairline discipline of Concept 1** w
 
 ## 8. Outstanding Choices Requiring Owner Review
 
-Before proceeding to Phase 01C (Scaffold, Design Tokens & Implementation), please review the interactive preview at [`docs/design-concepts/preview.html`](file:///d:/Forge/Per/docs/design-concepts/preview.html) and confirm your preference on:
+Before proceeding to Phase 01C (Scaffold, Design Tokens & Implementation), please review the interactive preview at [`docs/design-concepts/preview.html`](./design-concepts/preview.html) and confirm your preference on:
 
 1. **Visual Direction Preference**:
    - **Option A**: **Concept 1 (Ledger Minimal)** — Swiss editorial, hairline borders, monospaced numbers.
@@ -303,4 +303,4 @@ Before proceeding to Phase 01C (Scaffold, Design Tokens & Implementation), pleas
    - Approve the payment method memory (remembering last-used method) and reversible soft-delete undo.
 
 ---
-*End of ARTH_VISUAL_DIRECTION.md — Awaiting Owner Direction.*
+*End of SPENDSENSE_VISUAL_DIRECTION.md — Awaiting Owner Direction.*

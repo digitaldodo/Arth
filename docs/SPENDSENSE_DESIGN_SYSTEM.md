@@ -1,4 +1,4 @@
-# Arth — Design System Specification: Ledger Minimal
+# SpendSense — Design System Specification: Ledger Minimal
 
 > **Document Version**: 1.0 — Phase 01C  
 > **Status**: Completed / Ready for Owner Review  
@@ -10,7 +10,7 @@
 ## 1. Selected Concept & Design Principles
 
 ### 1.1 Foundation & Character
-Arth's visual identity is **Ledger Minimal**. Rooted in Swiss modernist typography (International Typographic Style) and physical accounting ledgers, it approaches personal financial tracking as an intentional, disciplined craft.
+SpendSense's visual identity is **Ledger Minimal**. Rooted in Swiss modernist typography (International Typographic Style) and physical accounting ledgers, it approaches personal financial tracking as an intentional, disciplined craft.
 
 The design philosophy is defined by:
 - **Quiet Authority**: Financial truth requires clarity, not spectacle. The UI never shouts with arbitrary gradients, candy-colored cards, or gratuitous illustrations.
@@ -31,7 +31,7 @@ The design philosophy is defined by:
 
 ## 2. Semantic Color Token System
 
-Every color in Arth is mapped to a semantic token. Components consume tokens, never raw hex codes.
+Every color in SpendSense is mapped to a semantic token. Components consume tokens, never raw hex codes.
 
 ### 2.1 Theme Palettes & Semantic Mapping
 
@@ -88,7 +88,7 @@ Every color in Arth is mapped to a semantic token. Components consume tokens, ne
 | `--state-hover-overlay`| `rgba(0, 0, 0, 0.03)` | `rgba(255, 255, 255, 0.04)` | General hover surface tint | Fluid responsiveness |
 
 ### 2.2 Dual-Encoding Accessibility Mandate
-Color is strictly forbidden from acting as the sole carrier of status. In Arth:
+Color is strictly forbidden from acting as the sole carrier of status. In SpendSense:
 - **Income** always displays `+` prefix, green tint, and `↑` vector arrow.
 - **Expense** always displays `−` prefix, red tint, and `↓` vector arrow.
 - **Essential** always pairs with text label `Essential` and a solid geometric glyph `[▲]`.
@@ -102,7 +102,7 @@ Color is strictly forbidden from acting as the sole carrier of status. In Arth:
 
 ## 3. Typography & Financial Numerals
 
-Arth utilizes a deliberate two-typeface typography system:
+SpendSense utilizes a deliberate two-typeface typography system:
 1. **Primary Interface Sans**: `Inter` (or system fallback: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`). Handles navigation, table headers, labels, form controls, and body copy.
 2. **Financial Numerals & Dates Mono**: `Geist Mono` (or fallback: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`). Handles monetary amounts, percentages, quantities, and dates. Always rendered with `tabular-nums`.
 
@@ -132,7 +132,7 @@ Arth utilizes a deliberate two-typeface typography system:
 
 ## 4. Spacing, Geometry & Responsive Layout
 
-Arth adheres to a strict 4px base spacing grid with an 8px preferred spatial rhythm.
+SpendSense adheres to a strict 4px base spacing grid with an 8px preferred spatial rhythm.
 
 ### 4.1 Spacing Scale
 
@@ -261,7 +261,7 @@ Layout behavior is content-driven:
 
 #### Desktop Left Sidebar
 - **Geometry**: Fixed left column, `w-56` (220px), `h-screen`, `bg-[var(--bg-surface-subtle)]`, `border-r border-[var(--border-hairline)]`, `p-4`.
-- **Header**: Arth logo glyph + version badge.
+- **Header**: SpendSense logo glyph + version badge.
 - **Primary CTA**: Top button `+ New Transaction` with keyboard hotkey hint `[N]`.
 - **Menu Items**: Full-width rows with 16px vector icon and 13px label. Active item displays a 2px solid left accent bar.
 
@@ -310,7 +310,7 @@ Layout behavior is content-driven:
 
 ## 6. Progressive Disclosure Visual Styling
 
-To maintain Ledger Minimal's quiet clarity, Arth applies explicit visual weighting across the 3 disclosure levels:
+To maintain Ledger Minimal's quiet clarity, SpendSense applies explicit visual weighting across the 3 disclosure levels:
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -401,7 +401,7 @@ The following core behaviors are formally locked into the design system:
 The following operational questions cannot be deduced from prior documents and should be confirmed during Phase 01D prototype review:
 
 1. **Category Icon Set**: Should custom categories use standard curated SVG icons (e.g., Lucide financial icons) or allow native Unicode emojis as custom category badges?
-2. **Number Keypad vs. Native Keypad**: On mobile web/PWA, should Arth render a custom in-app numeric keypad component or rely exclusively on the mobile OS virtual decimal keypad (`inputMode="decimal"`)? *(Recommendation: Start with native `inputMode="decimal"` for native haptics, speed, and zero layout overhead).*
+2. **Number Keypad vs. Native Keypad**: On mobile web/PWA, should SpendSense render a custom in-app numeric keypad component or rely exclusively on the mobile OS virtual decimal keypad (`inputMode="decimal"`)? *(Recommendation: Start with native `inputMode="decimal"` for native haptics, speed, and zero layout overhead).*
 3. **Table Row Density on Desktop**: Should the desktop ledger support an explicit density toggle (`Compact: 32px row` vs `Comfortable: 44px row`) or default to a single standard `40px` row height?
 
 ---
@@ -420,4 +420,4 @@ Before Phase 01D is declared complete, the screen-level prototype must satisfy:
 - [ ] **Accessibility & States**: Focus rings, active states, and empty states rendered faithfully according to this specification.
 
 ---
-*End of ARTH_DESIGN_SYSTEM.md — Ready for Review.*
+*End of SPENDSENSE_DESIGN_SYSTEM.md — Ready for Review.*

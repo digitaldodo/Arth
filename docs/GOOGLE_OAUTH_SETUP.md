@@ -1,6 +1,6 @@
 # Google OAuth Redirect & Branding Configuration Guide
 
-This document specifies the exact configuration required in the **Google Cloud Console (Google Auth Platform)**, **Supabase Dashboard**, and **Vercel Deployment** to ensure Google OAuth sign-in identifies the app as **Arth** and redirects seamlessly in both local development and production.
+This document specifies the exact configuration required in the **Google Cloud Console (Google Auth Platform)**, **Supabase Dashboard**, and **Vercel Deployment** to ensure Google OAuth sign-in identifies the app as **SpendSense** and redirects seamlessly in both local development and production.
 
 ---
 
@@ -41,9 +41,9 @@ Navigate to [Google Cloud Console](https://console.cloud.google.com/apis/credent
 1. Go to **APIs & Services → OAuth consent screen**.
 2. Set **User Type** to **External** (unless restricting to Google Workspace organization).
 3. Under **App Information**:
-   - **App name**: `Arth`
+   - **App name**: `SpendSense`
    - **User support email**: Select your developer/support email (e.g. `anshkmrn@gmail.com`).
-   - **App logo**: Upload the Arth Ledger Minimal logo (120×120 px PNG).
+   - **App logo**: Upload the SpendSense Ledger Minimal logo (120×120 px PNG).
 4. Under **App Domain**:
    - **Application home page**: `https://arth-9h3f.vercel.app`
    - **Application privacy policy link**: `https://arth-9h3f.vercel.app`
@@ -65,14 +65,14 @@ Ensure the following standard non-sensitive scopes are selected:
 
 ### Step 2.3: OAuth 2.0 Web Client Credentials
 1. Go to **APIs & Services → Credentials**.
-2. Select your Web Application client (e.g., "Arth Web Client").
+2. Select your Web Application client (e.g., "SpendSense Web Client").
 3. Under **Authorized JavaScript Origins**:
    - `http://localhost:3000`
    - `https://arth-9h3f.vercel.app`
 4. Under **Authorized redirect URIs**:
    - `https://fbmmkqdwkayrrsodueqd.supabase.co/auth/v1/callback`
    > [!IMPORTANT]
-   > Do **NOT** add `/auth/callback` to the Google Cloud Console redirect URIs. Google talks exclusively to Supabase's hosted callback (`https://fbmmkqdwkayrrsodueqd.supabase.co/auth/v1/callback`). Supabase then forwards the user to Arth's `/auth/callback`.
+   > Do **NOT** add `/auth/callback` to the Google Cloud Console redirect URIs. Google talks exclusively to Supabase's hosted callback (`https://fbmmkqdwkayrrsodueqd.supabase.co/auth/v1/callback`). Supabase then forwards the user to SpendSense's `/auth/callback`.
 5. Click **Save**.
 > [!CAUTION]
 > Never commit or publicly expose the Google OAuth Client Secret.
@@ -126,7 +126,7 @@ INTERNAL_API_URL=https://arth-backend.onrender.com
 
 ---
 
-## 5. Summary of Code Defenses Implemented in Arth
+## 5. Summary of Code Defenses Implemented in SpendSense
 
 1. **Centralized Origin Resolver (`auth-config.ts`)**:
    - Derives `getAppOrigin(headers)` from `NEXT_PUBLIC_APP_URL`, `x-forwarded-host`, and `x-forwarded-proto`.

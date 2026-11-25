@@ -1,6 +1,6 @@
-# Arth product differentiation
+# SpendSense product differentiation
 
-Arth's product direction is one coherent personal-finance record that favors accuracy, source traceability and user control over unreviewed automation.
+SpendSense's product direction is one coherent personal-finance record that favors accuracy, source traceability and user control over unreviewed automation.
 
 ## Highest-priority differentiators
 

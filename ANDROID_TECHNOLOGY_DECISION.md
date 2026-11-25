@@ -1,4 +1,4 @@
-# Arth Android — Technology Architecture Decision
+# SpendSense Android — Technology Architecture Decision
 
 ## Executive Summary
 
@@ -17,16 +17,16 @@
 
 ## 1. Context & Objective
 
-Arth is a disciplined, offline-first personal finance application adhering strictly to the **Ledger Minimal** design system (archival paper / obsidian palettes, 1px hairlines, tabular figures, and honest accounting). 
+SpendSense is a disciplined, offline-first personal finance application adhering strictly to the **Ledger Minimal** design system (archival paper / obsidian palettes, 1px hairlines, tabular figures, and honest accounting). 
 
 Physical device testing revealed several product-level deficiencies:
 1. Inconsistent navigation and backstack behavior (difficulty returning to Dashboard).
 2. Quick Add acting as a full-screen navigation destination rather than an 80%-height bottom sheet overlay.
-3. Visual styling falling short of the refined Arth PWA.
+3. Visual styling falling short of the refined SpendSense PWA.
 4. SMS detection disabled in local development builds.
 5. Incomplete authentication options (missing username/password alongside native Google Sign-In).
 
-The objective is to achieve **complete functional, visual, and behavioral parity with the Arth PWA** while preserving native Android capabilities.
+The objective is to achieve **complete functional, visual, and behavioral parity with the SpendSense PWA** while preserving native Android capabilities.
 
 ---
 
@@ -57,13 +57,13 @@ The objective is to achieve **complete functional, visual, and behavioral parity
 A common rationale for considering React Native is code sharing with the existing React/TypeScript web app (`frontend/`). However:
 
 1. **DOM vs Native Primitives**:
-   - Arth Web utilizes Next.js 16, Tailwind CSS v4, and Radix UI / shadcn/ui.
+   - SpendSense Web utilizes Next.js 16, Tailwind CSS v4, and Radix UI / shadcn/ui.
    - Radix primitives (`@radix-ui/react-dialog`, `@radix-ui/react-select`, `@radix-ui/react-dropdown-menu`) are hard-coded to HTML DOM elements (`<div>`, `<button>`, `ARIA` attributes).
    - React Native does **not** run HTML or DOM elements. None of the existing web JSX components can be imported into React Native without an absolute rewrite into `<View>`, `<Text>`, `<Pressable>`, and `StyleSheet`.
 
 2. **Design Tokens & Ledger Minimal Aesthetic**:
    - Jetpack Compose is a modern declarative UI framework that mirrors React concepts (`@Composable` ≈ functional components, `remember` ≈ `useMemo`/`useRef`, `mutableStateOf` ≈ `useState`, `LaunchedEffect` ≈ `useEffect`).
-   - Every styling attribute in the Arth PWA—hairline borders (`0.5.dp`/`1.dp`), archival paper (`#FBFBF9`), obsidian (`#0C0A09`), tabular numbers, typography scales, necessity badges—is implemented with native precision in Jetpack Compose.
+   - Every styling attribute in the SpendSense PWA—hairline borders (`0.5.dp`/`1.dp`), archival paper (`#FBFBF9`), obsidian (`#0C0A09`), tabular numbers, typography scales, necessity badges—is implemented with native precision in Jetpack Compose.
    - The generic appearance was not a framework limitation; it was a styling fidelity gap that is readily resolved by syncing tokens directly.
 
 ---
@@ -76,7 +76,7 @@ The user requirement states:
 ### Why React Native Creates Architectural Friction for SMS
 
 1. **Process Lifecycle**:
-   - When an SMS arrives while Arth is closed or the device was recently rebooted, Android invokes a `BroadcastReceiver`.
+   - When an SMS arrives while SpendSense is closed or the device was recently rebooted, Android invokes a `BroadcastReceiver`.
    - The React Native JavaScript runtime (Hermes) is **not running**. Spinning up the JS engine to parse an SMS message consumes hundreds of milliseconds, risks ANRs (Application Not Responding), and drains battery.
    - Therefore, the SMS receiver, Indian banking regex parser, deduplicator, and pending suggestion storage **must be written in native Kotlin anyway**.
 

@@ -1,8 +1,8 @@
-# Arth — Native Android Application Implementation Plan
+# SpendSense — Native Android Application Implementation Plan
 
 ## 1. Executive Summary & Architecture Overview
 
-The native Android application for **Arth** is a first-class, offline-first personal finance platform built with **Kotlin** and **Jetpack Compose**. It strictly adheres to Arth's core financial tenets:
+The native Android application for **SpendSense** is a first-class, offline-first personal finance platform built with **Kotlin** and **Jetpack Compose**. It strictly adheres to SpendSense's core financial tenets:
 - **Zero Floating-Point Money**: All monetary amounts are represented as integer paise (`Long`).
 - **Deterministic Historical Accounting**: Balances respect baseline configuration timestamps (`recorded_at <= balances_configured_at`).
 - **Idempotency & Deterministic Sorting**: Uses time-ordered UUIDv7 identifiers with deterministic sorting (`transaction_date DESC, created_at DESC, id DESC`).

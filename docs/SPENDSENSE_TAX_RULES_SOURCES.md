@@ -1,4 +1,4 @@
-# Arth Indian Tax Rules Sources & Statutory References
+# SpendSense Indian Tax Rules Sources & Statutory References
 
 **Last verified:** 2026-11-19 (Asia/Kolkata)  
 **Governing statutes:** Income-tax Act, 1961 (Act No. 43 of 1961) and Income-tax Act, 2025 (Act No. 46 of 2025), read with the applicable Finance Acts.
@@ -7,7 +7,7 @@
 
 ## 1. Statutory Frameworks Supported
 
-Arth implements deterministic, versioned rulesets for personal income tax calculation in India across four distinct tax periods:
+SpendSense implements deterministic, versioned rulesets for personal income tax calculation in India across four distinct tax periods:
 
 1. **Assessment Year 2024–25 (Financial Year 2023–24)**
    - Framework: `income_tax_act_1961`

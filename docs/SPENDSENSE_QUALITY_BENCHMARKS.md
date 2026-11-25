@@ -1,4 +1,4 @@
-# Arth product-quality benchmarks
+# SpendSense product-quality benchmarks
 
 ## Benchmark status
 
@@ -33,6 +33,6 @@ Report at least:
 - **Form adapter coverage:** 10 form adapters (Form 16, Form 16A, AIS/26AS, Payslip, 80C investments, Health Insurance 80D, Home Loan 24(b) & 80C, Education Loan 80E, NPS 80CCD, Donations 80G).
 - **Migration & RLS assertions:** Static SQL schema checks and database function RPC contracts verified via `database-schema-audit.test.ts`. Migrations have not been applied to a live remote Supabase instance, and live RLS enforcement on storage buckets remains an external dependency requiring an active Supabase server.
 - **Scanned-PDF OCR:** Browser-side local OCR uses bundled Tesseract English/Hindi LSTM models with a 25-page safety limit, displaying progress and leaving rows unselected for mandatory user review.
-- **Tax engine rulesets:** Sourced directly from official Ministry of Finance / Income Tax Department enactments (Finance Acts 2023, 2024, 2025 and Income-tax Act, 2025), documented in `docs/ARTH_TAX_RULES_SOURCES.md`.
+- **Tax engine rulesets:** Sourced directly from official Ministry of Finance / Income Tax Department enactments (Finance Acts 2023, 2024, 2025 and Income-tax Act, 2025), documented in `docs/SPENDSENSE_TAX_RULES_SOURCES.md`.
 
 Update this page only with measured test runs and the exact fixture/ruleset commit.

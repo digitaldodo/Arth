@@ -1,6 +1,6 @@
 # Email Confirmation & Supabase SSR Token-Hash Configuration Guide
 
-This document specifies the exact configuration required in the **Supabase Dashboard** to enable reliable email/password confirmation for **Arth** using the SSR PKCE token-hash architecture.
+This document specifies the exact configuration required in the **Supabase Dashboard** to enable reliable email/password confirmation for **SpendSense** using the SSR PKCE token-hash architecture.
 
 ---
 
@@ -49,19 +49,19 @@ Navigate to your project in the [Supabase Dashboard](https://supabase.com/dashbo
 1. Go to **Authentication → Email Templates → Confirm signup**.
 2. **Subject**:
    ```
-   Confirm your Arth Ledger account
+   Confirm your SpendSense Ledger account
    ```
 3. **Body (HTML)**:
    ```html
-   <h2>Confirm your Arth Ledger account</h2>
-   <p>Thank you for signing up for Arth. Follow this link to confirm your email and activate your personal finance ledger:</p>
+   <h2>Confirm your SpendSense Ledger account</h2>
+   <p>Thank you for signing up for SpendSense. Follow this link to confirm your email and activate your personal finance ledger:</p>
    <p>
      <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/">
        Confirm your email
      </a>
    </p>
    <p style="color: #78716c; font-size: 12px; margin-top: 24px;">
-     If you did not sign up for Arth, you can safely ignore this email.
+     If you did not sign up for SpendSense, you can safely ignore this email.
    </p>
    ```
 4. Click **Save**.
@@ -71,7 +71,7 @@ Navigate to your project in the [Supabase Dashboard](https://supabase.com/dashbo
 ## 3. End-to-End Registration & Verification Testing
 
 ### A. Testing Unconfirmed State & Resend Capability
-1. Open the Arth application at `/login`.
+1. Open the SpendSense application at `/login`.
 2. Click **Create Account**.
 3. Fill in:
    - Username: `alice_test`

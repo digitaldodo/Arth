@@ -1,10 +1,10 @@
-# Arth Android Message Detection Architecture
+# SpendSense Android Message Detection Architecture
 
 > **Direct website releases do not support SMS inbox detection.** The production `localRelease` APK removes `READ_SMS`, `RECEIVE_SMS`, and the SMS receiver from its merged manifest, and its feature flag is disabled. This document describes retained native code and possible future distribution work; it does not claim that SMS detection works in the current APK or that another app store has approved it.
 
 > Android classifies `READ_SMS` and `RECEIVE_SMS` as hard-restricted and permits them only when the installer of record allowlists them. A website cannot do this itself. Device package installers can differ in their sideload behavior, and this project has not verified SMS permission grants on physical devices. The direct APK removes the permissions and does not support SMS inbox detection. For current direct releases, use user-selected notification access where supported, consent-based Account Aggregator ingestion, or statement import. See [the direct distribution runbook](docs/ANDROID_DIRECT_DISTRIBUTION.md) for the compatibility report.
 
-Arth provides on-device financial transaction detection from incoming Indian banking, UPI, card, and wallet SMS alerts.
+SpendSense provides on-device financial transaction detection from incoming Indian banking, UPI, card, and wallet SMS alerts.
 
 ---
 
@@ -13,7 +13,7 @@ Arth provides on-device financial transaction detection from incoming Indian ban
 1. **100% On-Device Parsing**:
    Raw SMS message bodies never leave the user's physical Android device. No raw SMS text, phone numbers, or metadata are transmitted over network connections or logged to cloud servers.
 2. **Prominent User Disclosure & Consent**:
-   Before requesting SMS permissions in the Google Play build, Arth presents an explicit, high-contrast modal dialog explaining exactly why SMS access is required and confirming that only financial messages are processed.
+   Before requesting SMS permissions in the Google Play build, SpendSense presents an explicit, high-contrast modal dialog explaining exactly why SMS access is required and confirming that only financial messages are processed.
 3. **No Automatic Ledger Mutation**:
    Detected transactions are never directly written into the user's financial balance or ledger. Instead, they enter a local **Candidate Review Queue** (`SmsSuggestionEntity` in Room).
 4. **Mandatory User Confirmation**:

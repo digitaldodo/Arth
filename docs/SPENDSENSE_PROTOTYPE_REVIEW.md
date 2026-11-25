@@ -1,9 +1,9 @@
-# Arth — Phase 01D, 01D.1 & 01D.2: Interactive Screen-Level Design Prototype Review
+# SpendSense — Phase 01D, 01D.1 & 01D.2: Interactive Screen-Level Design Prototype Review
 
 > **Document Version**: 1.2 — Phase 01D.2 Mobile Responsiveness Fixes Applied  
 > **Status**: Completed / Verified via Headless Chrome CDP / Ready for Owner Review  
 > **Visual Identity**: Concept 1 — Ledger Minimal (Authoritative)  
-> **Prototype Artifact**: [`docs/design-concepts/arth-prototype.html`](file:///d:/Forge/Per/docs/design-concepts/arth-prototype.html)  
+> **Prototype Artifact**: [`docs/design-concepts/arth-prototype.html`](./design-concepts/arth-prototype.html)  
 > **Verification Screenshots**: `docs/design-concepts/verification-shots/`  
 
 ---
@@ -13,7 +13,7 @@
 In accordance with Phase 01D specifications, an interactive, standalone HTML/CSS/JavaScript screen-level prototype has been constructed at:
 `docs/design-concepts/arth-prototype.html`
 
-The prototype faithfully realizes the **Ledger Minimal** visual direction and UX architecture established in `docs/ARTH_UX_BLUEPRINT.md` and `docs/ARTH_DESIGN_SYSTEM.md`. It provides complete in-memory interactivity across all five required application screens, dual-theme switching, responsive layout switching, and progressive disclosure levels.
+The prototype faithfully realizes the **Ledger Minimal** visual direction and UX architecture established in `docs/SPENDSENSE_UX_BLUEPRINT.md` and `docs/SPENDSENSE_DESIGN_SYSTEM.md`. It provides complete in-memory interactivity across all five required application screens, dual-theme switching, responsive layout switching, and progressive disclosure levels.
 
 No production application code, npm packages, database migrations, or authentication configurations have been introduced.
 
@@ -196,7 +196,7 @@ Following owner inspection which identified that the desktop sidebar was occupyi
 1. **Defect A: Desktop Sidebar Displaying Inside Mobile Frames**:
    - **Root Cause**: Tailwind CDN media queries (`md:flex`, `md:hidden`, `flex-col md:flex-row`) evaluate against the outer browser window (`window.innerWidth`), not the inner prototype frame. When the prototype was previewed on desktop monitors (window width ≥ 768px) with the switcher set to `Mobile (390px)`, Tailwind's `.md\:flex` had higher CSS precedence than `.hidden`. The 224px desktop sidebar was rendered side-by-side with the content inside the 390px canvas, leaving only ~166px for the main screen and compressing all controls.
 2. **Defect B: Missing 64px Tablet Rail**:
-   - **Root Cause**: The prototype previously had a binary choice: either show the full 224px sidebar or hide it. The approved 64px collapsed icon navigation rail specified in `ARTH_UX_BLUEPRINT.md` for tablet viewports (768px – 1023px) had not been implemented.
+   - **Root Cause**: The prototype previously had a binary choice: either show the full 224px sidebar or hide it. The approved 64px collapsed icon navigation rail specified in `SPENDSENSE_UX_BLUEPRINT.md` for tablet viewports (768px – 1023px) had not been implemented.
 3. **Defect C: Premature Desktop Tabular Ledger on Narrow Screens**:
    - **Root Cause**: The 7-column tabular ledger used `sm:block` (≥ 640px) and `sm:hidden`. Devices between 640px and 767px were forced to render 7 table columns, causing cramped data cells.
 4. **Defect D: Mobile Content Squishing on 360px Widths**:
@@ -224,7 +224,7 @@ Following owner inspection which identified that the desktop sidebar was occupyi
      - Bottom navigation dock hidden (`display: none !important;`).
    - **Desktop Viewport (≥ 1024px or `.is-desktop-view`)**:
      - `#app-nav-sidebar` expanded to **240px width** (`width: 240px !important;`).
-     - Full brand text ("Arth", "Ledger Minimal").
+     - Full brand text ("SpendSense", "Ledger Minimal").
      - Full "Add Transaction" CTA with keyboard shortcut badge (`N`).
      - Text navigation links with active surface indicators.
      - 40px standard height tabular ledger with sticky header.
@@ -300,11 +300,11 @@ You can review the interactive prototype directly in any browser:
 
 1. **Direct File Path**:
    ```
-   file:///d:/Forge/Per/docs/design-concepts/arth-prototype.html
+   ./design-concepts/arth-prototype.html
    ```
 2. **Artifact Viewer Path**:
    ```
-   file:///C:/Users/Ansh/.gemini/antigravity/brain/470d2ed6-9122-48aa-beca-af9a561b2afc/arth-prototype.html
+   `docs/design-concepts/arth-prototype.html` (historical local workspace artifact archived in repository)
    ```
 
 ### Recommended Review Routine:
@@ -327,4 +327,4 @@ You can review the interactive prototype directly in any browser:
 - [x] Stop condition reached: waiting for owner review and sign-off.
 
 ---
-*End of ARTH_PROTOTYPE_REVIEW.md — Awaiting Owner Direction.*
+*End of SPENDSENSE_PROTOTYPE_REVIEW.md — Awaiting Owner Direction.*

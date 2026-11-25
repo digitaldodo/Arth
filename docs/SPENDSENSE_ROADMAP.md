@@ -1,4 +1,4 @@
-# Arth — Product Roadmap
+# SpendSense — Product Roadmap
 
 > Version 0.1 — Phase 00 Baseline  
 > Last updated: 2026-10-25
@@ -7,7 +7,7 @@
 
 ## Vision
 
-Arth is a private, offline-capable, single-user personal finance tracker built for disciplined manual entry. The app grows incrementally from a simple transaction log into a comprehensive personal finance command centre, while never sacrificing data integrity, privacy, or simplicity.
+SpendSense is a private, offline-capable, single-user personal finance tracker built for disciplined manual entry. The app grows incrementally from a simple transaction log into a comprehensive personal finance command centre, while never sacrificing data integrity, privacy, or simplicity.
 
 ---
 
@@ -36,9 +36,9 @@ Architecture  (CRUD + Auth)   & Export        Full PWA
 ### Deliverables
 - Workspace audit (confirmed empty)
 - `ANTIGRAVITY.md` — persistent agent decision file
-- `docs/ARTH_ARCHITECTURE.md`
-- `docs/ARTH_BUILD_PLAN.md`
-- `docs/ARTH_ROADMAP.md` (this file)
+- `docs/SPENDSENSE_ARCHITECTURE.md`
+- `docs/SPENDSENSE_BUILD_PLAN.md`
+- `docs/SPENDSENSE_ROADMAP.md` (this file)
 
 ### Key decisions
 - Next.js 15 App Router, TypeScript strict, shadcn/ui, Tailwind CSS v4
@@ -202,4 +202,4 @@ Architecture  (CRUD + Auth)   & Export        Full PWA
 
 ---
 
-*End of ARTH_ROADMAP.md*
+*End of SPENDSENSE_ROADMAP.md*

@@ -1,4 +1,4 @@
-# Arth — Build Plan
+# SpendSense — Build Plan
 
 > Version 0.1 — Phase 00 Baseline  
 > Last updated: 2026-10-25
@@ -11,9 +11,9 @@
 **Deliverables**:
 - [x] Workspace audit (empty repo confirmed)
 - [x] `ANTIGRAVITY.md` — persistent agent instruction file
-- [x] `docs/ARTH_ARCHITECTURE.md` — full architecture document
-- [x] `docs/ARTH_BUILD_PLAN.md` — this file
-- [x] `docs/ARTH_ROADMAP.md` — phase-level roadmap
+- [x] `docs/SPENDSENSE_ARCHITECTURE.md` — full architecture document
+- [x] `docs/SPENDSENSE_BUILD_PLAN.md` — this file
+- [x] `docs/SPENDSENSE_ROADMAP.md` — phase-level roadmap
 
 **Decisions locked in this phase**:
 - Next.js 15 App Router + TypeScript strict
@@ -34,21 +34,21 @@
 
 | Task | Details |
 |---|---|
-| UX Blueprint | Complete `docs/ARTH_UX_BLUEPRINT.md` establishing IA, mobile-first navigation, progressive disclosure, 7 core user flows, and interaction rules |
-| UX Approval | Owner review and approval of `docs/ARTH_UX_BLUEPRINT.md` |
+| UX Blueprint | Complete `docs/SPENDSENSE_UX_BLUEPRINT.md` establishing IA, mobile-first navigation, progressive disclosure, 7 core user flows, and interaction rules |
+| UX Approval | Owner review and approval of `docs/SPENDSENSE_UX_BLUEPRINT.md` |
 
 ### 01-B · Visual Direction Exploration ✅
 
 | Task | Details |
 |---|---|
-| Visual Exploration | Explore 3 distinct visual directions in `docs/ARTH_VISUAL_DIRECTION.md` and interactive preview |
+| Visual Exploration | Explore 3 distinct visual directions in `docs/SPENDSENSE_VISUAL_DIRECTION.md` and interactive preview |
 | Visual Decision | Owner selected Concept 1: Ledger Minimal |
 
 ### 01-C · Ledger Minimal Design System ✅
 
 | Task | Details |
 |---|---|
-| Design System Spec | Complete `docs/ARTH_DESIGN_SYSTEM.md` establishing semantic color tokens, Inter/Geist Mono typography, 4px grid geometry, reusable component states, and approved UX decisions |
+| Design System Spec | Complete `docs/SPENDSENSE_DESIGN_SYSTEM.md` establishing semantic color tokens, Inter/Geist Mono typography, 4px grid geometry, reusable component states, and approved UX decisions |
 | Design System Review| Owner review of design system specifications prior to prototype |
 
 ### 01-D · Screen-Level Prototype ✅
@@ -57,7 +57,7 @@
 |---|---|---|
 | Interactive Prototype | Screen-level prototype implementing Ledger Minimal across Dashboard, Quick Entry, Ledger, Categories, and Settings (`docs/design-concepts/arth-prototype.html`) | Complete ✅ |
 | Responsiveness & Review | Fixed mobile navigation, bottom sheet quick add, zero horizontal overflow at 360px, 390px, 768px, 1120px; 12 verification screenshots saved | Complete ✅ |
-| Prototype Approval | Owner sign-off documented in `docs/ARTH_PROTOTYPE_REVIEW.md` | Complete ✅ |
+| Prototype Approval | Owner sign-off documented in `docs/SPENDSENSE_PROTOTYPE_REVIEW.md` | Complete ✅ |
 
 ### 01-E · Project Scaffold & Tooling Setup ✅
 
@@ -68,7 +68,7 @@
 | Ledger Minimal Design Tokens | Semantic color tokens (Warm Paper `#FBFBF9` light, Obsidian `#0C0A09` dark) integrated into `src/app/globals.css` and Tailwind `@theme` | Complete ✅ |
 | Typography & Font Optimization | Configured `next/font/google` for `Inter` (UI) and `Geist Mono` (tabular financial figures) | Complete ✅ |
 | Currency Utility & Theme Toggle | Created `src/lib/format.ts` (paise to INR) and `src/components/ThemeToggle.tsx` (dual theme support) | Complete ✅ |
-| Deliberate Foundation Page | Rendered honest, minimal Arth foundation placeholder at `src/app/page.tsx` | Complete ✅ |
+| Deliberate Foundation Page | Rendered honest, minimal SpendSense foundation placeholder at `src/app/page.tsx` | Complete ✅ |
 | Core Tooling & Strict Config | `tsconfig.json` with strict mode and `@/*` alias, ESLint 9 (`next/core-web-vitals`), `README.md`, `.gitignore`, `.env.example` | Complete ✅ |
 | Quality Gates Verification | `pnpm install`, `pnpm lint` (0 errors), `pnpm typecheck` (0 errors), `pnpm build` (clean), and CDP browser inspection (0 console errors, exact RGB matches) | Complete ✅ |
 | Git Repository Init | Git initialized with verified `.gitignore` excluding build artifacts and secrets | Complete ✅ |
@@ -211,7 +211,7 @@
 | ACID & Concurrency Test Suite | Created `backend/tests/database-acid-reliability.test.ts` with 11 automated test cases verifying transaction-outbox atomicity, settlement limits, idempotent replays, concurrent settlement over-settlement prevention, cross-user isolation, category reorder permutation validation, and non-destructive archival | Complete ✅ |
 | Backend Services Hardening | Hardened `SupabaseTransactionService` to handle concurrent unique-key replay, removed redundant read-before-write checks in `SupabaseCategoryService`, and implemented settlement idempotency checks in both live and in-memory people services | Complete ✅ |
 | Database Operations Spec | Authored `docs/DATABASE_OPERATIONS.md` documenting ACID guarantees, disaster recovery runbook, PITR setup, append-only protocol, and query benchmarks | Complete ✅ |
-| Architecture Document Reconciliation | Reconciled `docs/ARTH_ARCHITECTURE.md` to authoritative single-source-of-truth model for settlement balances (no duplicate mutable column) and updated constraints matrix | Complete ✅ |
+| Architecture Document Reconciliation | Reconciled `docs/SPENDSENSE_ARCHITECTURE.md` to authoritative single-source-of-truth model for settlement balances (no duplicate mutable column) and updated constraints matrix | Complete ✅ |
 
 **Acceptance criteria**:
 - [x] Transaction write and outbox event insert commit or rollback atomically
@@ -277,10 +277,10 @@
 | Task | Details | Status |
 |---|---|---|
 | Dashboard Fallback Elimination | Fixed preflight bug in `backend/src/modules/dashboard/dashboard.service.ts`: eliminated silent fallback to raw table query when `fn_dashboard_summary` RPC fails, logging safe diagnostics without secret leakage and raising clean service errors. Verified via 2 dedicated unit tests. | Complete ✅ |
-| App Router Web App Manifest | Implemented `frontend/src/app/manifest.ts` using Next.js `MetadataRoute.Manifest` with `name`, `short_name: 'Arth'`, `start_url: '/'`, `scope: '/'`, `id: '/'`, `display: 'standalone'`, `background_color: '#FBFBF9'`, `theme_color: '#1C1917'`, `lang: 'en-IN'`, `dir: 'ltr'`, and complete icon definitions. Served automatically at `/manifest.webmanifest`. | Complete ✅ |
+| App Router Web App Manifest | Implemented `frontend/src/app/manifest.ts` using Next.js `MetadataRoute.Manifest` with `name`, `short_name: 'SpendSense'`, `start_url: '/'`, `scope: '/'`, `id: '/'`, `display: 'standalone'`, `background_color: '#FBFBF9'`, `theme_color: '#1C1917'`, `lang: 'en-IN'`, `dir: 'ltr'`, and complete icon definitions. Served automatically at `/manifest.webmanifest`. | Complete ✅ |
 | Ledger Minimal PNG Icons | Generated production-quality PNG icon assets matching Ledger Minimal obsidian aesthetic (`#0C0A09` background, `#FBFBF9` warm paper mark, `#10B981` ledger emerald ruling rule): `icon-192x192.png`, `icon-512x512.png`, `icon-512x512-maskable.png` (verified center 80% safe zone), `apple-touch-icon.png` (180×180), and `favicon.ico`. | Complete ✅ |
-| Viewport & Apple Metadata | Extended `frontend/src/app/layout.tsx` with light/dark `themeColor` definitions (`#FBFBF9` / `#0C0A09`), `viewportFit: 'cover'`, `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Arth' }`, and icon declarations. | Complete ✅ |
-| Restrained Install Experience | Implemented `usePwaInstall` hook (using `useSyncExternalStore`) and `InstallPromptCard` inside More/Settings (`activeView === 'more'`). Captures deferred `beforeinstallprompt`, listens to `appinstalled`, provides non-intrusive "Install Arth" action, detects standalone mode, and offers concise step-by-step guidance for iOS/iPadOS Safari without unsolicited popups. | Complete ✅ |
+| Viewport & Apple Metadata | Extended `frontend/src/app/layout.tsx` with light/dark `themeColor` definitions (`#FBFBF9` / `#0C0A09`), `viewportFit: 'cover'`, `appleWebApp: { capable: true, statusBarStyle: 'default', title: 'SpendSense' }`, and icon declarations. | Complete ✅ |
+| Restrained Install Experience | Implemented `usePwaInstall` hook (using `useSyncExternalStore`) and `InstallPromptCard` inside More/Settings (`activeView === 'more'`). Captures deferred `beforeinstallprompt`, listens to `appinstalled`, provides non-intrusive "Install SpendSense" action, detects standalone mode, and offers concise step-by-step guidance for iOS/iPadOS Safari without unsolicited popups. | Complete ✅ |
 | Automated PWA Tests | Added 4 automated tests in `frontend/tests/pwa-manifest.test.ts` verifying manifest contract, physical icon file existence, dimensions, PNG headers (`89 50 4E 47`), strict absence of service worker registrations in Phase 01N, and layout metadata. | Complete ✅ |
 
 **Acceptance criteria**:
@@ -385,7 +385,7 @@
 | Settings UI integration | `SheetsConnectionCard.tsx` — connection setup, copy email, sync now, full reconcile, disconnect | Complete ✅ |
 | CSV export | `frontend/src/lib/export/csv-export.ts` — RFC 4180 escaping, CWE-1236 formula-injection sanitization, exact paise math | Complete ✅ |
 | JSON export | `frontend/src/lib/export/json-export.ts` — versioned backup (`version: 1`), full audit preservation | Complete ✅ |
-| UI Corrections (Part A) | Favicon replaced with multi-resolution monochrome Arth logo; visible `(Asia/Kolkata)` labels removed; misleading password card and PWA info cards removed | Complete ✅ |
+| UI Corrections (Part A) | Favicon replaced with multi-resolution monochrome SpendSense logo; visible `(Asia/Kolkata)` labels removed; misleading password card and PWA info cards removed | Complete ✅ |
 
 **Acceptance criteria**:
 - [x] Outbox event claiming & batching with `FOR UPDATE SKIP LOCKED` prevents concurrent worker collisions
@@ -486,4 +486,4 @@ A phase is done when:
 
 ---
 
-*End of ARTH_BUILD_PLAN.md*
+*End of SPENDSENSE_BUILD_PLAN.md*
