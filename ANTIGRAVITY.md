@@ -154,5 +154,17 @@ Supabase
 | 05 | Goals & Recurring | FinancialGoals, RecurringTransactions, SubscriptionTracker |
 | 06 | Financial Tools, AI & Health | FinancialTools, FinancialHealth, AIAdvisor |
 
+## Git Branch Ownership & Collaboration Rules
+
+- **`main` is protected and owner-controlled**: Never commit or push directly to `main` unless explicitly authorized for that specific task; never overwrite, reset, force-push, or rewrite `main`. Explicit permission applies only to that single task.
+- **Dedicated team member branches**:
+  - Ansh Gupta: `ansh`
+  - Ayush Chaudhary: `ayush`
+  - Arun Kushwah: `arun`
+  - Akshat Kumar: `akshat`
+  - Dev Chaudhary: `dev`
+- **Isolation & PR integration**: Never commit one member's changes under another member's branch, switch/modify another member's branch without authorization, or merge between member branches without approval. Completed work targets `main` via Pull Request for owner review and integration.
+- **Pre-flight check before any Git action**: Always check current branch, `git status`, uncommitted changes, and intended target branch. If on `main` for an implementation task without explicit authorization, stop and ask which team member's branch should receive the changes.
+
 ---
-*Last updated: Phase 00 — 2026-10-25*
+*Last updated: Phase 00 — 2026-10-25 (Branch governance appended 2026-11-25)*

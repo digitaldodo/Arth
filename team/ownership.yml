@@ -1,0 +1,196 @@
+# SpendSense — Strict File, Directory & Database Ownership Registry
+# Baseline: main @ 518d3c9 (Group 369)
+
+version: 1
+product: SpendSense
+legacy_identifier: Arth
+default_branch: main
+
+integration_lead:
+  name: Ansh Gupta
+  roll_number: "2315000330"
+  shared_resources_controlled:
+    - path: backend/src/app.ts
+      policy: PR-gated plugin registration only
+    - path: packages/contracts/src/
+      policy: Contract-first PR with affected consumer sign-off
+    - path: packages/financial-modules/src/shared/
+      policy: Contract-first PR with affected consumer sign-off
+    - path: frontend/src/features/transactions/TransactionAppShell.tsx
+      policy: PR-gated dynamic import slot replacement only
+    - path: frontend/src/lib/api-client/
+      policy: Shared client preserved; new modules add fetchers inside their own feature folder
+    - path: package.json
+      policy: Root workspace scripts & dependencies maintainer only
+    - path: pnpm-workspace.yaml
+      policy: Integration lead only
+    - path: pnpm-lock.yaml
+      policy: Integration lead / coordinated dependency PRs only
+
+frozen_resources:
+  - path: supabase/migrations/0001_create_profiles.sql .. 0039_consolidated_ledger_balances.sql
+    reason: Applied/historical append-only migration chain
+  - path: backend/src/plugins/auth.ts
+    reason: Shared JWT verification security boundary
+  - path: frontend/src/proxy.ts
+    reason: Shared Next.js 16 Supabase SSR session refresher
+  - path: frontend/src/features/auth/
+    reason: Shared authentication lifecycle
+  - path: frontend/src/app/api/backend/[...segments]/route.ts
+    reason: Frozen catch-all proxy; new modules must use dedicated /api/backend/<module>/ routes
+  - path: backend/src/modules/documents/
+    reason: Shared document metadata & storage intake boundary consumed by Module E
+  - path: backend/src/modules/balances/
+    reason: Shared consolidated Cash/Online balance engine
+  - path: backend/src/modules/transactions/
+    reason: Core ledger CRUD & outbox trigger boundary
+  - path: backend/src/modules/categories/
+    reason: Shared category taxonomy
+  - path: backend/src/modules/people/
+    reason: Existing People & Money Tracker extension
+  - path: backend/src/modules/dashboard/
+    reason: Existing dashboard summary RPC wrapper
+  - path: android/
+    reason: Native Android companion (frozen during web/backend synopsis sprint)
+
+modules:
+  A_transaction_intelligence:
+    owner: Ansh Gupta
+    roll_number: "2315000330"
+    migration_slot: "0040 (only if needed for merchant_rules / ML provenance)"
+    owned_paths:
+      - frontend/src/features/imports/
+      - frontend/src/features/categorization/
+      - frontend/src/features/transactions/
+      - frontend/src/app/api/backend/financial-imports/
+      - frontend/src/app/api/backend/categorization/
+      - backend/src/modules/financial-imports/
+      - backend/src/modules/categorization/
+      - ml/transaction-categorization/
+      - packages/financial-modules/src/modules/personalized-categories/
+      - packages/financial-modules/src/modules/recurring-payments/
+      - team/modules/A-transaction-intelligence/
+    owned_tables:
+      - public.merchant_rules
+      - public.statement_import_batches
+      - public.statement_import_batch_items
+      - public.transaction_links
+      - public.financial_accounts
+      - public.account_movements
+    read_only_tables:
+      - public.transactions
+      - public.categories
+    must_not_modify:
+      - backend/src/modules/safe-to-spend/
+      - backend/src/modules/emi-affordability/
+      - backend/src/modules/goal-planner/
+      - backend/src/modules/purchase-simulator/
+      - backend/src/modules/tax/
+      - backend/src/modules/documents/
+      - frontend/src/features/tax/
+
+  B_safe_to_spend:
+    owner: Arun Kushwah
+    roll_number: "2315000441"
+    migration_slot: "0041"
+    owned_paths:
+      - packages/financial-modules/src/modules/safe-to-spend/
+      - packages/financial-modules/src/modules/spending-forecast/
+      - frontend/src/features/safe-to-spend/
+      - frontend/src/features/spending-forecast/
+      - backend/src/modules/safe-to-spend/
+      - backend/src/modules/spending-forecast/
+      - frontend/src/app/api/backend/planning/safe-to-spend/
+      - frontend/src/app/api/backend/planning/spending-forecast/
+      - team/modules/B-safe-to-spend/
+    owned_tables:
+      - public.cash_flow_commitments (planned in 0041)
+    read_only_tables:
+      - public.transactions
+      - public.profiles
+      - public.balance_movements
+      - public.transaction_links
+    must_not_modify:
+      - backend/src/modules/balances/
+      - backend/src/modules/transactions/
+      - backend/src/plugins/auth.ts
+      - backend/src/modules/emi-affordability/
+      - backend/src/modules/goal-planner/
+      - backend/src/modules/purchase-simulator/
+      - backend/src/modules/tax/
+
+  C_emi_affordability:
+    owner: Akshat Kumar
+    roll_number: "2315000205"
+    migration_slot: "0042"
+    owned_paths:
+      - packages/financial-modules/src/modules/emi-affordability/
+      - frontend/src/features/emi-affordability/
+      - backend/src/modules/emi-affordability/
+      - frontend/src/app/api/backend/planning/emi-affordability/
+      - team/modules/C-emi-affordability/
+    owned_tables:
+      - public.loan_obligations (planned in 0042)
+    read_only_tables:
+      - public.transactions
+      - public.profiles
+    must_not_modify:
+      - backend/src/modules/safe-to-spend/
+      - backend/src/modules/spending-forecast/
+      - backend/src/modules/goal-planner/
+      - backend/src/modules/purchase-simulator/
+      - backend/src/modules/tax/
+      - frontend/src/features/safe-to-spend/
+      - frontend/src/features/goal-planner/
+
+  D_goal_planning:
+    owner: Ayush Chaudhary
+    roll_number: "2315000536"
+    migration_slot: "0043"
+    owned_paths:
+      - packages/financial-modules/src/modules/goal-planner/
+      - packages/financial-modules/src/modules/purchase-simulator/
+      - frontend/src/features/goal-planner/
+      - frontend/src/features/purchase-simulator/
+      - backend/src/modules/goal-planner/
+      - backend/src/modules/purchase-simulator/
+      - frontend/src/app/api/backend/planning/goals/
+      - frontend/src/app/api/backend/planning/purchase-simulate/
+      - team/modules/D-goal-planning/
+    owned_tables:
+      - public.financial_goals (planned in 0043)
+      - public.goal_contributions (planned in 0043)
+    read_only_tables:
+      - public.transactions
+      - public.profiles
+    must_not_modify:
+      - backend/src/modules/safe-to-spend/
+      - backend/src/modules/emi-affordability/
+      - frontend/src/features/safe-to-spend/
+      - frontend/src/features/emi-affordability/
+      - backend/src/modules/tax/
+
+  E_tax_planning:
+    owner: Dev Chaudhary
+    roll_number: "2315000708"
+    migration_slot: "none_reserved (uses existing financial_documents, tax_extracted_fields, tax_profiles from 0028)"
+    owned_paths:
+      - backend/src/modules/tax/
+      - packages/financial-modules/src/modules/tax-calculation/
+      - frontend/src/features/tax/
+      - frontend/src/app/api/backend/tax/
+      - team/modules/E-tax-planning/
+    owned_tables:
+      - public.tax_profiles
+    read_only_tables:
+      - public.financial_documents
+      - public.tax_extracted_fields
+      - public.transactions
+    must_not_modify:
+      - backend/src/modules/documents/
+      - backend/src/modules/transactions/
+      - backend/src/modules/financial-imports/
+      - frontend/src/features/imports/
+      - frontend/src/features/safe-to-spend/
+      - frontend/src/features/emi-affordability/
+      - frontend/src/features/goal-planner/
