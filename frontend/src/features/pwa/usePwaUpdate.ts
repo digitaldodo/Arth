@@ -13,8 +13,9 @@ export interface PwaUpdateOptions {
 }
 
 /**
- * Hook providing automatic, background PWA update detection, download, and safe activation.
- * Guarantees zero interruption during transaction entry, editing, or synchronization.
+ * Hook providing service worker registration and safe, non-disruptive background updates.
+ * Supports both mobile and desktop installed PWAs while keeping browser sessions classified
+ * separately so offline ledger shells only activate in standalone installed windows.
  */
 export function usePwaUpdate(options: PwaUpdateOptions = {}) {
   const {
@@ -30,7 +31,6 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
   const pendingReloadRef = useRef<boolean>(false);
   const hasLoadedControllerRef = useRef<boolean>(false);
 
-  // Activates a waiting service worker once safe
   const activateWaitingWorker = useCallback((worker: ServiceWorker) => {
     if (!worker) return;
     if (worker.state === 'redundant') return;
@@ -39,7 +39,6 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
 
     if (isCriticalOperationActive()) {
       console.log('[PWA Update] Deferring update activation: critical operation in progress');
-      // Subscribe to wait for critical operation to finish
       const unsubscribe = onCriticalOperationChange((isBusy) => {
         if (!isBusy) {
           unsubscribe();
@@ -55,13 +54,12 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
     worker.postMessage({ type: 'SKIP_WAITING' });
   }, []);
 
-  // Request browser service worker check
   const checkForUpdate = useCallback(async () => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
     const now = Date.now();
     if (now - lastCheckTimeRef.current < throttleMs) {
-      return; // Rate limit update checks
+      return;
     }
     lastCheckTimeRef.current = now;
 
@@ -76,7 +74,6 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
           const data = await res.json();
           if (data.buildId) {
             if (!currentBuildIdRef.current) {
-              // Compare with the last known deployment when available across reloads.
               try {
                 currentBuildIdRef.current = localStorage.getItem('arth_build_id');
               } catch {
@@ -89,21 +86,18 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
               console.log(
                 `[PWA Update] New deployment detected (${currentBuildIdRef.current} → ${data.buildId}). Triggering immediate SW update check.`
               );
-              // Advance the tracked ID so this deployment is not logged again
               currentBuildIdRef.current = data.buildId;
               try {
                 localStorage.setItem('arth_build_id', data.buildId);
               } catch {
                 // Persistent comparison is an enhancement; SW checks still work.
               }
-              // Trigger an immediate SW update check for the new deployment
               const reg =
                 registrationRef.current ?? (await navigator.serviceWorker.getRegistration());
               if (reg) {
                 registrationRef.current = reg;
                 await reg.update();
               }
-              // Return early — the standard update() below is redundant now
               return;
             }
             try {
@@ -142,10 +136,9 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
     }
 
     hasLoadedControllerRef.current = Boolean(navigator.serviceWorker.controller);
-    const runtimeMode = getApplicationRuntimeMode();
-    const isInstalledMobilePwa = runtimeMode === 'installed-mobile-pwa';
 
     const classifyClient = () => {
+      const runtimeMode = getApplicationRuntimeMode();
       const message = { type: 'CLASSIFY_CLIENT', runtimeMode };
       navigator.serviceWorker.controller?.postMessage(message);
       registrationRef.current?.active?.postMessage(message);
@@ -154,9 +147,23 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
     let isMounted = true;
     let refreshTriggered = false;
 
-    // Handle controller change (when new SW activates)
+    const executeSafeReload = () => {
+      if (refreshTriggered) return;
+
+      const lastReload = Number(sessionStorage.getItem('arth_last_sw_reload') || 0);
+      if (Date.now() - lastReload < 10000) {
+        console.warn('[PWA Update] Reload suppressed: cooldown active');
+        return;
+      }
+
+      refreshTriggered = true;
+      sessionStorage.setItem('arth_last_sw_reload', String(Date.now()));
+      console.log('[PWA Update] Reloading to activate updated version.');
+      window.location.reload();
+    };
+
     const handleControllerChange = () => {
-      // If this was the very first install, do not reload
+      classifyClient();
       if (!hasLoadedControllerRef.current) {
         hasLoadedControllerRef.current = true;
         return;
@@ -164,7 +171,6 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
 
       if (refreshTriggered) return;
 
-      // Safe reload guard: check if user is busy with transaction
       if (isCriticalOperationActive()) {
         console.log('[PWA Update] Deferring reload: user is currently editing or saving data');
         pendingReloadRef.current = true;
@@ -182,55 +188,20 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
       executeSafeReload();
     };
 
-    const executeSafeReload = () => {
-      if (refreshTriggered) return;
-
-      // Prevent reload loops with 10-second cooldown
-      const lastReload = Number(sessionStorage.getItem('arth_last_sw_reload') || 0);
-      if (Date.now() - lastReload < 10000) {
-        console.warn('[PWA Update] Reload suppressed: cooldown active');
-        return;
-      }
-
-      refreshTriggered = true;
-      sessionStorage.setItem('arth_last_sw_reload', String(Date.now()));
-      console.log('[PWA Update] Reloading to activate updated version.');
-      window.location.reload();
-    };
-
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-    navigator.serviceWorker.addEventListener('controllerchange', classifyClient);
 
-    // Only an installed mobile PWA creates a service-worker registration. Ordinary web
-    // sessions update any legacy root registration once so the new worker stops applying
-    // the PWA fallback to them, then classify the current client as online-first.
-    if (!isInstalledMobilePwa) {
-      const legacyRegistration = navigator.serviceWorker.getRegistration('/');
-      const onLegacyUpdateFound = () => {
-        const worker = registrationRef.current?.installing;
-        if (!worker) return;
-        worker.addEventListener('statechange', () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) activateWaitingWorker(worker);
-        });
-      };
-      void legacyRegistration.then(async (reg) => {
-        if (!isMounted || !reg) return;
-        registrationRef.current = reg;
-        classifyClient();
-        if (reg.waiting) activateWaitingWorker(reg.waiting);
-        reg.addEventListener('updatefound', onLegacyUpdateFound);
-        try { await reg.update(); } catch { /* an offline desktop remains online-first */ }
-      });
-      classifyClient();
-      return () => {
-        isMounted = false;
-        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-        navigator.serviceWorker.removeEventListener('controllerchange', classifyClient);
-        void legacyRegistration.then((reg) => reg?.removeEventListener('updatefound', onLegacyUpdateFound));
-      };
+    // Re-classify client if browser transitions into standalone display mode after installation
+    let standaloneQuery: MediaQueryList | null = null;
+    try {
+      standaloneQuery = window.matchMedia('(display-mode: standalone)');
+      standaloneQuery.addEventListener('change', classifyClient);
+    } catch {
+      standaloneQuery = null;
     }
+    window.addEventListener('appinstalled', classifyClient);
 
-    // Register /sw.js only for installed mobile PWA clients.
+    // Register /sw.js across supported origins so PWA installability and precached offline
+    // shells are ready for both mobile and Windows/desktop standalone installs.
     navigator.serviceWorker
       .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
@@ -238,13 +209,11 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
         registrationRef.current = reg;
         classifyClient();
 
-        // If an updated worker is already waiting in the background, schedule activation
         if (reg.waiting) {
           waitingWorkerRef.current = reg.waiting;
           activateWaitingWorker(reg.waiting);
         }
 
-        // Listen for new service worker installation
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
@@ -262,27 +231,25 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
         console.warn('[PWA Update] Service Worker registration failed:', err);
       });
 
-    // Check immediately on launch after initiating registration.
     void checkForUpdate();
 
-    // 1. Periodic background checks while app is open (every 5 minutes)
     const intervalId = setInterval(() => {
-      checkForUpdate();
+      void checkForUpdate();
     }, checkIntervalMs);
 
-    // 2. Lifecycle triggers: return from background, window focus, coming online
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        checkForUpdate();
+        classifyClient();
+        void checkForUpdate();
       }
     };
 
     const handleFocus = () => {
-      checkForUpdate();
+      void checkForUpdate();
     };
 
     const handleOnline = () => {
-      checkForUpdate();
+      void checkForUpdate();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -293,7 +260,8 @@ export function usePwaUpdate(options: PwaUpdateOptions = {}) {
       isMounted = false;
       clearInterval(intervalId);
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-      navigator.serviceWorker.removeEventListener('controllerchange', classifyClient);
+      standaloneQuery?.removeEventListener('change', classifyClient);
+      window.removeEventListener('appinstalled', classifyClient);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);

@@ -36,7 +36,7 @@ describe('PWA Web App Manifest, Icon Assets & Baseline Installability', () => {
 
     assert.equal(m.name, 'SpendSense — Personal Finance Tracker');
     assert.equal(m.short_name, 'SpendSense');
-    assert.equal(m.start_url, '/offline?arth_runtime=installed-mobile-pwa');
+    assert.equal(m.start_url, '/');
     assert.equal(m.scope, '/');
     assert.equal(m.id, '/');
     assert.equal(m.display, 'standalone');

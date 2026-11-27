@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { useStandalonePwa } from '@/features/pwa/useStandalonePwa';
 import { usePwaInstall } from '@/features/pwa/usePwaInstall';
+import { useApkDownload } from '@/features/android/useApkDownload';
 import type { AndroidReleaseInfo } from '@/app/api/android/release/route';
 
 interface DownloadClientProps {
@@ -130,12 +131,38 @@ const VERIFIED_FEATURES: Array<{ code: string; title: string; detail: string }> 
 
 export function DownloadClient({ initialRelease }: DownloadClientProps) {
   const [release, setRelease] = useState<AndroidReleaseInfo>(initialRelease);
+  const [releaseReloadNonce, setReleaseReloadNonce] = useState(0);
   const [copiedKey, setCopiedKey] = useState<'apk' | 'installer' | 'sms' | null>(null);
   const [activePreview, setActivePreview] = useState<PreviewTabId>('dashboard');
   const [activeGuide, setActiveGuide] = useState<GuideTabId>('standard');
 
   const isStandalonePwa = useStandalonePwa();
-  const { isInstallable: isPwaInstallable, isInstalled: isPwaInstalled, installApp } = usePwaInstall();
+  const {
+    isInstallable: isPwaInstallable,
+    isInstalled: isPwaInstalled,
+    isInstalling: isPwaInstalling,
+    isWindows,
+    isIos,
+    installApp,
+  } = usePwaInstall();
+
+  const standardDownload = useApkDownload({
+    downloadUrl: '/api/android/download',
+    fileName: release.apkFileName || 'SpendSense.apk',
+    available: release.published,
+  });
+
+  const installerDownload = useApkDownload({
+    downloadUrl: release.installerDownloadUrl || '/api/android/installer-download',
+    fileName: release.installerFileName || 'SpendSense-Installer.apk',
+    available: Boolean(release.published && release.installerDownloadUrl),
+  });
+
+  const smsDownload = useApkDownload({
+    downloadUrl: release.smsDownloadUrl || '/api/android/sms-download',
+    fileName: release.smsApkFileName || 'SpendSense-SMS.apk',
+    available: Boolean(release.published && release.smsDownloadUrl),
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +182,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [releaseReloadNonce]);
 
   const handleCopyChecksum = async (value: string, key: 'apk' | 'installer' | 'sms') => {
     if (!value) return;
@@ -249,59 +276,111 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
           </div>
 
           {/* Primary Action Bar — Only render APK download CTA when a valid release artifact is available */}
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
-            {release.published ? (
-              <a
-                href={'/api/android/download'}
-                download={release.apkFileName || 'SpendSense.apk'}
-                className="inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+              {release.published ? (
+                <a
+                  href={'/api/android/download'}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void standardDownload.startDownload();
+                  }}
+                  aria-disabled={standardDownload.isDownloading}
+                  className={`inline-flex items-center justify-center gap-2.5 min-h-[44px] px-5 py-2.5 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer ${
+                    standardDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
+                  }`}
                 >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                <span>Download for Android</span>
-                {release.apkSize && (
-                  <span className="text-[11px] font-mono font-normal opacity-80 border-l border-current/25 pl-2">
-                    {release.apkSize}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>
+                    {standardDownload.isDownloading
+                      ? standardDownload.progressPercent !== null
+                        ? `Downloading ${standardDownload.progressPercent}%…`
+                        : 'Downloading APK…'
+                      : 'Download for Android'}
                   </span>
-                )}
-              </a>
-            ) : (
-              <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] flex-1 min-w-0">
-                <strong className="text-[var(--text-primary)] font-semibold">Release download inactive locally:</strong>{' '}
-                No signed APK release artifact is published or reachable from this local server. Connect GitHub Release
-                credentials (`GITHUB_TOKEN`) or download from the production release endpoint when live.
-              </div>
+                  {release.apkSize && (
+                    <span className="text-[11px] font-mono font-normal opacity-80 border-l border-current/25 pl-2">
+                      {release.apkSize}
+                    </span>
+                  )}
+                </a>
+              ) : (
+                <div className="p-3.5 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] flex-1 min-w-0 flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    <strong className="text-[var(--text-primary)] font-semibold">Release download unavailable:</strong>{' '}
+                    No verified signed APK release artifact is currently reachable. Check connectivity or retry.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReleaseReloadNonce((n) => n + 1)}
+                    className="px-3 py-1.5 rounded-[3px] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] font-semibold text-[var(--text-primary)] cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors"
+              >
+                Open SpendSense Web App
+              </Link>
+
+              {isPwaInstallable && !isStandalonePwa && !isPwaInstalled && (
+                <button
+                  type="button"
+                  onClick={() => void installApp()}
+                  disabled={isPwaInstalling}
+                  className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {isPwaInstalling
+                    ? 'Installing…'
+                    : isWindows
+                      ? 'Install SpendSense on Windows'
+                      : 'Install Browser PWA Instead'}
+                </button>
+              )}
+            </div>
+
+            {standardDownload.status === 'complete' && (
+              <p
+                role="status"
+                className="text-xs text-[var(--status-success-fg)] bg-[var(--status-success-bg)] border border-[var(--status-success-border)] rounded-[4px] px-3 py-2"
+              >
+                Download complete: <strong>{standardDownload.downloadedFileName}</strong>.
+              </p>
             )}
 
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors"
-            >
-              Open SpendSense Web App
-            </Link>
-
-            {isPwaInstallable && !isStandalonePwa && !isPwaInstalled && (
-              <button
-                type="button"
-                onClick={() => void installApp()}
-                className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[13px] font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+            {standardDownload.status === 'failed' && standardDownload.errorMessage && (
+              <div
+                role="alert"
+                className="text-xs text-[var(--status-error-fg)] bg-[var(--status-error-bg)] border border-[var(--status-error-border)] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-between gap-2"
               >
-                Install Browser PWA Instead
-              </button>
+                <span>{standardDownload.errorMessage}</span>
+                <button
+                  type="button"
+                  onClick={() => void standardDownload.startDownload()}
+                  className="underline font-semibold cursor-pointer"
+                >
+                  Retry Download
+                </button>
+              </div>
             )}
           </div>
 
@@ -324,15 +403,17 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                 {isStandalonePwa
                   ? 'You are currently running the installed SpendSense Web PWA. The native Android APK on this page is a separate Kotlin application with native device capture capabilities.'
-                  : 'iOS (iPhone / iPad), desktop browsers, and Chromebooks should use the official SpendSense Web App or install it as a Progressive Web App (PWA) from your browser.'}
+                  : isIos
+                    ? 'On iPhone and iPad, install SpendSense directly from Safari via Share → Add to Home Screen.'
+                    : 'Windows, macOS, Linux, and iOS browsers can install SpendSense as a standalone Progressive Web App (PWA) directly from the homepage or browser menu.'}
               </p>
             </div>
           </div>
 
-          {/* Optional Direct SMS Helper Banner (only when verified SMS + Installer assets are published) */}
-          {release.published && release.installerDownloadUrl && (
+          {/* Optional Direct SMS Helper & SMS APK Banner (only when verified assets are published) */}
+          {release.published && (release.installerDownloadUrl || release.smsDownloadUrl) && (
             <section
-              className="rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 sm:p-5 space-y-3"
+              className="rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 sm:p-5 space-y-4"
               aria-labelledby="sms-installer-title"
             >
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -346,23 +427,86 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                   <p className="text-xs leading-relaxed text-[var(--text-secondary)] max-w-2xl">
                     Android restricts <code className="font-mono">READ_SMS</code> and{' '}
                     <code className="font-mono">RECEIVE_SMS</code> for standard browser-downloaded APKs. The signed
-                    helper verifies the SMS-enabled package and allowlists only those two permissions during Android&apos;s
-                    user-confirmed install session.
+                    helper verifies <code className="font-mono">SpendSense-SMS.apk</code> and allowlists only those two
+                    permissions during Android&apos;s user-confirmed install session.
                   </p>
                 </div>
-                <a
-                  href="/api/android/installer-download"
-                  download={release.installerFileName || 'SpendSense-Installer.apk'}
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] px-4 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
-                >
-                  Download Installer
-                  {release.installerSize && (
-                    <span className="ml-2 text-[11px] font-mono font-normal text-[var(--text-muted)]">
-                      {release.installerSize}
-                    </span>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {release.installerDownloadUrl && (
+                    <a
+                      href={release.installerDownloadUrl}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void installerDownload.startDownload();
+                      }}
+                      aria-disabled={installerDownload.isDownloading}
+                      className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] px-4 py-2 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer ${
+                        installerDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
+                      }`}
+                    >
+                      {installerDownload.isDownloading ? 'Downloading Installer…' : 'Download Installer'}
+                      {release.installerSize && (
+                        <span className="ml-2 text-[11px] font-mono font-normal text-[var(--text-muted)]">
+                          {release.installerSize}
+                        </span>
+                      )}
+                    </a>
                   )}
-                </a>
+                  {release.smsDownloadUrl && (
+                    <a
+                      href={release.smsDownloadUrl}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void smsDownload.startDownload();
+                      }}
+                      aria-disabled={smsDownload.isDownloading}
+                      className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-[4px] border border-[var(--border-hairline)] bg-[var(--bg-surface)] px-3.5 py-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer ${
+                        smsDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
+                      }`}
+                    >
+                      {smsDownload.isDownloading ? 'Downloading SMS APK…' : 'Direct-SMS APK'}
+                      {release.smsApkSize && (
+                        <span className="ml-2 text-[11px] font-mono font-normal text-[var(--text-muted)]">
+                          {release.smsApkSize}
+                        </span>
+                      )}
+                    </a>
+                  )}
+                </div>
               </div>
+
+              {(installerDownload.status === 'complete' || smsDownload.status === 'complete') && (
+                <p
+                  role="status"
+                  className="text-xs text-[var(--status-success-fg)] bg-[var(--status-success-bg)] border border-[var(--status-success-border)] rounded-[4px] px-3 py-2"
+                >
+                  Downloaded{' '}
+                  <strong>
+                    {installerDownload.downloadedFileName || smsDownload.downloadedFileName}
+                  </strong>
+                  .
+                </p>
+              )}
+
+              {(installerDownload.status === 'failed' || smsDownload.status === 'failed') && (
+                <div
+                  role="alert"
+                  className="text-xs text-[var(--status-error-fg)] bg-[var(--status-error-bg)] border border-[var(--status-error-border)] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span>{installerDownload.errorMessage || smsDownload.errorMessage}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (installerDownload.status === 'failed') void installerDownload.startDownload();
+                      if (smsDownload.status === 'failed') void smsDownload.startDownload();
+                    }}
+                    className="underline font-semibold cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
               {release.installerSha256 && (
                 <details className="text-xs text-[var(--text-secondary)]">
                   <summary className="cursor-pointer font-medium text-[var(--text-primary)]">

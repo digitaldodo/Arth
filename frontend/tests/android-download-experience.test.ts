@@ -13,20 +13,33 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     assert.ok(fs.readFileSync(path.join(process.cwd(), 'src', 'app', 'api', 'android', 'release', 'route.ts'), 'utf-8').includes("asset.name === 'SpendSense.apk'"));
   });
 
-  test('release and download routes fail closed without a server-side token', async () => {
+  test('release and download routes fail closed for unconfigured/private repo without token', async () => {
     const previousToken = process.env.GITHUB_TOKEN;
+    const previousRepo = process.env.GITHUB_REPOSITORY;
     delete process.env.GITHUB_TOKEN;
+    process.env.GITHUB_REPOSITORY = 'digitaldodo/nonexistent-private-repo-check';
     try {
       assert.equal((await getRelease()).status, 503);
       assert.equal((await getDownload()).status, 503);
     } finally {
       if (previousToken) process.env.GITHUB_TOKEN = previousToken;
+      if (previousRepo !== undefined) process.env.GITHUB_REPOSITORY = previousRepo;
+      else delete process.env.GITHUB_REPOSITORY;
     }
   });
 
-  test('GET /api/android/download issues 302 redirect to latest APK asset', async () => {
-    const response = await getDownload();
-    assert.strictEqual(response.status, 503, 'must fail closed when release service is not configured');
+  test('GET /api/android/download fails closed with 503 JSON when upstream release is unreachable', async () => {
+    const previousRepo = process.env.GITHUB_REPOSITORY;
+    process.env.GITHUB_REPOSITORY = 'digitaldodo/nonexistent-private-repo-check';
+    try {
+      const response = await getDownload();
+      assert.strictEqual(response.status, 503, 'must fail closed when release repository is unreachable');
+      assert.ok((response.headers.get('content-type') || '').includes('application/json'));
+      assert.equal(response.headers.get('content-disposition'), null);
+    } finally {
+      if (previousRepo !== undefined) process.env.GITHUB_REPOSITORY = previousRepo;
+      else delete process.env.GITHUB_REPOSITORY;
+    }
   });
 
   test('UnauthenticatedHome exposes /download in header and footer', () => {

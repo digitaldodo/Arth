@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import { DownloadClient } from './DownloadClient';
-import type { AndroidReleaseInfo } from '@/app/api/android/release/route';
+import {
+  getVerifiedAndroidReleaseMetadata,
+  UNAVAILABLE_ANDROID_RELEASE,
+} from '@/lib/android-release-asset';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Download SpendSense for Android',
@@ -8,28 +13,11 @@ export const metadata: Metadata = {
   applicationName: 'SpendSense',
 };
 
-function getInitialRelease(): AndroidReleaseInfo {
-  return {
-    published: false,
-    applicationId: 'com.digitaldodo.arth',
-    version: '',
-    versionCode: 0,
-    buildNumber: 0,
-    releaseDate: '',
-    minAndroidVersion: 'Android 8.0 (API 26)',
-    targetAndroidVersion: 'Android 15 (API 35)',
-    apkFileName: 'SpendSense.apk',
-    apkSize: '',
-    downloadUrl: '/api/android/download',
-    githubReleaseUrl: '',
-    sha256: '',
-    signingCertificateSha256: '',
-    highlights: [],
-    disclaimer: 'Release information is loading. The web app and installable PWA remain available independently.',
-  };
-}
-
-export default function DownloadPage() {
-  const initialRelease = getInitialRelease();
-  return <DownloadClient initialRelease={initialRelease} />;
+export default async function DownloadPage() {
+  const result = await getVerifiedAndroidReleaseMetadata().catch(() => ({
+    ok: false,
+    status: 503,
+    info: UNAVAILABLE_ANDROID_RELEASE,
+  }));
+  return <DownloadClient initialRelease={result.info} />;
 }

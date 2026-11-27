@@ -91,30 +91,38 @@ describe('SpendSense Website Navigation & Android Download Experience Test Suite
   });
 
   describe('2. Direct APK Download Route & File Verification', () => {
-    test('GET /api/android/download returns 302 redirect to valid APK asset, never to private GitHub release page', async () => {
+    test('GET /api/android/download fails closed for unreachable private repository without token', async () => {
       const previousToken = process.env.GITHUB_TOKEN;
+      const previousRepo = process.env.GITHUB_REPOSITORY;
       delete process.env.GITHUB_TOKEN;
+      process.env.GITHUB_REPOSITORY = 'digitaldodo/nonexistent-private-repo-check';
       try {
-        assert.equal((await getDownloadRoute()).status, 503, 'must fail closed without the server-side release token');
+        assert.equal((await getDownloadRoute()).status, 503, 'must fail closed when release cannot be resolved');
       } finally {
         if (previousToken) process.env.GITHUB_TOKEN = previousToken;
+        if (previousRepo !== undefined) process.env.GITHUB_REPOSITORY = previousRepo;
+        else delete process.env.GITHUB_REPOSITORY;
       }
     });
 
-    test('APK binary is absent from Git and served by the private release route', () => {
+    test('APK binary is absent from Git and served by the verified release route', () => {
       const apkPath = path.join(projectRoot, 'public', 'android', 'SpendSense.apk');
       assert.ok(!fs.existsSync(apkPath), 'APK must be hosted outside the Git repository');
       const route = fs.readFileSync(path.join(projectRoot, 'src', 'app', 'api', 'android', 'download', 'route.ts'), 'utf8');
       assert.ok(route.includes("asset.name === 'SpendSense.apk'"));
     });
 
-    test('GET /api/android/release exposes direct downloadUrl', async () => {
+    test('GET /api/android/release fails closed when release endpoint is unreachable', async () => {
       const previousToken = process.env.GITHUB_TOKEN;
+      const previousRepo = process.env.GITHUB_REPOSITORY;
       delete process.env.GITHUB_TOKEN;
+      process.env.GITHUB_REPOSITORY = 'digitaldodo/nonexistent-private-repo-check';
       try {
-        assert.equal((await getReleaseRoute()).status, 503, 'must fail closed when release credentials are absent');
+        assert.equal((await getReleaseRoute()).status, 503, 'must fail closed when release cannot be fetched');
       } finally {
         if (previousToken) process.env.GITHUB_TOKEN = previousToken;
+        if (previousRepo !== undefined) process.env.GITHUB_REPOSITORY = previousRepo;
+        else delete process.env.GITHUB_REPOSITORY;
       }
     });
   });

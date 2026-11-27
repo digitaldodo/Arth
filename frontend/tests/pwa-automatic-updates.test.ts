@@ -47,7 +47,7 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
       'Must exclude auth routes from cache'
     );
     assert.ok(content.includes("data.type === 'CLASSIFY_CLIENT'"), 'Must classify browser clients before offline fallback decisions');
-    assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Only mobile standalone PWA clients may use the offline entry');
+    assert.ok(content.includes("'installed-mobile-pwa'") && content.includes("'installed-desktop-pwa'"), 'Installed mobile and desktop PWA clients may use the offline entry');
     assert.ok(content.includes("'Connection required'"), 'Normal web sessions receive a small network-required response');
     assert.ok(content.includes("cache.addAll(PRECACHE_ASSETS)"), 'Must precache built shell assets');
     assert.ok(!content.includes('cache.put(event.request'), 'Must not cache personalized navigation HTML');
@@ -168,8 +168,8 @@ describe('Arth PWA Automatic Updates & Financial Data Safety Suite', () => {
 
     // Bypasses HTTP cache
     assert.ok(
-      hookContent.includes("updateViaCache: 'none'") && hookContent.includes("runtimeMode === 'installed-mobile-pwa'"),
-      'Must only register service worker for an installed mobile PWA'
+      hookContent.includes("updateViaCache: 'none'") && hookContent.includes('getApplicationRuntimeMode'),
+      'Must register service worker with updateViaCache none and classify runtime mode'
     );
 
     // Safe deferred activation

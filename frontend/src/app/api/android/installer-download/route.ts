@@ -1,9 +1,11 @@
-import { downloadVerifiedReleaseAsset } from '@/lib/android-release-asset';
+import { ANDROID_APK_ARTIFACTS, downloadVerifiedReleaseAsset } from '@/lib/android-release-asset';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return downloadVerifiedReleaseAsset({
-    fileName: 'SpendSense-Installer.apk',
-    checksumFileName: 'SpendSense-Installer.apk.sha256',
-    metadataChecksumKey: 'installerSha256',
-  });
+  return downloadVerifiedReleaseAsset(ANDROID_APK_ARTIFACTS.installer, 'GET');
+}
+
+export async function HEAD() {
+  return downloadVerifiedReleaseAsset(ANDROID_APK_ARTIFACTS.installer, 'HEAD');
 }

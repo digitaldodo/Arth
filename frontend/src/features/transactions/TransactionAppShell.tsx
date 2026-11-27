@@ -17,7 +17,8 @@ import {
 import { getCachedBalances, setCachedBalances, setCachedPwaUser } from '@/lib/offline-db';
 import { useCriticalOperation } from '@/features/pwa/critical-operation';
 import { useBackHandler } from '@/features/navigation';
-import { useMobileStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { useMobileStandalonePwa, useStandalonePwa } from '@/features/pwa/useStandalonePwa';
+import { isStandalonePwaClient } from '@/lib/platform-mode';
 import type { PasswordStatus } from '@/lib/auth/password-status';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 import { FeatureComingSoon } from '@/features/scaffold/FeatureComingSoon';
@@ -113,6 +114,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const { signOut } = useAuth();
   const router = useRouter();
   const userId = user?.id ?? null;
+  const isStandalonePwa = useStandalonePwa();
   const isMobilePwa = useMobileStandalonePwa();
   const appLock = useAppLock(user?.id ?? 'anonymous', isMobilePwa);
   const isAppLocked = Boolean(user) && (!appLock.isReady || (isMobilePwa && appLock.isLocked));
@@ -271,17 +273,27 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
   useEffect(() => {
     if (!user) return;
-    void setCachedPwaUser(user).then(() => {
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({ type: 'PWA_PREPARED' });
-        } else {
-          navigator.serviceWorker.ready.then((reg) => {
-            reg.active?.postMessage({ type: 'PWA_PREPARED' });
-          }).catch(() => {});
-        }
+    const notifyPrepared = () => {
+      if (!isStandalonePwaClient() || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+        return;
       }
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'PWA_PREPARED' });
+      } else {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.active?.postMessage({ type: 'PWA_PREPARED' });
+        }).catch(() => {});
+      }
+    };
+
+    void setCachedPwaUser(user).then(() => {
+      notifyPrepared();
     }).catch(() => {});
+
+    window.addEventListener('appinstalled', notifyPrepared);
+    return () => {
+      window.removeEventListener('appinstalled', notifyPrepared);
+    };
   }, [user]);
 
   const handleSignOut = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -304,6 +316,11 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       .catch(() => {});
   }, [user]);
 
+  const isStandalonePwaRef = useRef(isStandalonePwa);
+  useEffect(() => {
+    isStandalonePwaRef.current = isStandalonePwa;
+  }, [isStandalonePwa]);
+
   useEffect(() => {
     syncEngine.setUserId(userId);
     const unsubscribe = syncEngine.subscribe((state) => {
@@ -313,8 +330,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       if (state.lastSyncedAt && state.lastSyncedAt !== lastSyncedAtRef.current) {
         lastSyncedAtRef.current = state.lastSyncedAt;
         // Avoid triggering a redundant Dashboard refetch on the very first background reconciliation
-        // unless offline mutations were actually uploaded to the server.
-        if (initialMountSyncHandledRef.current || syncedChanged) {
+        // in browser sessions unless offline mutations were uploaded. Installed PWAs always refresh
+        // once their initial IndexedDB snapshot completes.
+        if (isStandalonePwaRef.current || initialMountSyncHandledRef.current || syncedChanged) {
           setRefreshTrigger((value) => value + 1);
         }
         initialMountSyncHandledRef.current = true;

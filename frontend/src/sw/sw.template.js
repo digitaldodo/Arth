@@ -1,7 +1,7 @@
 /**
- * SpendSense service worker. The root scope is retained for existing installs, but only
- * a mobile standalone client can use the offline entry. Personalized HTML and APIs
- * are never cached.
+ * SpendSense service worker. Supports installed mobile and desktop PWAs for
+ * static shell caching and offline bootstrap, while keeping APIs, auth, and
+ * personalized SSR HTML strictly network-only.
  */
 const SW_VERSION = '__SW_VERSION__';
 const CACHE_NAME = 'arth-shell-v2-' + SW_VERSION;
@@ -9,6 +9,16 @@ const PRECACHE_ASSETS = __PRECACHE_ASSETS__;
 const FALLBACK_OFFLINE_HTML = __FALLBACK_OFFLINE_HTML__;
 const RUNTIME_DB = 'arth_sw_runtime_v1';
 const RUNTIME_DB_VERSION = 1;
+const ALLOWED_RUNTIME_MODES = [
+  'desktop-web',
+  'mobile-web',
+  'installed-mobile-pwa',
+  'installed-desktop-pwa',
+];
+
+function isInstalledPwaMode(mode) {
+  return mode === 'installed-mobile-pwa' || mode === 'installed-desktop-pwa';
+}
 
 function openRuntimeDb() {
   return new Promise((resolve, reject) => {
@@ -55,15 +65,9 @@ async function getClientMode(clientId) {
   }
 }
 
-function isMobileUserAgent() {
-  const hints = self.navigator.userAgentData;
-  if (hints && typeof hints.mobile === 'boolean') return hints.mobile;
-  return /android|iphone|ipad|ipod|mobile/i.test(self.navigator.userAgent || '');
-}
-
 function offlineHtml(title, message, retry = true) {
   return new Response(
-    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0D0D0F"><title>' + title + '</title><style>body{margin:0;background:#0D0D0F;color:#F5F5F4;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}.card{width:min(100%,380px);background:#141416;border:1px solid #333;border-radius:16px;padding:28px 24px;text-align:center}p{font-size:14px;color:#bbb;line-height:1.55}button{margin-top:12px;background:#fff;color:#000;border:0;border-radius:8px;padding:10px 18px;font-weight:600}</style></head><body><main class="card"><h1>' + title + '</h1><p>' + message + '</p>' + (retry ? '<button onclick="location.reload()">Try again</button>' : '') + '</main></body></html>',
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0D0D0F"><title>' + title + '</title><style>body{margin:0;background:#0D0D0F;color:#F5F5F4;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box}.card{width:min(100%,380px);background:#141416;border:1px solid #333;border-radius:16px;padding:28px 24px;text-align:center}p{font-size:14px;color:#bbb;line-height:1.55}button{margin-top:12px;background:#fff;color:#000;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer}</style></head><body><main class="card"><h1>' + title + '</h1><p>' + message + '</p>' + (retry ? '<button onclick="location.reload()">Try again</button>' : '') + '</main></body></html>',
     { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
   );
 }
@@ -95,8 +99,7 @@ self.addEventListener('message', (event) => {
   if (data.type === 'SKIP_WAITING') self.skipWaiting();
   if (data.type === 'GET_VERSION') event.ports[0]?.postMessage({ version: SW_VERSION, cacheName: CACHE_NAME });
   if (data.type === 'CLASSIFY_CLIENT' && event.source?.id) {
-    const allowed = ['desktop-web', 'mobile-web', 'installed-mobile-pwa'];
-    if (allowed.includes(data.runtimeMode)) {
+    if (ALLOWED_RUNTIME_MODES.includes(data.runtimeMode)) {
       event.waitUntil(storeRuntime('clients', { id: event.source.id, runtimeMode: data.runtimeMode, updatedAt: Date.now() }));
     }
   }
@@ -120,22 +123,23 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
-      let mode = await getClientMode(event.clientId);
-      const startUrlSignal = (url.pathname === '/offline' || url.searchParams.get('arth_runtime') === 'installed-mobile-pwa') && isMobileUserAgent();
-      if (startUrlSignal) mode = 'installed-mobile-pwa';
+      const mode = await getClientMode(event.clientId);
       try {
         const response = await fetch(request);
-        // Never cache authenticated or personalized navigation responses.
-        if (startUrlSignal && event.resultingClientId) {
-          await storeRuntime('clients', { id: event.resultingClientId, runtimeMode: 'installed-mobile-pwa', updatedAt: Date.now() });
+        // Never cache authenticated or personalized navigation HTML responses.
+        if (isInstalledPwaMode(mode) && event.resultingClientId) {
+          await storeRuntime('clients', { id: event.resultingClientId, runtimeMode: mode, updatedAt: Date.now() });
         }
         return response;
       } catch {
-        if (!mode && isMobileUserAgent()) {
-          const prepared = await getRuntime('state', 'pwa-prepared').catch(() => null);
-          if (prepared?.value) mode = 'installed-mobile-pwa';
-        }
-        if (mode === 'installed-mobile-pwa' && isMobileUserAgent()) {
+        const prepared = await getRuntime('state', 'pwa-prepared').catch(() => null);
+        // Serve the static /offline bootstrap only to installed PWA clients (or cold-started
+        // windows when an installed PWA session has prepared offline storage; OfflinePwaEntry
+        // re-verifies display-mode: standalone before restoring any user session).
+        const allowOfflineEntry =
+          isInstalledPwaMode(mode) || (!mode && Boolean(prepared?.value));
+
+        if (allowOfflineEntry) {
           const cached =
             (await caches.open(CACHE_NAME).then((cache) => cache.match('/offline')).catch(() => null)) ||
             (await caches.match('/offline')) ||
@@ -146,15 +150,26 @@ self.addEventListener('fetch', (event) => {
               headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
             });
           }
-          return offlineHtml('SpendSense is offline', 'The authenticated app shell is not cached on this device. Reconnect to open SpendSense; previously loaded financial records remain stored locally and will sync when online.');
+          return offlineHtml(
+            'SpendSense is offline',
+            'The offline app shell is not cached on this device. Reconnect to open SpendSense; previously loaded financial records remain stored locally and will sync when online.'
+          );
         }
-        return offlineHtml('Connection required', 'This web session needs an internet connection. Check your connection and try again.');
+        return offlineHtml(
+          'Connection required',
+          'This web session needs an internet connection. Check your connection and try again.'
+        );
       }
     })());
     return;
   }
 
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest' || url.pathname.startsWith('/fonts/')) {
+  if (
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname.startsWith('/fonts/')
+  ) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const cached = await cache.match(request);

@@ -173,8 +173,9 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
         content.includes("request.mode === 'navigate'"),
         'Service worker must handle navigation requests'
       );
-      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Only installed mobile PWA clients receive offline entry');
-      assert.ok(content.includes("url.pathname === '/offline'"), 'PWA offline entry route is explicit');
+      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Installed mobile PWA clients receive offline entry');
+      assert.ok(content.includes("mode === 'installed-desktop-pwa'"), 'Installed desktop PWA clients receive offline entry');
+      assert.ok(content.includes("cache.match('/offline')"), 'PWA offline entry served from cache');
       assert.ok(content.includes("'Connection required'"), 'Desktop web gets a network-required state');
       assert.ok(!content.includes('cache.put(event.request'), 'Authenticated navigation HTML must not be cached');
     });
@@ -187,7 +188,8 @@ describe('Arth Fast Startup & Non-Blocking App Shell Suite', () => {
         content.includes("request.mode === 'navigate'"),
         'Generated sw.js must handle navigation requests'
       );
-      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Generated worker must isolate installed PWA behavior');
+      assert.ok(content.includes("mode === 'installed-mobile-pwa'"), 'Generated worker must isolate installed mobile PWA behavior');
+      assert.ok(content.includes("mode === 'installed-desktop-pwa'"), 'Generated worker must isolate installed desktop PWA behavior');
       assert.ok(content.includes("'Connection required'"), 'Generated worker must not display PWA fallback on desktop');
     });
   });

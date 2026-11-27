@@ -5,7 +5,10 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { getCachedPwaUser, clearCachedPwaUserContext, type CachedPwaUser } from '@/lib/offline-db';
-import { isAndroidPhone } from '@/lib/device';
+import { getDeviceInstallContext, isAndroidPhone } from '@/lib/device';
+import { isStandalonePwaClient } from '@/lib/platform-mode';
+import { useApkDownload } from '@/features/android/useApkDownload';
+import { GetSpendSenseSection } from '@/features/install/GetSpendSenseSection';
 
 const TransactionAppShell = dynamic(
   () => import('@/features/transactions/TransactionAppShell').then((m) => m.TransactionAppShell),
@@ -24,14 +27,22 @@ const TransactionAppShell = dynamic(
 export function UnauthenticatedHome() {
   const [cachedUser, setCachedUser] = useState<CachedPwaUser | null>(null);
   const [isChecking, setIsChecking] = useState(() =>
-    typeof navigator !== 'undefined' ? !navigator.onLine : false
+    typeof navigator !== 'undefined' ? navigator.onLine === false : false
   );
   const [isAndroid, setIsAndroid] = useState(false);
+  const [isAnyAndroidDevice, setIsAnyAndroidDevice] = useState(false);
+
+  const headerApkDownload = useApkDownload({
+    downloadUrl: '/api/android/download',
+    fileName: 'SpendSense.apk',
+    available: true,
+  });
 
   useEffect(() => {
     // Device detection is client-only; defer it to avoid server/client hydration disagreement.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAndroid(isAndroidPhone());
+    setIsAnyAndroidDevice(getDeviceInstallContext().isAndroid);
   }, []);
 
   useEffect(() => {
@@ -44,9 +55,12 @@ export function UnauthenticatedHome() {
           void clearCachedPwaUserContext();
           return;
         }
+        if (!isStandalonePwaClient()) {
+          return;
+        }
         const user = await getCachedPwaUser();
         if (!cancelled && user) {
-          // In offline PWA mode, hydrate local session so ledger operations remain accessible
+          // In offline standalone PWA mode (mobile or desktop), hydrate local session so ledger remains accessible
           setCachedUser(user);
         }
       } catch {
@@ -112,51 +126,76 @@ export function UnauthenticatedHome() {
 
         {/* Row 2: Android Phone Actions (rendered ONLY on Android smartphones on mobile viewports) */}
         {isAndroid && (
-          <div className="md:hidden grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-hairline)]">
-            <a
-              href="/api/android/download"
-              download="SpendSense.apk"
-              className="h-9 px-2 text-[11px] sm:text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-[4px] hover:bg-[var(--action-primary-hover)] transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
-              title="Download SpendSense Android APK directly"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                className="shrink-0"
+          <div className="md:hidden space-y-2 pt-2 border-t border-[var(--border-hairline)]">
+            <div className="grid grid-cols-3 gap-2">
+              <a
+                href="/api/android/download"
+                onClick={(e) => {
+                  e.preventDefault();
+                  void headerApkDownload.startDownload();
+                }}
+                aria-disabled={headerApkDownload.isDownloading}
+                className={`h-9 px-2 text-[11px] sm:text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-[4px] hover:bg-[var(--action-primary-hover)] transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap min-w-0 ${
+                  headerApkDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
+                }`}
+                title="Download SpendSense Android APK directly"
               >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <span className="truncate">Download App</span>
-            </a>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="shrink-0"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span className="truncate">
+                  {headerApkDownload.isDownloading ? 'Downloading…' : 'Download App'}
+                </span>
+              </a>
 
-            <Link
-              href="/login?mode=signup"
-              className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
-            >
-              <span className="truncate">Sign Up</span>
-            </Link>
+              <Link
+                href="/login?mode=signup"
+                className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center shadow-2xs cursor-pointer whitespace-nowrap min-w-0"
+              >
+                <span className="truncate">Sign Up</span>
+              </Link>
 
-            <Link
-              href="/login"
-              className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center cursor-pointer whitespace-nowrap min-w-0"
-            >
-              <span className="truncate">Log In</span>
-            </Link>
+              <Link
+                href="/login"
+                className="h-9 px-2 text-[11px] sm:text-xs font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] rounded-[4px] hover:bg-[var(--bg-surface-subtle)] transition-all flex items-center justify-center cursor-pointer whitespace-nowrap min-w-0"
+              >
+                <span className="truncate">Log In</span>
+              </Link>
+            </div>
+            {headerApkDownload.status === 'failed' && headerApkDownload.errorMessage && (
+              <div
+                role="alert"
+                className="p-2 rounded-[4px] bg-[var(--status-error-bg)] border border-[var(--status-error-border)] text-[11px] text-[var(--status-error-fg)] flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{headerApkDownload.errorMessage}</span>
+                <button
+                  type="button"
+                  onClick={() => void headerApkDownload.startDownload()}
+                  className="underline font-semibold shrink-0 cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>
 
-      {/* Main Content: Wide, Balanced 2-Column Hero Grid + Value Pillars */}
+      {/* Main Content: Wide, Balanced 2-Column Hero Grid + Get SpendSense + Value Pillars */}
       <main className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 my-auto py-10 sm:py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 xl:gap-16 items-center">
           {/* Left Column: Hero Copy & Actions */}
@@ -176,8 +215,8 @@ export function UnauthenticatedHome() {
               </p>
             </div>
 
-            {/* Primary Registration and Sign In Actions */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+            {/* Primary Registration, Sign In & Quick Jump to App Installation */}
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 pt-1">
               <Link
                 href="/login?mode=signup"
                 className="inline-flex items-center justify-center h-11 px-6 rounded-[3px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] text-[14px] font-semibold hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 cursor-pointer"
@@ -190,6 +229,12 @@ export function UnauthenticatedHome() {
               >
                 Log In
               </Link>
+              <a
+                href="#get-spendsense"
+                className="inline-flex items-center justify-center h-11 px-4 rounded-[3px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-hairline)] text-[13px] font-medium transition-colors cursor-pointer"
+              >
+                Install App &darr;
+              </a>
             </div>
 
             {/* Architectural Highlights / Ledger Specification */}
@@ -325,6 +370,9 @@ export function UnauthenticatedHome() {
           </div>
         </div>
 
+        {/* Immediate PWA & Native Android Installation Options */}
+        <GetSpendSenseSection />
+
         {/* Core Value Pillars: 4-Column Responsive Grid */}
         <div className="mt-16 pt-12 border-t border-[var(--border-hairline)]">
           <div className="text-[11px] font-mono uppercase tracking-widest text-[var(--text-muted)] mb-8">
@@ -386,12 +434,14 @@ export function UnauthenticatedHome() {
       <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 border-t border-[var(--border-hairline)] flex flex-wrap items-center justify-between gap-4 text-[11px] font-mono text-[var(--text-muted)]">
         <div className="flex items-center gap-4">
           <span>SpendSense &middot; Ledger Minimal</span>
-          <Link
-            href="/download"
-            className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline transition-colors"
-          >
-            Android App
-          </Link>
+          {isAnyAndroidDevice && (
+            <Link
+              href="/download"
+              className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline transition-colors"
+            >
+              Android App
+            </Link>
+          )}
         </div>
         <span>Confidential &amp; Sovereign</span>
         <span>IST (Asia/Kolkata)</span>
