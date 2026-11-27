@@ -215,10 +215,10 @@ describe('Universal PWA Landing Page, Device Detection & Desktop Windows Runtime
     }
   });
 
-  test('UnauthenticatedHome SSR places PWA guidance in the hero and hides Android APK until hydration', () => {
+  test('UnauthenticatedHome SSR places unified install guidance in the hero and hides Android APK until hydration', () => {
     const homeMarkup = renderToStaticMarkup(React.createElement(UnauthenticatedHome));
     assert.ok(homeMarkup.includes('Get SpendSense'));
-    assert.ok(homeMarkup.includes('Install for this device'));
+    assert.ok(homeMarkup.includes('Add to your device'));
     assert.ok(homeMarkup.includes('Install SpendSense'));
     assert.ok(homeMarkup.indexOf('Get Started') < homeMarkup.indexOf('get-spendsense-heading'));
     // Unknown / pre-hydration SSR state must NEVER expose Android APK options
@@ -229,6 +229,7 @@ describe('Universal PWA Landing Page, Device Detection & Desktop Windows Runtime
     const sectionMarkup = renderToStaticMarkup(React.createElement(GetSpendSenseSection));
     assert.ok(sectionMarkup.includes('Install SpendSense'));
     assert.ok(!sectionMarkup.includes('landing-android-card'));
+    assert.ok(!sectionMarkup.includes('PWA'));
   });
 
   test('GetSpendSenseSection checks Android endpoint via HEAD before enabling APK CTA and never appends .json', () => {
@@ -236,7 +237,7 @@ describe('Universal PWA Landing Page, Device Detection & Desktop Windows Runtime
     const apkHook = fs.readFileSync(path.join(projectRoot, 'src/features/android/useApkDownload.ts'), 'utf8');
     const landing = fs.readFileSync(path.join(projectRoot, 'src/app/UnauthenticatedHome.tsx'), 'utf8');
 
-    assert.match(sectionSrc, /const showAndroidCard = isHydrated && isAndroid;/);
+    assert.match(sectionSrc, /const isAndroidDevice = isHydrated && isAndroid;/);
     assert.match(sectionSrc, /method:\s*'HEAD'/);
     assert.match(sectionSrc, /application\/vnd\.android\.package-archive/);
     assert.match(apkHook, /application\/vnd\.android\.package-archive/);

@@ -277,7 +277,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
             </h3>
           </div>
           <Badge variant="connected" size="sm" dot>
-            Installed
+            Already installed
           </Badge>
         </div>
 
@@ -421,7 +421,7 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
       {/* Browser Install Guidance when programmatic prompt is not exposed */}
       <div className="p-2.5 bg-[var(--bg-surface-subtle)] rounded-lg border border-[var(--border-hairline)] text-[11px] text-[var(--text-secondary)] space-y-1">
         <p className="font-semibold text-[var(--text-primary)]">
-          {installOutcome === 'dismissed' ? 'Install SpendSense anytime' : 'Install SpendSense Web App'}
+          {installOutcome === 'dismissed' ? 'Install SpendSense anytime' : 'Install SpendSense'}
         </p>
         <p className="leading-relaxed text-[var(--text-muted)]">
           To install on this device, tap the <strong>Install</strong> icon in your browser&apos;s address bar or open the browser menu and select <strong>Install app</strong> / <strong>Add to Home screen</strong>.

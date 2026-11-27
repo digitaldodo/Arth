@@ -339,7 +339,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                 href="/"
                 className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors"
               >
-                Open SpendSense Web App
+                Open SpendSense
               </Link>
 
               {isPwaInstallable && !isStandalonePwa && !isPwaInstalled && (
@@ -353,7 +353,7 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
                     ? 'Installing…'
                     : isWindows
                       ? 'Install SpendSense on Windows'
-                      : 'Install Browser PWA Instead'}
+                      : 'Add to Home Screen'}
                 </button>
               )}
             </div>
@@ -398,14 +398,14 @@ export function DownloadClient({ initialRelease }: DownloadClientProps) {
             </div>
             <div className="p-4 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] space-y-1.5">
               <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                {isStandalonePwa ? 'Active Session: Web PWA' : 'Separate Web App & PWA'}
+                {isStandalonePwa ? 'Already installed' : 'Browser Installation'}
               </div>
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                 {isStandalonePwa
-                  ? 'You are currently running the installed SpendSense Web PWA. The native Android APK on this page is a separate Kotlin application with native device capture capabilities.'
+                  ? 'SpendSense is already installed on this device. The native Android download on this page installs the companion Android app with notification capture.'
                   : isIos
-                    ? 'On iPhone and iPad, install SpendSense directly from Safari via Share → Add to Home Screen.'
-                    : 'Windows, macOS, Linux, and iOS browsers can install SpendSense as a standalone Progressive Web App (PWA) directly from the homepage or browser menu.'}
+                    ? 'On iPhone and iPad, add SpendSense directly from Safari via Share → Add to Home Screen.'
+                    : 'On Windows, macOS, Linux, and mobile browsers you can also install SpendSense directly from your browser without downloading an installer file.'}
               </p>
             </div>
           </div>

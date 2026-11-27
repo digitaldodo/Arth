@@ -217,6 +217,12 @@ data class LoginRequest(
 )
 
 @Serializable
+data class SupabasePasswordLoginRequest(
+    val email: String,
+    val password: String
+)
+
+@Serializable
 data class ForgotPasswordRequest(
     val identifier: String
 )
@@ -314,7 +320,7 @@ interface NativeAuthApi {
 
 interface SupabaseAuthApi {
     @POST("auth/v1/token?grant_type=password")
-    suspend fun login(@Body body: LoginRequest): AuthResponse
+    suspend fun login(@Body body: SupabasePasswordLoginRequest): AuthResponse
 
     @POST("auth/v1/token?grant_type=refresh_token")
     suspend fun refreshToken(@Body body: RefreshRequest): AuthResponse
@@ -339,6 +345,66 @@ class AuthInterceptor(private val secureStorage: SecureStorage) : Interceptor {
         }
 
         return chain.proceed(builder.build())
+    }
+}
+
+class TokenRefreshAuthenticator(private val secureStorage: SecureStorage) : okhttp3.Authenticator {
+    private val refreshLock = Any()
+
+    override fun authenticate(route: okhttp3.Route?, response: Response): okhttp3.Request? {
+        if (response.request.header("X-Arth-Retry") != null) return null
+
+        synchronized(refreshLock) {
+            val currentToken = secureStorage.getAccessToken()
+            val failedToken = response.request.header("Authorization")?.removePrefix("Bearer ")?.trim()
+            if (!currentToken.isNullOrBlank() && currentToken != failedToken) {
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentToken")
+                    .header("X-Arth-Retry", "1")
+                    .build()
+            }
+
+            val refreshToken = secureStorage.getRefreshToken()?.takeIf { it.isNotBlank() } ?: return null
+            val webBase = NetworkClient.getWebBaseUrl(BuildConfig.WEB_URL)
+            val refreshed = requestNativeRefresh(webBase, refreshToken) ?: return null
+
+            secureStorage.saveSession(
+                accessToken = refreshed.accessToken,
+                refreshToken = refreshed.refreshToken,
+                userId = refreshed.user.id,
+                email = refreshed.user.email ?: secureStorage.getUserEmail().orEmpty()
+            )
+
+            return response.request.newBuilder()
+                .header("Authorization", "Bearer ${refreshed.accessToken}")
+                .header("X-Arth-Retry", "1")
+                .build()
+        }
+    }
+
+    private fun requestNativeRefresh(webBase: String, refreshToken: String): AuthResponse? {
+        return try {
+            val conn = (java.net.URL("${webBase}api/native/auth/refresh").openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+            }
+            conn.outputStream.use {
+                val payload = """{"refresh_token":${org.json.JSONObject.quote(refreshToken)}}"""
+                it.write(payload.toByteArray(Charsets.UTF_8))
+            }
+            if (conn.responseCode in 200..299) {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<AuthResponse>(body)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 }
 
@@ -370,6 +436,7 @@ object NetworkClient {
         val baseUrl = sanitizeBaseUrl(BuildConfig.API_URL, DEFAULT_API_BASE_URL)
         val client = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(secureStorage))
+            .authenticator(TokenRefreshAuthenticator(secureStorage))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
             })

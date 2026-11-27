@@ -13,15 +13,27 @@ import com.digitaldodo.arth.core.security.GoogleAuthManager
 import com.digitaldodo.arth.core.security.GoogleAuthResult
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.core.sync.AccountSyncService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 enum class AuthMode {
     SIGN_IN,
     SIGN_UP,
     FORGOT_PASSWORD
+}
+
+enum class ConnectionState {
+    CHECKING,
+    READY,
+    DEGRADED,
+    UNAVAILABLE
 }
 
 data class AuthUiState(
@@ -31,10 +43,15 @@ data class AuthUiState(
     val password: String = "",
     val confirmPassword: String = "",
     val isPasswordVisible: Boolean = false,
+    val isConfirmPasswordVisible: Boolean = false,
     val authMode: AuthMode = AuthMode.SIGN_IN,
     val isLoading: Boolean = false,
+    val isGoogleLoading: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val showBrowserGoogleFallback: Boolean = false,
+    val connectionState: ConnectionState = ConnectionState.CHECKING,
+    val connectionNotice: String? = null,
     val isAuthenticated: Boolean = false,
     val userEmail: String? = null
 )
@@ -52,12 +69,65 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState = _uiState.asStateFlow()
 
+    init {
+        checkAuthConnectivity()
+    }
+
+    fun checkAuthConnectivity() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(connectionState = ConnectionState.CHECKING, connectionNotice = null) }
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val webBase = NetworkClient.getWebBaseUrl(BuildConfig.WEB_URL)
+                    val conn = (URL("${webBase}api/auth/health").openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 5000
+                        readTimeout = 5000
+                        setRequestProperty("Accept", "application/json")
+                    }
+                    try {
+                        val bodyText = (if (conn.responseCode < 400) conn.inputStream else conn.errorStream)
+                            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                        val json = if (bodyText.startsWith("{")) JSONObject(bodyText) else JSONObject()
+                        val ok = json.optBoolean("ok", conn.responseCode in 200..299)
+                        val category = json.optString("category", "healthy")
+                        val message = json.optString("message", "").takeIf { it.isNotBlank() }
+                        when {
+                            ok && category == "healthy" -> Pair(ConnectionState.READY, null)
+                            ok -> Pair(ConnectionState.DEGRADED, message)
+                            else -> Pair(ConnectionState.UNAVAILABLE, message ?: "Authentication service is temporarily unavailable.")
+                        }
+                    } finally {
+                        conn.disconnect()
+                    }
+                } catch (_: Exception) {
+                    Pair(ConnectionState.UNAVAILABLE, "Check your internet connection to sign in or sync records.")
+                }
+            }
+            _uiState.update {
+                it.copy(connectionState = result.first, connectionNotice = result.second)
+            }
+        }
+    }
+
     fun onIdentifierChanged(identifier: String) {
-        _uiState.update { it.copy(identifier = identifier, email = identifier, errorMessage = null, successMessage = null) }
+        _uiState.update {
+            it.copy(
+                identifier = identifier,
+                errorMessage = null,
+                successMessage = null
+            )
+        }
     }
 
     fun onEmailChanged(email: String) {
-        _uiState.update { it.copy(email = email, identifier = email, errorMessage = null, successMessage = null) }
+        _uiState.update {
+            it.copy(
+                email = email,
+                errorMessage = null,
+                successMessage = null
+            )
+        }
     }
 
     fun onUsernameChanged(username: String) {
@@ -76,27 +146,68 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isPasswordVisible = !it.isPasswordVisible) }
     }
 
+    fun toggleConfirmPasswordVisibility() {
+        _uiState.update { it.copy(isConfirmPasswordVisible = !it.isConfirmPasswordVisible) }
+    }
+
+    fun clearStatusMessages() {
+        _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
     fun setAuthMode(mode: AuthMode) {
-        _uiState.update { it.copy(authMode = mode, errorMessage = null, successMessage = null) }
+        _uiState.update { current ->
+            val nextEmail = if (mode == AuthMode.SIGN_UP || mode == AuthMode.FORGOT_PASSWORD) {
+                current.email.ifBlank {
+                    if (current.identifier.contains("@")) current.identifier else ""
+                }
+            } else {
+                current.email
+            }
+            val nextIdentifier = if (mode == AuthMode.SIGN_IN) {
+                current.identifier.ifBlank { current.email.ifBlank { current.username } }
+            } else if (mode == AuthMode.FORGOT_PASSWORD) {
+                current.identifier.ifBlank { current.email }
+            } else {
+                current.identifier
+            }
+            current.copy(
+                authMode = mode,
+                email = nextEmail,
+                identifier = nextIdentifier,
+                errorMessage = null,
+                successMessage = null,
+                showBrowserGoogleFallback = false
+            )
+        }
     }
 
     fun login(onSuccess: () -> Unit) {
+        if (_uiState.value.isLoading || _uiState.value.isGoogleLoading) return
         val id = _uiState.value.identifier.trim().ifEmpty { _uiState.value.email.trim() }
         val password = _uiState.value.password
         if (id.isBlank() || password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Please enter your username/email and password") }
+            _uiState.update { it.copy(errorMessage = "Enter your email or username and password to continue.") }
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null, successMessage = null) }
+            _uiState.update {
+                it.copy(isLoading = true, errorMessage = null, successMessage = null, showBrowserGoogleFallback = false)
+            }
             try {
                 val req = LoginRequest(identifier = id, email = id, password = password)
                 val response = try {
                     nativeAuthApi.login(req)
                 } catch (firstErr: Exception) {
+                    val canDirectSupabaseFallback =
+                        AuthErrorDiagnostics.isConnectivityOrServerFailure(firstErr) &&
+                        id.contains("@") &&
+                        BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
+                    if (!canDirectSupabaseFallback) {
+                        throw firstErr
+                    }
                     try {
-                        supabaseAuthApi.login(req)
+                        supabaseAuthApi.login(SupabasePasswordLoginRequest(email = id.lowercase(), password = password))
                     } catch (_: Exception) {
                         throw firstErr
                     }
@@ -114,6 +225,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         isLoading = false,
                         isAuthenticated = true,
                         userEmail = resolvedEmail,
+                        password = "",
+                        confirmPassword = "",
                         errorMessage = null
                     )
                 }
@@ -136,21 +249,29 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signUp(onSuccess: () -> Unit) {
-        val email = _uiState.value.email.trim()
-        val username = _uiState.value.username.trim().takeIf { it.isNotBlank() }
+        if (_uiState.value.isLoading || _uiState.value.isGoogleLoading) return
+        val email = _uiState.value.email.trim().lowercase()
+        val rawUsername = _uiState.value.username.trim().lowercase()
+        val username = rawUsername.takeIf { it.isNotBlank() }
         val password = _uiState.value.password
         val confirm = _uiState.value.confirmPassword
 
-        if (email.isBlank() || !email.contains("@")) {
-            _uiState.update { it.copy(errorMessage = "Please enter a valid email address") }
+        if (email.isBlank() || !email.contains("@") || !email.contains(".")) {
+            _uiState.update { it.copy(errorMessage = "Please enter a valid email address.") }
+            return
+        }
+        if (username != null && !Regex("^[a-z0-9_]{3,20}$").matches(username)) {
+            _uiState.update {
+                it.copy(errorMessage = "Username must be 3-20 characters using lowercase letters, numbers, or underscores.")
+            }
             return
         }
         if (password.length < 8) {
-            _uiState.update { it.copy(errorMessage = "Password must be at least 8 characters") }
+            _uiState.update { it.copy(errorMessage = "Password must be at least 8 characters.") }
             return
         }
         if (password != confirm) {
-            _uiState.update { it.copy(errorMessage = "Passwords do not match") }
+            _uiState.update { it.copy(errorMessage = "Passwords do not match.") }
             return
         }
 
@@ -178,6 +299,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                             isLoading = false,
                             isAuthenticated = true,
                             userEmail = resolvedEmail,
+                            password = "",
+                            confirmPassword = "",
                             errorMessage = null
                         )
                     }
@@ -190,7 +313,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(
                             isLoading = false,
                             authMode = AuthMode.SIGN_IN,
-                            successMessage = response.message ?: "Account created! Please check your email to activate."
+                            identifier = email,
+                            password = "",
+                            confirmPassword = "",
+                            successMessage = response.message ?: "Account created. Check your email to confirm and activate your account."
                         )
                     }
                 }
@@ -206,9 +332,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun forgotPassword() {
+        if (_uiState.value.isLoading || _uiState.value.isGoogleLoading) return
         val id = _uiState.value.identifier.trim().ifEmpty { _uiState.value.email.trim() }
         if (id.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Please enter your email address or username") }
+            _uiState.update { it.copy(errorMessage = "Please enter your email address or username.") }
             return
         }
 
@@ -235,21 +362,37 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Native Google Sign-In using AndroidX Credential Manager.
-     * The user remains within the application while choosing their registered Google account.
+     * Native Google Sign-In via AndroidX Credential Manager, with automatic seamless browser
+     * OAuth fallback whenever device-level Google accounts/credential providers are unavailable.
      */
     fun signInWithNativeGoogle(activity: Activity, onSuccess: () -> Unit) {
+        if (_uiState.value.isLoading || _uiState.value.isGoogleLoading) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null, successMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isGoogleLoading = true,
+                    errorMessage = null,
+                    successMessage = null,
+                    showBrowserGoogleFallback = false
+                )
+            }
             val googleAuthManager = GoogleAuthManager(activity)
             when (val result = googleAuthManager.signIn(activity)) {
                 is GoogleAuthResult.Cancelled -> {
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update {
+                        it.copy(isGoogleLoading = false)
+                    }
+                }
+                is GoogleAuthResult.DeviceCredentialUnavailable -> {
+                    // Do not strand the user on a "No Google accounts found in Android Settings" error:
+                    // automatically fall back to SpendSense browser OAuth just like web/PWA sign-in.
+                    startBrowserGoogleSignIn(activity, triggeredByFallback = true)
                 }
                 is GoogleAuthResult.Failure -> {
                     _uiState.update {
                         it.copy(
-                            isLoading = false,
+                            isGoogleLoading = false,
+                            showBrowserGoogleFallback = true,
                             errorMessage = result.message
                         )
                     }
@@ -260,6 +403,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         val response = try {
                             nativeAuthApi.loginWithGoogleIdToken(req)
                         } catch (firstErr: Exception) {
+                            val canFallback = AuthErrorDiagnostics.isConnectivityOrServerFailure(firstErr) &&
+                                BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
+                            if (!canFallback) throw firstErr
                             try {
                                 supabaseAuthApi.loginWithGoogleIdToken(req)
                             } catch (_: Exception) {
@@ -276,10 +422,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         )
                         _uiState.update {
                             it.copy(
-                                isLoading = false,
+                                isGoogleLoading = false,
                                 isAuthenticated = true,
                                 userEmail = resolvedEmail,
-                                errorMessage = null
+                                password = "",
+                                errorMessage = null,
+                                showBrowserGoogleFallback = false
                             )
                         }
 
@@ -292,7 +440,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     } catch (e: Exception) {
                         _uiState.update {
                             it.copy(
-                                isLoading = false,
+                                isGoogleLoading = false,
+                                showBrowserGoogleFallback = true,
                                 errorMessage = AuthErrorDiagnostics.diagnose(e)
                             )
                         }
@@ -303,15 +452,40 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Browser-based OAuth fallback if native Credential Manager is unavailable.
+     * Browser-based OAuth fallback using SpendSense web PKCE endpoint -> arth://auth/callback.
      */
-    fun startBrowserGoogleSignIn(context: Context) {
+    fun startBrowserGoogleSignIn(context: Context, triggeredByFallback: Boolean = false) {
         val webBase = NetworkClient.getWebBaseUrl(BuildConfig.WEB_URL)
         val authUrl = "${webBase}api/native/auth/google"
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            if (context !is Activity) {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+            _uiState.update {
+                it.copy(
+                    isGoogleLoading = false,
+                    errorMessage = null,
+                    showBrowserGoogleFallback = true,
+                    successMessage = if (triggeredByFallback) {
+                        "Continue Google sign-in in your browser. SpendSense will open automatically once complete."
+                    } else {
+                        "Complete Google sign-in in the browser window that just opened."
+                    }
+                )
+            }
+        } catch (_: Exception) {
+            _uiState.update {
+                it.copy(
+                    isGoogleLoading = false,
+                    showBrowserGoogleFallback = true,
+                    errorMessage = "No web browser found on this device to open Google sign-in."
+                )
+            }
+        }
     }
 
     fun onSessionReceived(accessToken: String, refreshToken: String?, userId: String, email: String?) {
@@ -327,7 +501,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 isAuthenticated = true,
                 userEmail = resolvedEmail,
                 isLoading = false,
-                errorMessage = null
+                isGoogleLoading = false,
+                password = "",
+                confirmPassword = "",
+                errorMessage = null,
+                successMessage = null,
+                showBrowserGoogleFallback = false
             )
         }
 
@@ -337,7 +516,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onAuthError(errorDescription: String) {
-        _uiState.update { it.copy(isLoading = false, errorMessage = errorDescription) }
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                isGoogleLoading = false,
+                showBrowserGoogleFallback = true,
+                errorMessage = errorDescription
+            )
+        }
     }
 
     fun logout(onSuccess: () -> Unit) {
@@ -348,6 +534,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 userEmail = null
             )
         }
+        checkAuthConnectivity()
         onSuccess()
     }
 

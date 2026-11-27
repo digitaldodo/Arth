@@ -87,28 +87,28 @@ export function UnauthenticatedHome() {
       {/* Header: Crisp, aligned layout on desktop, conditional touch row for Android phones */}
       <header className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-4 sm:py-5 border-b border-[var(--border-hairline)] space-y-3 sm:space-y-0">
         {/* Row 1: Brand Logo & Desktop Navigation */}
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
+        <div className="flex items-center justify-between gap-2">
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 min-w-0 group">
             <ArthLogo
               variant="full"
-              className="h-6 sm:h-7 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity"
+              className="h-5 sm:h-7 w-auto text-[var(--text-primary)] group-hover:opacity-90 transition-opacity shrink-0"
             />
-            <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] select-none">
+            <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)] select-none shrink-0">
               Ledger
             </span>
           </Link>
 
           {/* Desktop & Standard Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <Link
               href="/login"
-              className="text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-3 py-1.5 rounded-[3px] whitespace-nowrap cursor-pointer"
+              className="text-[12px] sm:text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-2 sm:px-3 py-1.5 rounded-[3px] whitespace-nowrap cursor-pointer"
             >
               Log In
             </Link>
             <Link
               href="/login?mode=signup"
-              className="text-[13px] font-medium text-[var(--action-primary-fg)] bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] transition-colors px-3.5 py-1.5 rounded-[3px] shadow-2xs whitespace-nowrap cursor-pointer"
+              className="text-[12px] sm:text-[13px] font-medium text-[var(--action-primary-fg)] bg-[var(--action-primary-bg)] hover:bg-[var(--action-primary-hover)] transition-colors px-2.5 sm:px-3.5 py-1.5 rounded-[3px] shadow-2xs whitespace-nowrap cursor-pointer"
             >
               Sign Up
             </Link>

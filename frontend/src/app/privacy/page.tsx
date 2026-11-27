@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         <section className="space-y-3">
           <p className="text-xs font-mono uppercase tracking-widest text-[var(--text-muted)]">SpendSense · Privacy information</p>
           <h1 className="text-3xl font-semibold tracking-tight">Your financial information in SpendSense</h1>
-          <p className="text-sm leading-6 text-[var(--text-secondary)]">This page describes the information used by the SpendSense web application, installable PWA, and direct Android application. The Android release page links here so you can review the product’s data handling before installing.</p>
+          <p className="text-sm leading-6 text-[var(--text-secondary)]">This page describes the information used by the SpendSense web application, home-screen app experience, and companion Android application. The Android release page links here so you can review the product’s data handling before installing.</p>
         </section>
 
         <section className="space-y-3">
@@ -30,13 +30,13 @@ export default function PrivacyPage() {
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Direct Android package</h2>
-          <p className="text-sm leading-6 text-[var(--text-secondary)]">The APK linked from this site does not declare READ_SMS or RECEIVE_SMS and cannot read the SMS inbox or its history. If you choose, you can grant Android Notification access and enable detection in SpendSense. It processes only visible notifications from your current default Messages app on-device; Android may hide or redact message previews, in which case detection cannot read them. Only recognized transaction fields are retained as a review candidate; the original message text is discarded. You can also share a selected message from Messages to SpendSense. Android may ask you to allow installation from your browser. SpendSense does not install updates silently; Android shows its system installer for each update.</p>
+          <p className="text-sm leading-6 text-[var(--text-secondary)]">The Android installer linked from this site does not declare READ_SMS or RECEIVE_SMS and cannot read the SMS inbox or its history. If you choose, you can grant Android Notification access and enable detection in SpendSense. It processes only visible notifications from your current default Messages app on-device; Android may hide or redact message previews, in which case detection cannot read them. Only recognized transaction fields are retained as a review candidate; the original message text is discarded. You can also share a selected message from Messages to SpendSense. Android may ask you to allow installation from your browser. SpendSense does not install updates silently; Android shows its system installer for each update.</p>
           <p className="text-sm leading-6 text-[var(--text-secondary)]">The app uses network access for account and data sync, and biometric access only when you choose to use the app lock. Updates installed over the existing app with the same signing identity keep its app-private data. Uninstalling the app removes that local copy.</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Web app and PWA</h2>
-          <p className="text-sm leading-6 text-[var(--text-secondary)]">The website and installable PWA remain separate ways to use SpendSense. The web app may keep a local offline copy in your browser storage so that supported records remain available without a connection. Clearing browser data removes that local copy.</p>
+          <h2 className="text-lg font-semibold">Web application and installed device mode</h2>
+          <p className="text-sm leading-6 text-[var(--text-secondary)]">The website and installed home-screen or desktop app remain separate ways to use SpendSense. SpendSense may keep a local offline copy in your browser storage so that supported records remain available without a connection. Clearing browser data removes that local copy.</p>
         </section>
 
         <footer className="border-t border-[var(--border-hairline)] pt-5 text-xs leading-5 text-[var(--text-muted)]">

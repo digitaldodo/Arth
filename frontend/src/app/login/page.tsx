@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { ArthLogo } from '@/components/brand/ArthLogo';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { sanitizeRedirectPath, formatAuthError } from '@/lib/auth-config';
 import { AuthForm } from './AuthForm';
 
@@ -58,13 +59,15 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col justify-between transition-colors">
       {/* Responsive Header Bar */}
-      <header className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-4 sm:py-5 flex items-center justify-between">
+      <header className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-3.5 sm:py-5 border-b border-[var(--border-hairline)] flex items-center justify-between gap-3">
         <Link
           href="/"
-          className="text-xs sm:text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-2 font-medium cursor-pointer"
+          className="text-xs sm:text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors inline-flex items-center gap-1.5 font-medium cursor-pointer shrink-0"
         >
           <span aria-hidden="true">&larr;</span> Back to Home
         </Link>
+
+        <ThemeToggle compact />
       </header>
 
       {/* Main Authentication Section: 2-column on desktop, 1-column on mobile */}
@@ -93,7 +96,7 @@ export default async function LoginPage({
             {/* Architectural Highlights */}
             <div className="space-y-4 pt-2">
               <div className="flex items-start gap-3.5">
-                <div className="w-6 h-6 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs font-mono text-[var(--text-primary)] shrink-0 mt-0.5">
+                <div className="w-6 h-6 rounded-[3px] bg-[var(--brand-evergreen-soft)] border border-[var(--brand-evergreen-border)] flex items-center justify-center text-xs font-mono text-[var(--brand-evergreen-fg)] shrink-0 mt-0.5">
                   ₹
                 </div>
                 <div>
@@ -107,7 +110,7 @@ export default async function LoginPage({
               </div>
 
               <div className="flex items-start gap-3.5">
-                <div className="w-6 h-6 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs font-mono text-[var(--text-primary)] shrink-0 mt-0.5">
+                <div className="w-6 h-6 rounded-[3px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs font-mono text-[var(--text-primary)] shrink-0 mt-0.5">
                   ⚖
                 </div>
                 <div>
@@ -121,7 +124,7 @@ export default async function LoginPage({
               </div>
 
               <div className="flex items-start gap-3.5">
-                <div className="w-6 h-6 rounded-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs font-mono text-[var(--text-primary)] shrink-0 mt-0.5">
+                <div className="w-6 h-6 rounded-[3px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center text-xs font-mono text-[var(--text-primary)] shrink-0 mt-0.5">
                   🔒
                 </div>
                 <div>
@@ -136,7 +139,7 @@ export default async function LoginPage({
             </div>
 
             {/* Architectural Ledger Invariants (Neutral, authentic preview without fake salary numbers) */}
-            <div className="p-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] space-y-2.5 font-mono text-xs">
+            <div className="p-4 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] border-l-2 border-l-[var(--brand-evergreen)] space-y-2.5 font-mono text-xs">
               <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] border-b border-[var(--border-hairline)] pb-1.5 uppercase tracking-wider">
                 <span>Ledger Architecture</span>
                 <span>Invariant Specification</span>
@@ -157,21 +160,43 @@ export default async function LoginPage({
           </div>
 
           {/* Right Column: Authentication Card Form */}
-          <div className="w-full max-w-[440px] mx-auto lg:max-w-none lg:col-span-6">
-            <div className="p-6 sm:p-8 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] shadow-xs">
-              <AuthForm
-                initialError={resolvedError}
-                initialMessage={resolvedMessage}
-                initialMode={params.mode === 'signup' ? 'signup' : 'signin'}
-              />
+          <div className="w-full max-w-[440px] mx-auto lg:max-w-none lg:col-span-6 space-y-3">
+            {/* Compact Mobile & Tablet Identity Framing so smaller viewports retain SpendSense context */}
+            <div className="lg:hidden flex items-center justify-between gap-2 px-0.5">
+              <div className="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[var(--text-secondary)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-emerald)] shrink-0" />
+                <span>Personal Financial Ledger</span>
+              </div>
+              <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                Ledger Minimal
+              </span>
+            </div>
+
+            <div className="rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] border-t-2 border-t-[var(--brand-evergreen)] shadow-xs overflow-hidden">
+              <div className="p-5 sm:p-8">
+                <AuthForm
+                  initialError={resolvedError}
+                  initialMessage={resolvedMessage}
+                  initialMode={params.mode === 'signup' ? 'signup' : 'signin'}
+                />
+              </div>
             </div>
           </div>
         </div>
       </main>
 
       {/* Subtle Minimal Footer */}
-      <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 text-center text-xs font-mono text-[var(--text-muted)]">
-        SpendSense &middot; Ledger Minimal &middot; Confidential &amp; Sovereign
+      <footer className="w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-4 border-t border-[var(--border-hairline)] flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-[var(--text-muted)]">
+        <span>SpendSense &middot; Ledger Minimal &middot; Confidential &amp; Sovereign</span>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/privacy"
+            className="hover:text-[var(--text-primary)] transition-colors underline-offset-4 hover:underline"
+          >
+            Privacy
+          </Link>
+          <span>IST (Asia/Kolkata)</span>
+        </div>
       </footer>
     </div>
   );

@@ -237,28 +237,30 @@ class MainActivity : FragmentActivity() {
             val error = data.getQueryParameter("error")
             val errorDescription = data.getQueryParameter("error_description")
 
-            val fragment = data.fragment
-            if (accessToken.isNullOrBlank() && !fragment.isNullOrBlank()) {
-                val params = fragment.split("&").associate {
-                    val parts = it.split("=", limit = 2)
-                    if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
-                }
-                accessToken = params["access_token"]
-                refreshToken = params["refresh_token"]
-                userId = params["user_id"]
-                email = params["email"]
+        val fragment = data.fragment
+        if (accessToken.isNullOrBlank() && !fragment.isNullOrBlank()) {
+            val params = fragment.split("&").associate {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to Uri.decode(parts[1]) else parts[0] to ""
             }
+            accessToken = params["access_token"]
+            refreshToken = params["refresh_token"]
+            userId = params["user_id"]
+            email = params["email"]
+        }
 
-            if (!error.isNullOrBlank()) {
-                authViewModel.onAuthError(errorDescription ?: error)
-            } else if (!accessToken.isNullOrBlank()) {
-                authViewModel.onSessionReceived(
-                    accessToken = accessToken,
-                    refreshToken = refreshToken,
-                    userId = userId ?: "",
-                    email = email
-                )
-            }
+        intent.data = null
+
+        if (!error.isNullOrBlank()) {
+            authViewModel.onAuthError(errorDescription?.takeIf { it.isNotBlank() } ?: error)
+        } else if (!accessToken.isNullOrBlank()) {
+            authViewModel.onSessionReceived(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                userId = userId ?: "",
+                email = email
+            )
+        }
         }
     }
 

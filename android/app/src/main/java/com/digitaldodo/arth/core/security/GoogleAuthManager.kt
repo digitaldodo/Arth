@@ -7,6 +7,8 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
+import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
 import com.digitaldodo.arth.BuildConfig
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -15,16 +17,19 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 sealed class GoogleAuthResult {
     data class Success(val idToken: String, val email: String?) : GoogleAuthResult()
     object Cancelled : GoogleAuthResult()
+    data class DeviceCredentialUnavailable(val reason: String, val cause: Throwable? = null) : GoogleAuthResult()
     data class Failure(val message: String, val cause: Throwable? = null) : GoogleAuthResult()
 }
 
-class GoogleAuthManager(private val context: Context) {
+class GoogleAuthManager(context: Context) {
     private val credentialManager = CredentialManager.create(context)
 
     suspend fun signIn(activity: Activity): GoogleAuthResult {
         val serverClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID
         if (serverClientId.isBlank()) {
-            return GoogleAuthResult.Failure("Google Web Client ID is not configured in this build.")
+            return GoogleAuthResult.DeviceCredentialUnavailable(
+                "On-device Google account selection is unavailable; continuing in browser."
+            )
         }
 
         val googleIdOption = GetGoogleIdOption.Builder()
@@ -51,14 +56,37 @@ class GoogleAuthManager(private val context: Context) {
                     email = googleIdTokenCredential.id
                 )
             } else {
-                GoogleAuthResult.Failure("Unexpected credential type: ${credential::class.java.name}")
+                GoogleAuthResult.DeviceCredentialUnavailable(
+                    "Unexpected credential type; continuing in browser."
+                )
             }
         } catch (e: GetCredentialCancellationException) {
             GoogleAuthResult.Cancelled
         } catch (e: NoCredentialException) {
-            GoogleAuthResult.Failure("No Google accounts found on this device. Add a Google account in Android Settings.")
+            GoogleAuthResult.DeviceCredentialUnavailable(
+                "No Google account is configured on this device. Opening browser Google sign-in.",
+                e
+            )
+        } catch (e: GetCredentialProviderConfigurationException) {
+            GoogleAuthResult.DeviceCredentialUnavailable(
+                "Device Google credential provider is unavailable. Opening browser Google sign-in.",
+                e
+            )
+        } catch (e: GetCredentialUnsupportedException) {
+            GoogleAuthResult.DeviceCredentialUnavailable(
+                "On-device credential manager is unsupported. Opening browser Google sign-in.",
+                e
+            )
         } catch (e: GetCredentialException) {
-            GoogleAuthResult.Failure(e.message ?: "Google sign-in error (${e.type})", e)
+            val lower = (e.message ?: "").lowercase()
+            if (lower.contains("no credential") || lower.contains("developer_error") || lower.contains("provider")) {
+                GoogleAuthResult.DeviceCredentialUnavailable(
+                    "Device Google account picker is unavailable. Opening browser Google sign-in.",
+                    e
+                )
+            } else {
+                GoogleAuthResult.Failure(e.message ?: "Google sign-in error (${e.type})", e)
+            }
         } catch (e: Exception) {
             GoogleAuthResult.Failure(e.message ?: "Failed to authenticate with Google", e)
         }

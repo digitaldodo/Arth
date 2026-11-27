@@ -280,11 +280,12 @@ export async function signInWithEmailAction(
       lower.includes('enotfound') ||
       lower.includes('econnrefused') ||
       lower.includes('etimedout') ||
-      lower.includes('ebusy')
+      lower.includes('ebusy') ||
+      lower.includes('missing supabase credentials')
     ) {
       return {
         error:
-          'Authentication service is temporarily unavailable. Please try again shortly.',
+          'Authentication service is temporarily unavailable. Check your internet connection and try again shortly.',
       };
     }
     return { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') };

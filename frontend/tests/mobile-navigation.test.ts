@@ -92,7 +92,7 @@ describe('Mobile Header & Navigation Architecture', () => {
     assert.ok(navContent.includes('More'), 'Nav must have More item');
   });
 
-  test('Unauthenticated home and login headers do not contain ThemeToggle', () => {
+  test('Unauthenticated home omits ThemeToggle in header while login page exposes compact ThemeToggle', () => {
     const unauthPath = path.join(projectRoot, 'src', 'app', 'UnauthenticatedHome.tsx');
     const loginPath = path.join(projectRoot, 'src', 'app', 'login', 'page.tsx');
 
@@ -107,8 +107,8 @@ describe('Mobile Header & Navigation Architecture', () => {
       'UnauthenticatedHome header must not contain ThemeToggle'
     );
     assert.ok(
-      !loginHeader.includes('<ThemeToggle'),
-      'LoginPage header must not contain ThemeToggle'
+      loginHeader.includes('<ThemeToggle'),
+      'LoginPage header should expose ThemeToggle for Obsidian Dark and Warm Paper switching'
     );
   });
 });

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     if (!rawIdentifier || !password) {
       return NextResponse.json(
-        { error: 'Email or username and password are required' },
+        { error: 'Email or username and password are required', code: 'MISSING_FIELDS' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -36,7 +36,10 @@ export async function POST(request: Request) {
       const normalizedUsername = rawIdentifier.toLowerCase();
       if (!isValidUsername(normalizedUsername)) {
         return NextResponse.json(
-          { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+          {
+            error: 'Invalid email, username, or password. Please verify your credentials and try again.',
+            code: 'INVALID_CREDENTIALS',
+          },
           { status: 401, headers: { 'Cache-Control': 'no-store' } }
         );
       }
@@ -44,13 +47,19 @@ export async function POST(request: Request) {
       const lookup = await lookupEmailByUsername(normalizedUsername);
       if (lookup.status === 'unavailable') {
         return NextResponse.json(
-          { error: 'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.' },
+          {
+            error: 'Username sign-in is temporarily unavailable. Please sign in with your registered email address or try again shortly.',
+            code: 'USERNAME_LOOKUP_UNAVAILABLE',
+          },
           { status: 503, headers: { 'Cache-Control': 'no-store' } }
         );
       }
       if (lookup.status === 'not_found') {
         return NextResponse.json(
-          { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+          {
+            error: 'Invalid email, username, or password. Please verify your credentials and try again.',
+            code: 'INVALID_CREDENTIALS',
+          },
           { status: 401, headers: { 'Cache-Control': 'no-store' } }
         );
       }
@@ -77,7 +86,7 @@ export async function POST(request: Request) {
           lower.includes('ebusy')
         ) {
           return NextResponse.json(
-            { error: 'Authentication service is temporarily unavailable. Please try again shortly.' },
+            { error: 'Authentication service is temporarily unavailable. Please try again shortly.', code: 'SERVICE_UNAVAILABLE' },
             { status: 503, headers: { 'Cache-Control': 'no-store' } }
           );
         }
@@ -87,29 +96,41 @@ export async function POST(request: Request) {
           error.message.includes('invalid_grant')
         ) {
           return NextResponse.json(
-            { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+            {
+              error: 'Invalid email, username, or password. Please verify your credentials and try again.',
+              code: 'INVALID_CREDENTIALS',
+            },
             { status: 401, headers: { 'Cache-Control': 'no-store' } }
           );
         }
         if (error.message.includes('Email not confirmed')) {
           return NextResponse.json(
-            { error: 'Your email address has not been confirmed yet. Please check your inbox for the confirmation link.' },
+            {
+              error: 'Your email address has not been confirmed yet. Please check your inbox for the confirmation link.',
+              code: 'EMAIL_NOT_CONFIRMED',
+            },
             { status: 403, headers: { 'Cache-Control': 'no-store' } }
           );
         }
         if (error.status === 429 || error.message.includes('rate')) {
           return NextResponse.json(
-            { error: 'Too many sign-in attempts. Please wait a few moments before trying again.' },
+            {
+              error: 'Too many sign-in attempts. Please wait a few moments before trying again.',
+              code: 'RATE_LIMITED',
+            },
             { status: 429, headers: { 'Cache-Control': 'no-store' } }
           );
         }
         return NextResponse.json(
-          { error: sanitizeUserFacingError(error.message, 'Unable to sign in. Please verify your credentials and try again.') },
+          {
+            error: sanitizeUserFacingError(error.message, 'Unable to sign in. Please verify your credentials and try again.'),
+            code: error.status && error.status >= 500 ? 'SERVICE_UNAVAILABLE' : 'AUTH_REJECTED',
+          },
           { status: error.status && error.status >= 500 ? 503 : 401, headers: { 'Cache-Control': 'no-store' } }
         );
       }
       return NextResponse.json(
-        { error: 'Invalid email, username, or password. Please verify your credentials and try again.' },
+        { error: 'Invalid email, username, or password. Please verify your credentials and try again.', code: 'INVALID_CREDENTIALS' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -134,15 +155,19 @@ export async function POST(request: Request) {
       lower.includes('enotfound') ||
       lower.includes('econnrefused') ||
       lower.includes('etimedout') ||
-      lower.includes('ebusy')
+      lower.includes('ebusy') ||
+      lower.includes('missing supabase credentials')
     ) {
       return NextResponse.json(
-        { error: 'Authentication service is temporarily unavailable. Please try again shortly.' },
+        {
+          error: 'Authentication service is temporarily unavailable. Please try again shortly.',
+          code: lower.includes('missing supabase credentials') ? 'CONFIGURATION_ERROR' : 'SERVICE_UNAVAILABLE',
+        },
         { status: 503, headers: { 'Cache-Control': 'no-store' } }
       );
     }
     return NextResponse.json(
-      { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.') },
+      { error: sanitizeUserFacingError(err, 'Unable to sign in. Please try again.'), code: 'SERVER_ERROR' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

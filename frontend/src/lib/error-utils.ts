@@ -127,6 +127,8 @@ export function sanitizeUserFacingError(
   }
 
   if (
+    lower.includes('missing supabase credentials') ||
+    lower.includes('not configured in this environment') ||
     lower.includes('auth service unavailable') ||
     lower.includes('authapierror') ||
     lower.includes('authentication service is temporarily unavailable') ||
@@ -134,7 +136,7 @@ export function sanitizeUserFacingError(
     lower.includes('api key') ||
     lower.includes('apikey')
   ) {
-    return 'Authentication service is temporarily unavailable. Please try again shortly.';
+    return 'Authentication service is temporarily unavailable or not configured. Please check connectivity and try again shortly.';
   }
 
   // 5. Temporary backend unavailability / Gateway failures
@@ -144,11 +146,13 @@ export function sanitizeUserFacingError(
     lower.includes('service unavailable') ||
     lower.includes('temporarily unavailable')
   ) {
-    return 'SpendSense is temporarily unavailable. Your existing financial records have not been confirmed as loaded.';
+    return 'SpendSense is temporarily unavailable. Your existing financial records remain safe.';
   }
 
   // 6. Network & Connection Failures (Node undici, browser fetch, timeout, unreachable)
   if (
+    lower.includes('network unavailable') ||
+    lower.includes('offline') ||
     lower.includes('fetch failed') ||
     lower.includes('failed to fetch') ||
     lower.includes('networkerror') ||

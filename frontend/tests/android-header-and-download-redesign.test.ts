@@ -154,7 +154,7 @@ describe('SpendSense Website Navigation & Android Download Experience Test Suite
 
       assert.ok(installContent.includes("isHydrated && isAndroid"), 'APK card must be device-gated after hydration');
       assert.ok(installContent.includes("method: 'HEAD'"), 'APK action must verify a binary endpoint');
-      assert.ok(installContent.includes('Download Android App'), 'Android APK action must have a clear label');
+      assert.ok(installContent.includes('landing-android-apk-btn') && installContent.includes('Install SpendSense'), 'Android install action must use clear unified customer-facing copy');
 
       // Hero section: Removed duplicate Sign In, changed to "Get Started →"
       assert.ok(

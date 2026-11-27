@@ -50,7 +50,8 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
 
     assert.ok(content.includes('href="/download"'), 'UnauthenticatedHome must link to /download');
     assert.ok(content.includes('<GetSpendSenseSection compact />'), 'Install controls must be rendered in the hero');
-    assert.ok(installContent.includes('Download Android App'), 'Hero install card must expose the native Android action');
+    assert.ok(installContent.includes('landing-android-apk-btn') && installContent.includes('Install SpendSense'), 'Hero install card must expose unified Install SpendSense Android action');
+    assert.ok(!installContent.includes('Install SpendSense PWA'), 'Customer-facing install card must avoid technical PWA jargon');
     assert.ok(!content.includes('headerApkDownload'), 'APK download must not bypass release verification in the header');
     assert.ok(content.includes('Android App'), 'Footer must contain Android App link');
   });

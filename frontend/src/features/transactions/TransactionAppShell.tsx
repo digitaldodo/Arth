@@ -94,6 +94,7 @@ const DataSyncSettings = dynamic(() => import('@/features/settings/DataSyncSetti
 const QuickAddModal = dynamic(() => import('./QuickAddModal').then((module) => module.QuickAddModal));
 const StatementImportModal = dynamic(() => import('@/features/imports/StatementImportModal').then((module) => module.StatementImportModal));
 const InstallPromptCard = dynamic(() => import('@/features/pwa/InstallPromptCard').then((module) => module.InstallPromptCard));
+const InstallSuggestionBanner = dynamic(() => import('@/features/install/InstallSuggestionBanner').then((module) => module.InstallSuggestionBanner));
 const DataExportCard = dynamic(() => import('@/features/export/DataExportCard').then((module) => module.DataExportCard));
 const ThemeToggle = dynamic(() => import('@/components/ui/ThemeToggle').then((module) => module.ThemeToggle));
 const AppLockSettings = dynamic(() => import('@/features/app-lock/AppLockSettings').then((module) => module.AppLockSettings));
@@ -755,6 +756,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
         {user ? (
           <>
+            <InstallSuggestionBanner />
             {/* Mount each destination on first visit, then preserve its state for fast return navigation. */}
             {visitedViews.has('home') && <div className={activeView === 'home' ? 'view-enter' : 'hidden'}>
               <DashboardPage

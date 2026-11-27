@@ -50,6 +50,14 @@
   --border-strong: #9C978D;
   --focus-ring: #181615;
 
+  /* SpendSense Brand Accents (Subtle Archival Evergreen & Copper) */
+  --brand-evergreen: #193F37;
+  --brand-evergreen-fg: #193F37;
+  --brand-evergreen-soft: #EEF4F2;
+  --brand-evergreen-border: #C4D6D0;
+  --brand-copper: #B67645;
+  --accent-emerald: #10B981;
+
   /* Primary Actions */
   --action-primary-bg: #181615;
   --action-primary-fg: #FFFFFF;
@@ -150,6 +158,14 @@
     --border-strong: #57534E;
     --focus-ring: #F5F5F4;
 
+    /* SpendSense Brand Accents (Subtle Obsidian Evergreen & Copper) */
+    --brand-evergreen: #193F37;
+    --brand-evergreen-fg: #6EE7B7;
+    --brand-evergreen-soft: rgba(25, 63, 55, 0.36);
+    --brand-evergreen-border: rgba(110, 231, 183, 0.24);
+    --brand-copper: #B67645;
+    --accent-emerald: #10B981;
+
     --action-primary-bg: #F5F5F4;
     --action-primary-fg: #0C0A09;
     --action-primary-hover: #E7E5E4;
@@ -237,6 +253,14 @@
   --border-subtle: #3F3B37;
   --border-strong: #57534E;
   --focus-ring: #F5F5F4;
+
+  /* SpendSense Brand Accents (Subtle Obsidian Evergreen & Copper) */
+  --brand-evergreen: #193F37;
+  --brand-evergreen-fg: #6EE7B7;
+  --brand-evergreen-soft: rgba(25, 63, 55, 0.36);
+  --brand-evergreen-border: rgba(110, 231, 183, 0.24);
+  --brand-copper: #B67645;
+  --accent-emerald: #10B981;
 
   --action-primary-bg: #F5F5F4;
   --action-primary-fg: #0C0A09;

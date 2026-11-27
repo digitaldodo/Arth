@@ -1,6 +1,25 @@
 import { createClient } from '@/lib/supabase/server';
+import { formatAuthError } from '@/lib/auth-config';
 
 export const dynamic = 'force-dynamic';
+
+function parseIncomingCookies(request: Request): { name: string; value: string }[] {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return [];
+  return cookieHeader.split(';').map((pair) => {
+    const [name, ...rest] = pair.trim().split('=');
+    return { name, value: rest.join('=') };
+  });
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -9,29 +28,32 @@ export async function GET(request: Request) {
   const errorDescription = requestUrl.searchParams.get('error_description');
 
   if (errorParam) {
-    const errorTarget = `arth://auth/callback?error=${encodeURIComponent(errorParam)}&error_description=${encodeURIComponent(errorDescription || '')}`;
-    return new Response(renderRedirectHtml(errorTarget, false, errorDescription || errorParam), {
+    const friendly = formatAuthError(errorParam, errorDescription);
+    const errorTarget = `arth://auth/callback?error=${encodeURIComponent(errorParam)}&error_description=${encodeURIComponent(friendly)}`;
+    return new Response(renderRedirectHtml(errorTarget, false, friendly), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
   }
 
   if (!code) {
-    const errorTarget = `arth://auth/callback?error=missing_code&error_description=${encodeURIComponent('No authorization code received')}`;
-    return new Response(renderRedirectHtml(errorTarget, false, 'No authorization code received from Google'), {
+    const msg = 'No authorization code received from Google. Please try again.';
+    const errorTarget = `arth://auth/callback?error=missing_authorization_code&error_description=${encodeURIComponent(msg)}`;
+    return new Response(renderRedirectHtml(errorTarget, false, msg), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
   }
 
   try {
-    const supabase = await createClient();
+    const incomingCookies = parseIncomingCookies(request);
+    const supabase = await createClient(undefined, incomingCookies);
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error || !data.session) {
-      const errorMsg = error?.message || 'Code exchange failed';
-      const errorTarget = `arth://auth/callback?error=exchange_failed&error_description=${encodeURIComponent(errorMsg)}`;
-      return new Response(renderRedirectHtml(errorTarget, false, errorMsg), {
+      const friendly = formatAuthError('auth_exchange_failed', error?.message);
+      const errorTarget = `arth://auth/callback?error=auth_exchange_failed&error_description=${encodeURIComponent(friendly)}`;
+      return new Response(renderRedirectHtml(errorTarget, false, friendly), {
         status: 200,
         headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
       });
@@ -45,9 +67,10 @@ export async function GET(request: Request) {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Authentication service error';
-    const errorTarget = `arth://auth/callback?error=unexpected_error&error_description=${encodeURIComponent(errorMsg)}`;
-    return new Response(renderRedirectHtml(errorTarget, false, errorMsg), {
+    const raw = err instanceof Error ? err.message : 'Authentication service error';
+    const friendly = formatAuthError('auth_exchange_failed', raw);
+    const errorTarget = `arth://auth/callback?error=auth_service_unavailable&error_description=${encodeURIComponent(friendly)}`;
+    return new Response(renderRedirectHtml(errorTarget, false, friendly), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
@@ -56,6 +79,7 @@ export async function GET(request: Request) {
 
 function renderRedirectHtml(targetUrl: string, isSuccess: boolean, statusText: string): string {
   const safeTarget = targetUrl.replace(/"/g, '&quot;');
+  const safeText = escapeHtml(statusText);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -67,7 +91,7 @@ function renderRedirectHtml(targetUrl: string, isSuccess: boolean, statusText: s
     body {
       background-color: #0C0A09;
       color: #F5F5F4;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -80,45 +104,50 @@ function renderRedirectHtml(targetUrl: string, isSuccess: boolean, statusText: s
     .card {
       background: #171513;
       border: 1px solid #292524;
-      border-radius: 16px;
-      padding: 36px 24px;
+      border-top: 3px solid #193F37;
+      border-radius: 6px;
+      padding: 32px 24px;
       max-width: 420px;
       width: 100%;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .brand {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #A8A29E;
+      margin-bottom: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     h1 {
       font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 8px;
+      font-weight: 600;
+      margin: 0 0 8px;
       color: ${isSuccess ? '#86EFAC' : '#FCA5A5'};
     }
     p {
       color: #A8A29E;
       font-size: 14px;
       line-height: 1.5;
-      margin-bottom: 24px;
+      margin: 0 0 24px;
     }
     .btn {
       display: inline-block;
       background: #F5F5F4;
       color: #0C0A09;
       font-weight: 600;
-      font-size: 15px;
-      padding: 12px 28px;
-      border-radius: 8px;
+      font-size: 14px;
+      padding: 12px 24px;
+      border-radius: 4px;
       text-decoration: none;
-      transition: background 0.2s;
-    }
-    .btn:active {
-      background: #E7E5E4;
     }
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="brand">SpendSense · Personal Financial Ledger</div>
     <h1>${isSuccess ? 'Sign In Complete' : 'Sign In Notice'}</h1>
-    <p>${isSuccess ? 'Returning you to your SpendSense financial ledger...' : statusText}</p>
-    <a class="btn" href="${safeTarget}">Open SpendSense App</a>
+    <p>${isSuccess ? 'Returning you to your SpendSense financial ledger...' : safeText}</p>
+    <a class="btn" href="${safeTarget}">Return to SpendSense</a>
   </div>
   <script>
     try {

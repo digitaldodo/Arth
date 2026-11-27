@@ -110,12 +110,12 @@ export function SettingsView({
 
       </div>
 
-      {/* Quick PWA Install Banner when browser supports programmatic install */}
+      {/* Quick Install Banner when browser supports programmatic install */}
       {isInstallable && !isStandalone && !isInstalled && !isNativeAndroid && (
         <div className="p-4 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0 space-y-0.5">
             <h2 className="text-xs font-semibold text-[var(--text-primary)]">
-              Install SpendSense Web App
+              Install SpendSense
             </h2>
             <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
               Add SpendSense to your home screen or desktop for fast launch, standalone display, and offline ledger access.

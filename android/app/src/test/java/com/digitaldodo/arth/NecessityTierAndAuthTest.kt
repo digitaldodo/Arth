@@ -95,5 +95,36 @@ class NecessityTierAndAuthTest {
         val message = AuthErrorDiagnostics.diagnose(ex)
 
         assertTrue(message.contains("Unable to resolve server address"))
+        assertTrue(AuthErrorDiagnostics.isConnectivityOrServerFailure(ex))
+    }
+
+    @Test
+    fun authErrorDiagnosticsPreservesServerUnconfirmedEmailMessage() {
+        val response = Response.error<String>(
+            401,
+            """{"error":"Your email address has not been confirmed yet. Check your inbox first."}"""
+                .toResponseBody("application/json".toMediaType())
+        )
+        val ex = HttpException(response)
+        val message = AuthErrorDiagnostics.diagnose(ex)
+
+        assertTrue(message.contains("not been confirmed"))
+        assertFalse(message.contains("Invalid email or password"))
+        assertFalse(AuthErrorDiagnostics.isConnectivityOrServerFailure(ex))
+    }
+
+    @Test
+    fun authErrorDiagnosticsDistinguishesServerConfigOrOutageFromBadCredentials() {
+        val response = Response.error<String>(
+            503,
+            """{"code":"CONFIGURATION_ERROR","error":"Authentication service is not configured on this server."}"""
+                .toResponseBody("application/json".toMediaType())
+        )
+        val ex = HttpException(response)
+        val message = AuthErrorDiagnostics.diagnose(ex)
+
+        assertTrue(message.contains("not configured"))
+        assertFalse(message.contains("Invalid email or password"))
+        assertTrue(AuthErrorDiagnostics.isConnectivityOrServerFailure(ex))
     }
 }

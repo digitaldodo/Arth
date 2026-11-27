@@ -208,6 +208,10 @@ export function formatAuthError(
       return 'Sign-in was cancelled or access was denied. Please try again.';
     case 'expired_session':
       return 'Your password recovery or authentication session has expired. Please sign in again.';
+    case 'auth_service_unavailable':
+      return 'SpendSense authentication service is temporarily unavailable. Check your internet connection and try again.';
+    case 'session_persistence_failed':
+      return 'Your browser could not save your session cookies. Allow site cookies for SpendSense and try again.';
     default:
       return sanitizeUserFacingError(decodeURIComponent(errorParam));
   }

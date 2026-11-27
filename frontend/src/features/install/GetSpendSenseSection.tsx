@@ -40,12 +40,13 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
   const [endpointVerified, setEndpointVerified] = useState<boolean>(Boolean(initialRelease?.published));
   const [releaseCheckDone, setReleaseCheckDone] = useState<boolean>(Boolean(initialRelease));
   const [releaseReloadCount, setReleaseReloadCount] = useState(0);
+  const [showBrowserFallback, setShowBrowserFallback] = useState(false);
 
-  // Only Android devices need to check and verify the native Android APK release & binary endpoint.
-  const showAndroidCard = isHydrated && isAndroid;
+  // Only Android devices verify the signed Android application release endpoint.
+  const isAndroidDevice = isHydrated && isAndroid;
 
   useEffect(() => {
-    if (!showAndroidCard) return;
+    if (!isAndroidDevice) return;
 
     let cancelled = false;
     void (async () => {
@@ -83,9 +84,9 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
     return () => {
       cancelled = true;
     };
-  }, [showAndroidCard, releaseReloadCount]);
+  }, [isAndroidDevice, releaseReloadCount]);
 
-  const apkAvailable = Boolean(showAndroidCard && release?.published && endpointVerified);
+  const apkAvailable = Boolean(isAndroidDevice && release?.published && endpointVerified);
   const apkDownload = useApkDownload({
     downloadUrl: release?.downloadUrl || '/api/android/download',
     fileName: release?.apkFileName || 'SpendSense.apk',
@@ -97,47 +98,45 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
     void apkDownload.startDownload();
   };
 
-  const pwaTitle = isIos
-    ? 'Add SpendSense to Home Screen'
-    : isAndroid
-      ? 'Install SpendSense PWA'
+  const isAlreadyInstalled = isHydrated && (isStandalone || isInstalled);
+
+  const cardTitle = isAlreadyInstalled
+    ? 'Already installed'
+    : isIos
+      ? 'Add SpendSense to Home Screen'
       : 'Install SpendSense';
 
-  const pwaPrimaryLabel = isWindows
-    ? isInstalling
-      ? 'Installing on Windows…'
-      : 'Install on Windows'
-    : isInstalling
-      ? 'Installing SpendSense…'
-      : 'Install SpendSense';
-
-  const pwaBadgeLabel = !isHydrated
-    ? 'Web App · PWA'
-    : isStandalone
-      ? 'Installed App'
-      : isInstalled
-        ? 'Installed'
+  const platformBadge = !isHydrated
+    ? 'Preparing option'
+    : isAlreadyInstalled
+      ? 'Ready to open'
+      : isAndroidDevice
+        ? apkAvailable && release?.version
+          ? `Android · v${release.version}${release.apkSize ? ` (${release.apkSize})` : ''}`
+          : 'Android Device'
         : isIos
           ? isIpad
-            ? 'iPadOS · Safari'
+            ? 'iPad · Safari'
             : 'iPhone · Safari'
           : isWindows
-            ? 'Windows Desktop · PWA'
+            ? 'Windows Desktop'
             : platform === 'macos'
-              ? 'macOS · PWA'
+              ? 'macOS Desktop'
               : platform === 'linux' || platform === 'chromeos'
-                ? 'Desktop · PWA'
-                : isAndroid
-                  ? 'Android · PWA'
-                  : 'Web App · PWA';
+                ? 'Desktop App'
+                : 'Add to your device';
 
-  const pwaDescription = isAndroid
-    ? 'Install SpendSense directly from your browser for quick access to your financial ledger.'
-    : isIos
-      ? `Add SpendSense directly to your ${isIpad ? 'iPad' : 'iPhone'} Home Screen for full-screen standalone access.`
-      : isWindows
-        ? 'Use SpendSense in its own desktop application window.'
-        : 'Install SpendSense as an app on your device. Access it from your home screen, dock, or application launcher.';
+  const cardDescription = isAlreadyInstalled
+    ? 'SpendSense is already installed.'
+    : isAndroidDevice && apkAvailable
+      ? 'Install the Android app for offline ledger access, fingerprint lock, and automatic notification capture.'
+      : isAndroidDevice
+        ? 'Add SpendSense directly from your Android browser for quick access to your financial ledger.'
+        : isIos
+          ? `Add SpendSense to your ${isIpad ? 'iPad' : 'iPhone'} Home Screen for quick, full-screen access.`
+          : isWindows
+            ? 'Install SpendSense on Windows to open it in its own application window and pin it to your Start menu or taskbar.'
+            : 'Add SpendSense to your device for quick access from your home screen, dock, or application launcher.';
 
   const renderBrowserInstructions = () => {
     if (isIos) {
@@ -167,7 +166,7 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
           <p className="font-semibold text-[var(--text-primary)]">
             {browser === 'firefox'
               ? 'Use Microsoft Edge or Google Chrome on Windows'
-              : 'Install via browser menu'}
+              : 'Install from your browser menu'}
           </p>
           {browser === 'edge' ? (
             <p className="leading-relaxed">
@@ -189,13 +188,13 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
       );
     }
 
-    if (isAndroid) {
+    if (isAndroidDevice) {
       return (
         <div
           data-testid="pwa-android-instructions"
           className="p-3.5 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] space-y-1.5 text-xs text-[var(--text-secondary)]"
         >
-          <p className="font-semibold text-[var(--text-primary)]">Install from your Android browser</p>
+          <p className="font-semibold text-[var(--text-primary)]">Add website to Home Screen</p>
           <p className="leading-relaxed">
             {browser === 'samsung'
               ? 'Tap the Menu (≡) or the Install icon in Samsung Internet and select Add page to → Home screen.'
@@ -230,40 +229,57 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
       aria-labelledby="get-spendsense-heading"
       className={compact ? 'mt-3 space-y-3' : 'mt-12 sm:mt-14 pt-10 border-t border-[var(--border-hairline)] space-y-6'}
     >
-      {!compact && <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[10px] font-mono uppercase tracking-wider text-[var(--text-secondary)]">
-            <span>Apps &amp; Installation</span>
+      {!compact ? (
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-[2px] bg-[var(--brand-evergreen-soft)] border border-[var(--brand-evergreen-border)] text-[10px] font-mono uppercase tracking-wider text-[var(--brand-evergreen-fg)]">
+              <span>Add SpendSense to your device</span>
+            </div>
+            <h2
+              id="get-spendsense-heading"
+              className="text-2xl sm:text-3xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]"
+            >
+              Get SpendSense
+            </h2>
+            <p className="text-sm sm:text-[15px] text-[var(--text-secondary)] leading-relaxed">
+              Take SpendSense with you. Install it on your device for convenient access to your personal financial ledger.
+            </p>
           </div>
-          <h2
-            id="get-spendsense-heading"
-            className="text-2xl sm:text-3xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]"
-          >
-            Get SpendSense
-          </h2>
-          <p className="text-sm sm:text-[15px] text-[var(--text-secondary)] leading-relaxed">
-            Use SpendSense wherever you manage your money. Install the app on your device or keep using it in your browser.
+
+          <div className="flex items-center gap-3 self-start sm:self-end shrink-0">
+            <div className="h-10 w-10 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] flex items-center justify-center shrink-0">
+              <ArthLogo variant="symbol" className="h-6 w-6 text-[var(--text-primary)]" />
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] leading-snug">
+              <span className="block text-[var(--text-primary)] font-semibold">Official SpendSense</span>
+              <span>Synced Ledger &middot; Offline Capable</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <h2
+              id="get-spendsense-heading"
+              className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]"
+            >
+              Get SpendSense
+            </h2>
+            <span className="text-[10px] text-[var(--text-muted)]">Add to your device</span>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Take SpendSense with you. Install it on your device for convenient access to your personal financial ledger.
           </p>
         </div>
+      )}
 
-        <div className="flex items-center gap-3 self-start sm:self-end shrink-0">
-          <div className="h-10 w-10 rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] flex items-center justify-center shrink-0">
-            <ArthLogo variant="symbol" className="h-6 w-6 text-[var(--text-primary)]" />
-          </div>
-          <div className="text-[11px] font-mono text-[var(--text-muted)] leading-snug">
-            <span className="block text-[var(--text-primary)] font-semibold">Official SpendSense</span>
-            <span>Synced Ledger &middot; Offline Capable</span>
-          </div>
-        </div>
-      </div>}
-      {compact && <div className="flex items-center justify-between gap-2"><h2 id="get-spendsense-heading" className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">Get SpendSense</h2><span className="text-[10px] text-[var(--text-muted)]">Install for this device</span></div>}
-
-      {/* Adaptive Grid: Two cards on Android (PWA + Verified Native APK); Single prominent PWA card on Desktop, iOS & Unknown */}
-      <div className={`grid gap-3 ${showAndroidCard ? (compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2') : 'grid-cols-1 max-w-2xl'}`}>
-        {/* OPTION 1 — INSTALL SPENDSENSE PWA */}
+      {/* Unified Single Card Installation Experience */}
+      <div className="max-w-2xl">
         <article
-          data-testid="landing-pwa-card"
-          className={`rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] ${compact ? 'p-3.5' : 'p-5 sm:p-6'} flex flex-col justify-between gap-4 shadow-2xs ${compact ? '' : 'min-h-[220px]'}`}
+          data-testid={isAndroidDevice && apkAvailable && !isAlreadyInstalled ? 'landing-android-card' : 'landing-pwa-card'}
+          className={`rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] border-t-2 border-t-[var(--brand-evergreen)] ${
+            compact ? 'p-4' : 'p-5 sm:p-6'
+          } flex flex-col justify-between gap-4 shadow-2xs`}
         >
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -273,33 +289,42 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-[var(--text-primary)] leading-tight">
-                    {pwaTitle}
+                    {cardTitle}
                   </h3>
-                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
-                    {pwaBadgeLabel}
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5 truncate">
+                    {platformBadge}
                   </p>
                 </div>
               </div>
+
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] text-[10px] font-mono uppercase tracking-wider border ${
-                  isInstalled
+                  isAlreadyInstalled
                     ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]'
                     : 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)]'
                 }`}
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    isInstalled ? 'bg-[var(--income-dot)]' : isInstallable ? 'bg-emerald-500' : 'bg-[var(--text-muted)]'
+                    isAlreadyInstalled
+                      ? 'bg-[var(--income-dot)]'
+                      : apkAvailable || isInstallable
+                        ? 'bg-[var(--accent-emerald)]'
+                        : 'bg-[var(--text-muted)]'
                   }`}
                 />
                 {!isHydrated
-                  ? 'Web App'
-                  : isStandalone
-                    ? 'Active App'
-                    : isInstalled
-                      ? 'Installed'
+                  ? 'Checking device'
+                  : isAlreadyInstalled
+                    ? 'Already installed'
+                    : isAndroidDevice
+                      ? !releaseCheckDone
+                        ? 'Checking release'
+                        : apkAvailable
+                          ? 'Android App'
+                          : 'Browser Install'
                       : isInstallable
-                        ? 'Ready to Install'
+                        ? 'Ready to install'
                         : isIos
                           ? 'Safari Guide'
                           : 'Browser Install'}
@@ -307,45 +332,173 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
             </div>
 
             <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
-              {pwaDescription}
+              {cardDescription}
             </p>
-
-            {isHydrated && isWindows && (
-              <p className="text-xs text-[var(--text-muted)] leading-relaxed border-l-2 border-[var(--border-subtle)] pl-3">
-                Runs in its own app window and can be pinned to your Windows Start menu or taskbar.
-              </p>
-            )}
           </div>
 
           <div className="space-y-3">
             {!isHydrated ? (
               <div className="p-3 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs text-[var(--text-muted)]">
-                Checking browser installation support…
+                Checking installation options for your device…
               </div>
-            ) : isStandalone ? (
+            ) : isAlreadyInstalled ? (
               <div className="flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center min-h-[44px] px-4 py-2 rounded-[4px] bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border border-[var(--status-success-border)] text-xs font-semibold">
-                  Running as Installed SpendSense App
-                </span>
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-xs font-semibold transition-colors"
+                  className="inline-flex items-center justify-center min-h-[44px] px-5 py-2.5 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-[13px] font-semibold transition-colors"
                 >
                   Open SpendSense &rarr;
                 </Link>
               </div>
-            ) : isInstalled ? (
-              <div className="space-y-2.5">
-                <div className="p-3 rounded-[4px] bg-[var(--status-success-bg)] border border-[var(--status-success-border)] text-xs text-[var(--status-success-fg)]">
-                  SpendSense is installed on this device. Open it from your{' '}
-                  {isWindows ? 'Windows Start menu, taskbar, or browser apps' : 'home screen or app launcher'}.
-                </div>
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-xs font-semibold transition-colors"
-                >
-                  Open App &rarr;
-                </Link>
+            ) : isAndroidDevice ? (
+              <div className="space-y-3">
+                {!releaseCheckDone ? (
+                  <div className="p-3 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs text-[var(--text-muted)]">
+                    Verifying signed Android release…
+                  </div>
+                ) : apkAvailable ? (
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <a
+                        href="/api/android/download"
+                        onClick={handleApkAnchorClick}
+                        aria-disabled={apkDownload.isDownloading}
+                        data-testid="landing-android-apk-btn"
+                        className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-[4px] text-[13px] font-semibold transition-colors cursor-pointer bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] ${
+                          apkDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
+                        }`}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <span>
+                          {apkDownload.isDownloading
+                            ? apkDownload.progressPercent !== null
+                              ? `Downloading ${apkDownload.progressPercent}%…`
+                              : `Downloading ${formatBytesShort(apkDownload.bytesReceived) || 'app'}…`
+                            : 'Install SpendSense'}
+                        </span>
+                      </a>
+
+                      <Link
+                        href="/download"
+                        className="inline-flex items-center justify-center min-h-[44px] px-3 py-2 rounded-[4px] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent hover:border-[var(--border-hairline)] transition-colors"
+                      >
+                        Checksums &amp; SMS option &rarr;
+                      </Link>
+                    </div>
+
+                    {release && (
+                      <div className="text-[11px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-[4px] px-3 py-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <span>{release.apkFileName}</span>
+                        <span>v{release.version}</span>
+                      </div>
+                    )}
+
+                    {/* Discreet secondary browser-shortcut fallback (does not compete with primary install card) */}
+                    <div className="pt-1 border-t border-[var(--border-hairline)]">
+                      <button
+                        type="button"
+                        onClick={() => setShowBrowserFallback((prev) => !prev)}
+                        className="text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline underline-offset-2 cursor-pointer"
+                      >
+                        Or add website to Home Screen
+                      </button>
+
+                      {showBrowserFallback && (
+                        <div className="mt-2.5 space-y-2 p-3 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)]">
+                          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                            Browser shortcuts open SpendSense directly in Chrome or Edge without Android notification capture or fingerprint app lock.
+                          </p>
+                          {isInstallable ? (
+                            <button
+                              type="button"
+                              data-testid="landing-pwa-install-btn"
+                              onClick={() => void installApp()}
+                              disabled={isInstalling}
+                              className="inline-flex items-center justify-center min-h-[38px] px-3.5 py-1.5 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] cursor-pointer disabled:opacity-60"
+                            >
+                              {isInstalling ? 'Adding…' : 'Add website to Home Screen'}
+                            </button>
+                          ) : (
+                            renderBrowserInstructions()
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {isInstallable ? (
+                      <button
+                        type="button"
+                        data-testid="landing-pwa-install-btn"
+                        onClick={() => void installApp()}
+                        disabled={isInstalling}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-[4px] bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                      >
+                        {isInstalling ? 'Installing…' : 'Install SpendSense'}
+                      </button>
+                    ) : (
+                      renderBrowserInstructions()
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+                      <span data-testid="landing-apk-unavailable">
+                        Direct Android installer is temporarily unavailable.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReleaseCheckDone(false);
+                          setReleaseReloadCount((c) => c + 1);
+                        }}
+                        className="font-semibold text-[var(--text-primary)] underline underline-offset-2 cursor-pointer"
+                      >
+                        Retry release check
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {apkDownload.status === 'complete' && (
+                  <p
+                    data-testid="landing-apk-complete"
+                    role="status"
+                    className="text-xs text-[var(--status-success-fg)] bg-[var(--status-success-bg)] border border-[var(--status-success-border)] rounded-[4px] px-3 py-2"
+                  >
+                    Download complete: <strong>{apkDownload.downloadedFileName}</strong>. Open the file on your Android device to install.
+                  </p>
+                )}
+
+                {apkDownload.status === 'failed' && apkDownload.errorMessage && (
+                  <div
+                    data-testid="landing-apk-error"
+                    role="alert"
+                    className="text-xs text-[var(--status-error-fg)] bg-[var(--status-error-bg)] border border-[var(--status-error-border)] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <span>{apkDownload.errorMessage}</span>
+                    <button
+                      type="button"
+                      onClick={() => void apkDownload.startDownload()}
+                      className="underline font-semibold cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
               </div>
             ) : isInstallable ? (
               <div className="space-y-2.5">
@@ -373,8 +526,9 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
                     <path d="m9 11 3 3 3-3" />
                     <path d="M8 21h8" />
                   </svg>
-                  <span>{isAndroid ? 'Install PWA' : pwaPrimaryLabel}</span>
+                  <span>{isInstalling ? 'Installing SpendSense…' : 'Install SpendSense'}</span>
                 </button>
+
                 {installOutcome === 'dismissed' && (
                   <p className="text-[11px] text-[var(--text-muted)]">
                     Installation prompt dismissed. You can retry above or install anytime from your browser menu.
@@ -385,192 +539,21 @@ export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpe
                     {installError}
                   </p>
                 )}
+
+                {isWindows && (
+                  <details className="text-[11px] text-[var(--text-muted)]">
+                    <summary className="cursor-pointer hover:text-[var(--text-secondary)]">
+                      Browser menu instructions
+                    </summary>
+                    <div className="mt-2">{renderBrowserInstructions()}</div>
+                  </details>
+                )}
               </div>
             ) : (
               <div className="space-y-2.5">{renderBrowserInstructions()}</div>
             )}
-
-            {isHydrated && isWindows && !isInstalled && isInstallable && (
-              <details className="text-[11px] text-[var(--text-muted)]">
-                <summary className="cursor-pointer hover:text-[var(--text-secondary)]">
-                  Browser menu fallback instructions
-                </summary>
-                <div className="mt-2">{renderBrowserInstructions()}</div>
-              </details>
-            )}
           </div>
         </article>
-
-        {/* OPTION 2 — DOWNLOAD SPENDSENSE ANDROID (Rendered ONLY on Android phones & tablets) */}
-        {showAndroidCard && (
-          <article
-            data-testid="landing-android-card"
-            className={`rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] ${compact ? 'p-3.5' : 'p-5 sm:p-6'} flex flex-col justify-between gap-4 shadow-2xs ${compact ? '' : 'min-h-[220px]'}`}
-          >
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-9 w-9 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] flex items-center justify-center shrink-0 text-[var(--text-primary)]">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <rect x="6" y="4" width="12" height="16" rx="2" />
-                      <path d="M10 17h4" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-[var(--text-primary)] leading-tight">
-                      Download Native Android App
-                    </h3>
-                    <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
-                      Native APK &middot; Android 8.0+
-                    </p>
-                  </div>
-                </div>
-
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] text-[10px] font-mono uppercase tracking-wider border ${
-                    !releaseCheckDone
-                      ? 'bg-[var(--bg-surface-subtle)] text-[var(--text-muted)] border-[var(--border-hairline)]'
-                      : apkAvailable
-                        ? 'bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border-[var(--border-hairline)]'
-                        : 'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)] border-[var(--status-warning-border)]'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      !releaseCheckDone
-                        ? 'bg-[var(--text-muted)]'
-                        : apkAvailable
-                          ? 'bg-[var(--income-dot)]'
-                          : 'bg-amber-500'
-                    }`}
-                  />
-                  {!releaseCheckDone
-                    ? 'Verifying Release'
-                    : apkAvailable
-                      ? `v${release?.version} · ${release?.apkSize || 'APK'}`
-                      : 'Unavailable'}
-                </span>
-              </div>
-
-              <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                Get the native Android application for supported device features and transaction capture.
-              </p>
-
-              {apkAvailable && release && (
-                <div className="text-[11px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-                  <span>{release.apkFileName}</span>
-                  <span>{release.applicationId}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
-                {!releaseCheckDone ? (
-                  <span className="inline-flex items-center justify-center min-h-[44px] px-5 py-2.5 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs font-medium text-[var(--text-muted)]">
-                    Verifying Android APK release…
-                  </span>
-                ) : apkAvailable ? (
-                  <a
-                    href="/api/android/download"
-                    onClick={handleApkAnchorClick}
-                    aria-disabled={apkDownload.isDownloading}
-                    data-testid="landing-android-apk-btn"
-                    className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-[4px] text-[13px] font-semibold transition-colors cursor-pointer bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] ${
-                      apkDownload.isDownloading ? 'opacity-70 pointer-events-none' : ''
-                    }`}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    <span>
-                      {apkDownload.isDownloading
-                        ? apkDownload.progressPercent !== null
-                          ? `Downloading ${apkDownload.progressPercent}%…`
-                          : `Downloading ${formatBytesShort(apkDownload.bytesReceived) || 'APK'}…`
-                        : 'Download Android App'}
-                    </span>
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReleaseCheckDone(false);
-                      setReleaseReloadCount((c) => c + 1);
-                    }}
-                    className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--border-strong)] cursor-pointer"
-                  >
-                    Retry Release Check
-                  </button>
-                )}
-
-                <Link
-                  href="/download"
-                  className="inline-flex items-center justify-center min-h-[44px] px-3.5 py-2 rounded-[4px] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent hover:border-[var(--border-hairline)] transition-colors"
-                >
-                  Checksums &amp; SMS Helper &rarr;
-                </Link>
-              </div>
-
-              {apkDownload.status === 'complete' && (
-                <p
-                  data-testid="landing-apk-complete"
-                  role="status"
-                  className="text-xs text-[var(--status-success-fg)] bg-[var(--status-success-bg)] border border-[var(--status-success-border)] rounded-[4px] px-3 py-2"
-                >
-                  Download complete: <strong>{apkDownload.downloadedFileName}</strong>. Open the file on your Android device to install.
-                </p>
-              )}
-
-              {apkDownload.status === 'failed' && apkDownload.errorMessage && (
-                <div
-                  data-testid="landing-apk-error"
-                  role="alert"
-                  className="text-xs text-[var(--status-error-fg)] bg-[var(--status-error-bg)] border border-[var(--status-error-border)] rounded-[4px] px-3 py-2 flex flex-wrap items-center justify-between gap-2"
-                >
-                  <span>{apkDownload.errorMessage}</span>
-                  <button
-                    type="button"
-                    onClick={() => void apkDownload.startDownload()}
-                    className="underline font-semibold cursor-pointer"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              {releaseCheckDone && !apkAvailable && (
-                <p data-testid="landing-apk-unavailable" className="text-xs text-[var(--text-muted)]">
-                  Signed Android APK release is temporarily unavailable. You can install the SpendSense PWA or retry checking the release above.
-                </p>
-              )}
-            </div>
-          </article>
-        )}
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useRef, useCallback } from 'react';
 import { getCachedPwaUser, clearCachedPwaUserContext } from '@/lib/offline-db';
 import { useRouter } from 'next/navigation';
 import { ArthLogo } from '@/components/brand/ArthLogo';
@@ -16,6 +16,25 @@ import {
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'resend_confirm';
 
+interface AuthHealthSnapshot {
+  ok: boolean;
+  category:
+    | 'healthy'
+    | 'supabase_unconfigured'
+    | 'supabase_unreachable'
+    | 'backend_unreachable'
+    | 'degraded'
+    | 'unavailable';
+  message?: string;
+  checks?: {
+    supabaseConfigured?: boolean;
+    supabaseReachable?: boolean;
+    usernameLookupReady?: boolean;
+    googleOAuthReady?: boolean;
+    backendReachable?: boolean;
+  };
+}
+
 interface AuthFormProps {
   initialError?: string;
   initialMessage?: string;
@@ -28,6 +47,8 @@ export function AuthForm({
   initialMode = 'signin',
 }: AuthFormProps) {
   const router = useRouter();
+  const alertRef = useRef<HTMLDivElement | null>(null);
+  const identifierInputRef = useRef<HTMLInputElement | null>(null);
   const [mode, setMode] = useState<AuthMode>(() => {
     if (typeof window !== 'undefined') {
       const searchMode = new URLSearchParams(window.location.search).get('mode');
@@ -38,6 +59,13 @@ export function AuthForm({
   });
   const [isPending, startTransition] = useTransition();
   const [isGooglePending, startGoogleTransition] = useTransition();
+  const isSubmitting = isPending || isGooglePending;
+
+  const [isOfflineBrowser, setIsOfflineBrowser] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  );
+  const [authHealth, setAuthHealth] = useState<AuthHealthSnapshot | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
 
   // Field states
   const [identifier, setIdentifier] = useState('');
@@ -62,6 +90,66 @@ export function AuthForm({
   const [successMessage, setSuccessMessage] = useState<string | null>(
     initialMessage ? decodeURIComponent(initialMessage) : null
   );
+
+  const fetchAuthHealth = useCallback(async (): Promise<AuthHealthSnapshot | null> => {
+    try {
+      const res = await fetch('/api/auth/health', { cache: 'no-store' });
+      const data = (await res.json().catch(() => null)) as AuthHealthSnapshot | null;
+      if (data && typeof data.ok === 'boolean') {
+        return data;
+      }
+    } catch {
+      // fallback below
+    }
+    return {
+      ok: false,
+      category: 'unavailable',
+      message: 'Unable to check authentication service reachability right now.',
+    };
+  }, []);
+
+  const checkAuthHealth = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOfflineBrowser(true);
+      return;
+    }
+    setIsCheckingHealth(true);
+    const snapshot = await fetchAuthHealth();
+    setAuthHealth(snapshot);
+    setIsCheckingHealth(false);
+  }, [fetchAuthHealth]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    const handleOnline = () => {
+      setIsOfflineBrowser(false);
+      void fetchAuthHealth().then((snapshot) => {
+        if (!cancelled) setAuthHealth(snapshot);
+      });
+    };
+    const handleOffline = () => {
+      setIsOfflineBrowser(true);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      void fetchAuthHealth().then((snapshot) => {
+        if (!cancelled) setAuthHealth(snapshot);
+      });
+    }
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [fetchAuthHealth]);
+
+  useEffect(() => {
+    if (errorMessage && alertRef.current) {
+      alertRef.current.focus();
+    }
+  }, [errorMessage]);
 
   useEffect(() => {
     // If navigating to login with an error or explicit logout, clear stale cached user to prevent loops
@@ -91,9 +179,12 @@ export function AuthForm({
   }, [initialError]);
 
   const switchMode = (newMode: AuthMode) => {
+    if (isSubmitting) return;
     setMode(newMode);
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPassword('');
+    setConfirmPassword('');
 
     if (newMode === 'signin' && (email || username)) {
       setIdentifier(email || username);
@@ -112,8 +203,15 @@ export function AuthForm({
 
   const handleSignIn = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOfflineBrowser(true);
+      setErrorMessage('You appear to be offline. Reconnect to the internet to sign in.');
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
 
@@ -134,8 +232,15 @@ export function AuthForm({
 
   const handleSignUp = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOfflineBrowser(true);
+      setErrorMessage('You appear to be offline. Reconnect to the internet to create an account.');
+      return;
+    }
 
     if (password.length < 8) {
       setErrorMessage('Password must be at least 8 characters in length.');
@@ -225,7 +330,13 @@ export function AuthForm({
   };
 
   const handleGoogleSubmit = () => {
+    if (isSubmitting) return;
     setErrorMessage(null);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOfflineBrowser(true);
+      setErrorMessage('You appear to be offline. Reconnect to the internet before continuing with Google.');
+      return;
+    }
     startGoogleTransition(async () => {
       const clientOrigin =
         typeof window !== 'undefined' && window.location.origin
@@ -265,34 +376,42 @@ export function AuthForm({
   const isPasswordValidLength = password.length >= 8;
   const isPasswordMatch = password.length > 0 && password === confirmPassword;
 
+  const isConnectivityError = Boolean(
+    errorMessage &&
+      /(connect|offline|unavailable|configured|network|reach|timeout)/i.test(errorMessage)
+  );
+
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-5" aria-busy={isSubmitting}>
       {/* 1. SpendSense Wordmark & Brand Identifier */}
-      <div className="space-y-1">
-        <div className="flex items-center gap-2 mb-1.5">
-          <ArthLogo
-            variant="full"
-            className="h-6 sm:h-7 w-auto text-[var(--text-primary)]"
-          />
-          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-hairline)]">
-            Ledger
-          </span>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ArthLogo
+              variant="full"
+              className="h-6 sm:h-7 w-auto text-[var(--text-primary)]"
+            />
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-[2px] bg-[var(--brand-evergreen-soft)] text-[var(--brand-evergreen-fg)] border border-[var(--brand-evergreen-border)]">
+              Ledger
+            </span>
+          </div>
+          <span className="hidden sm:inline-block h-[2px] w-10 rounded-full bg-gradient-to-r from-[var(--brand-evergreen)] via-[var(--brand-evergreen)] to-[var(--brand-copper)] opacity-80" aria-hidden="true" />
         </div>
 
         {/* 2. Main Title */}
-        <h1 className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+        <h1 className="text-[19px] font-semibold tracking-[-0.015em] text-[var(--text-primary)]">
           {mode === 'signin' && 'Sign in to SpendSense'}
-          {mode === 'signup' && 'Create an account'}
+          {mode === 'signup' && 'Create your ledger account'}
           {mode === 'forgot' && 'Reset password'}
           {mode === 'resend_confirm' && 'Confirm your account'}
         </h1>
 
         {/* 3. Small, Muted Description */}
-        <p className="text-[12px] text-[var(--text-secondary)]">
+        <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
           {mode === 'signin' &&
-            'Enter your credentials to access your financial ledger.'}
+            'Access your personal financial ledger, cash and online balances, and synced entries.'}
           {mode === 'signup' &&
-            'Enter your details to create your personal ledger.'}
+            'Set up your SpendSense personal ledger credentials.'}
           {mode === 'forgot' &&
             'Enter your email address to receive a secure recovery link.'}
           {mode === 'resend_confirm' &&
@@ -305,16 +424,17 @@ export function AuthForm({
         <div
           role="tablist"
           aria-label="Authentication Options"
-          className="grid grid-cols-2 p-0.5 rounded-[3px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs font-medium"
+          className="grid grid-cols-2 p-0.5 rounded-[4px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-xs font-medium"
         >
           <button
             type="button"
             role="tab"
+            disabled={isSubmitting}
             aria-selected={mode === 'signin'}
             onClick={() => switchMode('signin')}
-            className={`py-1.5 px-3 rounded-[2px] text-center transition-all cursor-pointer ${
+            className={`py-2 px-3 rounded-[3px] text-center transition-all cursor-pointer disabled:cursor-not-allowed ${
               mode === 'signin'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold border border-[var(--border-hairline)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -323,11 +443,12 @@ export function AuthForm({
           <button
             type="button"
             role="tab"
+            disabled={isSubmitting}
             aria-selected={mode === 'signup'}
             onClick={() => switchMode('signup')}
-            className={`py-1.5 px-3 rounded-[2px] text-center transition-all cursor-pointer ${
+            className={`py-2 px-3 rounded-[3px] text-center transition-all cursor-pointer disabled:cursor-not-allowed ${
               mode === 'signup'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs'
+                ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold border border-[var(--border-hairline)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -336,19 +457,45 @@ export function AuthForm({
         </div>
       )}
 
+      {/* Calm Connectivity Diagnostic Notice (Separated cleanly from credential errors) */}
+      {(isOfflineBrowser || (authHealth && !authHealth.ok)) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="px-3 py-2.5 rounded-[4px] bg-[var(--status-warning-bg)] border border-[var(--status-warning-border)] text-[var(--status-warning-fg)] text-[11px] flex items-center justify-between gap-2.5"
+        >
+          <p className="leading-snug min-w-0">
+            {isOfflineBrowser
+              ? 'You are currently offline. Reconnect to sign in or create an account.'
+              : authHealth?.message ||
+                'Authentication service is currently checking connectivity.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => void checkAuthHealth()}
+            disabled={isCheckingHealth}
+            className="shrink-0 font-semibold underline underline-offset-2 hover:opacity-80 cursor-pointer disabled:opacity-50"
+          >
+            {isCheckingHealth ? 'Checking...' : 'Retry'}
+          </button>
+        </div>
+      )}
+
       {/* Error Alert */}
       {errorMessage && (
         <div
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
-          className="p-3 rounded-[3px] bg-[var(--status-error-bg)] border border-[var(--expense-border)] text-[var(--status-error-fg)] text-[12px] flex items-start justify-between gap-2"
+          className="p-3 rounded-[4px] bg-[var(--status-error-bg)] border border-[var(--expense-border)] text-[var(--status-error-fg)] text-[12px] flex items-start justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
         >
-          <div className="space-y-1.5 leading-snug">
+          <div className="space-y-1.5 leading-snug min-w-0">
             <p>{errorMessage}</p>
             {mode === 'signin' && errorMessage.includes('not been confirmed') && (
               <button
                 type="button"
                 onClick={() => {
-                  setUnconfirmedEmail(email);
+                  setUnconfirmedEmail(identifier.includes('@') ? identifier : '');
                   switchMode('resend_confirm');
                 }}
                 className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity block cursor-pointer pt-0.5 text-left"
@@ -356,11 +503,24 @@ export function AuthForm({
                 Resend confirmation link &rarr;
               </button>
             )}
+            {isConnectivityError && (
+              <button
+                type="button"
+                onClick={() => void checkAuthHealth()}
+                disabled={isCheckingHealth}
+                className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity block cursor-pointer pt-0.5 text-left"
+              >
+                {isCheckingHealth ? 'Checking service status...' : 'Check service connection →'}
+              </button>
+            )}
           </div>
           <button
             type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-[var(--status-error-fg)] opacity-70 hover:opacity-100 font-bold p-0.5 cursor-pointer"
+            onClick={() => {
+              setErrorMessage(null);
+              identifierInputRef.current?.focus();
+            }}
+            className="text-[var(--status-error-fg)] opacity-75 hover:opacity-100 font-bold p-0.5 cursor-pointer shrink-0"
             aria-label="Dismiss alert"
           >
             ✕
@@ -398,6 +558,7 @@ export function AuthForm({
               Email or username
             </label>
             <input
+              ref={identifierInputRef}
               id="signin-identifier"
               name="identifier"
               type="text"
@@ -406,7 +567,7 @@ export function AuthForm({
               placeholder="you@domain.com or username"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+              className="w-full h-10 px-3 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
             />
           </div>
 
@@ -437,7 +598,7 @@ export function AuthForm({
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-9 px-3 pr-10 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+                className="w-full h-10 px-3 pr-10 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
               />
               <button
                 type="button"
@@ -589,15 +750,20 @@ export function AuthForm({
           </button>
 
           {/* Small, unobtrusive link to switch between sign-in and account creation */}
-          <div className="pt-2 text-center text-[12px] text-[var(--text-muted)]">
-            Don&apos;t have an account?{' '}
-            <button
-              type="button"
-              onClick={() => switchMode('signup')}
-              className="text-[var(--text-primary)] font-medium underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer"
-            >
-              Create an account
-            </button>
+          <div className="pt-2 space-y-2 text-center">
+            <div className="text-[12px] text-[var(--text-muted)]">
+              Don&apos;t have an account?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('signup')}
+                className="text-[var(--text-primary)] font-medium underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                Create an account
+              </button>
+            </div>
+            <p className="text-[11px] font-mono text-[var(--text-muted)]">
+              Integer-paise precision &middot; Row-level security
+            </p>
           </div>
         </form>
       )}
@@ -638,7 +804,7 @@ export function AuthForm({
               placeholder="e.g. rahul_sharma (or leave blank)"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all lowercase"
+              className="w-full h-10 px-3 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all lowercase"
             />
           </div>
 
@@ -659,7 +825,7 @@ export function AuthForm({
               placeholder="you@domain.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+              className="w-full h-10 px-3 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
             />
           </div>
 
@@ -694,7 +860,7 @@ export function AuthForm({
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-9 px-3 pr-10 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+                className="w-full h-10 px-3 pr-10 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
               />
               <button
                 type="button"
@@ -772,7 +938,7 @@ export function AuthForm({
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full h-9 px-3 pr-10 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+                className="w-full h-10 px-3 pr-10 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
               />
               <button
                 type="button"
@@ -1012,7 +1178,7 @@ export function AuthForm({
               placeholder="you@domain.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+              className="w-full h-10 px-3 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
             />
             <p className="text-[11px] leading-5 text-[var(--text-muted)]">Enter the email used for your account. For privacy, we can’t confirm account registration from this screen.</p>
           </div>
@@ -1100,7 +1266,7 @@ export function AuthForm({
                 setUnconfirmedEmail(e.target.value);
                 setEmail(e.target.value);
               }}
-              className="w-full h-9 px-3 text-[13px] rounded-[3px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] focus:border-transparent transition-all"
+              className="w-full h-10 px-3 text-[13px] rounded-[4px] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-evergreen)] focus:ring-2 focus:ring-[var(--focus-ring)]/20 transition-all"
             />
           </div>
 
