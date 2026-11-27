@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
+import com.digitaldodo.arth.core.designsystem.SpendSenseMark
 
 @Composable
 fun ArthLockScreen(
@@ -49,13 +50,15 @@ fun ArthLockScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(top = 24.dp)
             ) {
+                SpendSenseMark(size = 40.dp)
+                Spacer(Modifier.height(10.dp))
                 Text(
                     text = "SPENDSENSE",
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 4.sp
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 3.sp
                     ),
-                    color = ArthTheme.colors.textMuted
+                    color = ArthTheme.colors.textPrimary
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -73,17 +76,17 @@ fun ArthLockScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(1.dp, ArthTheme.colors.border, CircleShape),
+                        .border(1.dp, ArthTheme.colors.border, RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Fingerprint,
                         contentDescription = "Fingerprint",
-                        tint = ArthTheme.colors.blue,
-                        modifier = Modifier.size(44.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(38.dp)
                     )
                 }
 

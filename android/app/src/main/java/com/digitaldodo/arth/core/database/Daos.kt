@@ -216,6 +216,9 @@ interface SmsSuggestionDao {
     @Query("SELECT * FROM sms_suggestions WHERE amountPaise = :amountPaise AND ABS(smsTimestamp - :timestamp) < :windowMillis LIMIT 1")
     suspend fun findNearMatch(amountPaise: Long, timestamp: Long, windowMillis: Long = 60000L): SmsSuggestionEntity?
 
+    @Query("SELECT * FROM sms_suggestions WHERE amountPaise = :amountPaise AND ABS(smsTimestamp - :timestamp) <= :windowMillis")
+    suspend fun findNearMatches(amountPaise: Long, timestamp: Long, windowMillis: Long = 300000L): List<SmsSuggestionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(suggestion: SmsSuggestionEntity)
 

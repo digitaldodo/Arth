@@ -270,8 +270,8 @@ export function UsernameClaimForm({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 pt-1">
-        <div className="relative flex-1">
+      <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="relative flex-1 min-w-[160px]">
           <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs font-mono text-[var(--text-muted)]">
             @
           </span>

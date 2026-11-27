@@ -35,53 +35,36 @@ class SmsReceiver : BroadcastReceiver() {
         val sender = messages[0].displayOriginatingAddress ?: "Unknown"
         val timestamp = messages[0].timestampMillis
 
-        // Parse entirely on-device in memory
-        val parsed = FinancialMessageClassifier.classifyAndParse(sender, fullBody, timestamp) ?: return
-
-        // Exclude non-financial, balance only, or failed transactions from pending queue
-        if (parsed.classification == FinancialClassification.NON_FINANCIAL ||
-            parsed.classification == FinancialClassification.BALANCE_ALERT ||
-            parsed.classification == FinancialClassification.FAILED_TRANSACTION) {
-            return
-        }
-
         val pendingResult = goAsync()
         val appContext = context.applicationContext
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Parse on IO dispatcher entirely on-device in memory
+                val parsed = FinancialMessageClassifier.classifyAndParse(sender, fullBody, timestamp)
+                    ?: return@launch
+
+                if (parsed.classification == FinancialClassification.NON_FINANCIAL ||
+                    parsed.classification == FinancialClassification.BALANCE_ALERT ||
+                    parsed.classification == FinancialClassification.FAILED_TRANSACTION) {
+                    return@launch
+                }
+
                 val db = ArthDatabase.getInstance(appContext)
                 val suggestionDao = db.smsSuggestionDao()
                 val transactionDao = db.transactionDao()
 
-                // Check duplicate in suggestions
-                if (!parsed.refNumber.isNullOrBlank()) {
-                    val existing = suggestionDao.findByRefNumber(parsed.refNumber)
-                    if (existing != null) return@launch
-                } else {
-                    val nearMatch = suggestionDao.findNearMatch(parsed.amountPaise, parsed.timestamp, 120000L)
-                    if (nearMatch != null && nearMatch.merchant == parsed.merchant) return@launch
-                }
-
-                // Check duplicate in confirmed transactions
-                var duplicateStatus = DuplicateStatus.UNIQUE.name
-                var matchedTxId: String? = null
-
-                if (!parsed.refNumber.isNullOrBlank()) {
-                    val txMatch = transactionDao.findByReference(parsed.refNumber)
-                    if (txMatch != null) {
-                        duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                        matchedTxId = txMatch.id
-                    }
-                }
-
-                if (matchedTxId == null) {
-                    val potentialDups = transactionDao.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp)
-                    if (potentialDups.isNotEmpty()) {
-                        duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                        matchedTxId = potentialDups.first().id
-                    }
-                }
+                val refMatchedTx = parsed.refNumber?.let { transactionDao.findByReference(it) }
+                val amountMatchedTxs = transactionDao.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp)
+                val (duplicateStatus, matchedTxId) = TransactionDeduplicator.evaluateLedgerDuplicate(
+                    amountPaise = parsed.amountPaise,
+                    type = parsed.type,
+                    merchant = parsed.merchant,
+                    refNumber = parsed.refNumber,
+                    timestamp = parsed.timestamp,
+                    refMatchedTx = refMatchedTx,
+                    amountMatchedTxs = amountMatchedTxs
+                )
 
                 val entity = SmsSuggestionEntity(
                     id = parsed.id,
@@ -103,21 +86,41 @@ class SmsReceiver : BroadcastReceiver() {
                     rawSnippet = null
                 )
 
-                suggestionDao.insert(entity)
-                prefs.incrementProcessedCount(1)
+                val exactRefMatch = parsed.refNumber?.takeIf { it.isNotBlank() }?.let { suggestionDao.findByRefNumber(it) }
+                val nearbyMatches = suggestionDao.findNearMatches(
+                    parsed.amountPaise,
+                    parsed.timestamp,
+                    TransactionDeduplicator.CROSS_SOURCE_WINDOW_MILLIS
+                )
 
-                // Optional auto-add if explicitly enabled by user, high confidence, and uniquely verified
-                if (prefs.isAutoAddEnabled && parsed.confidence >= 95 && duplicateStatus == DuplicateStatus.UNIQUE.name) {
-                    val smsRepo = SmsSuggestionRepository(
-                        suggestionDao,
-                        TransactionRepository(
-                            transactionDao,
-                            db.accountBalancesDao(),
-                            db.syncOutboxDao(),
-                            appContext
+                when (val decision = TransactionDeduplicator.evaluatePendingSuggestion(entity, exactRefMatch, nearbyMatches)) {
+                    is TransactionDeduplicator.CandidateDecision.SkipDuplicate -> return@launch
+                    is TransactionDeduplicator.CandidateDecision.MergeIntoExisting -> {
+                        suggestionDao.update(
+                            decision.mergedEntity.copy(
+                                duplicateStatus = duplicateStatus,
+                                matchedTransactionId = matchedTxId ?: decision.mergedEntity.matchedTransactionId
+                            )
                         )
-                    )
-                    smsRepo.autoConfirmIfEligible(entity.toDomain(), db.categoryDao())
+                        prefs.recordSuccessfulCapture(parsed.bank ?: "Bank SMS", parsed.timestamp)
+                    }
+                    is TransactionDeduplicator.CandidateDecision.InsertNew -> {
+                        suggestionDao.insert(entity)
+                        prefs.recordSuccessfulCapture(parsed.bank ?: "Bank SMS", parsed.timestamp)
+
+                        if (prefs.isAutoAddEnabled && parsed.confidence >= 95 && duplicateStatus == DuplicateStatus.UNIQUE.name) {
+                            val smsRepo = SmsSuggestionRepository(
+                                suggestionDao,
+                                TransactionRepository(
+                                    transactionDao,
+                                    db.accountBalancesDao(),
+                                    db.syncOutboxDao(),
+                                    appContext
+                                )
+                            )
+                            smsRepo.autoConfirmIfEligible(entity.toDomain(), db.categoryDao())
+                        }
+                    }
                 }
             } finally {
                 pendingResult.finish()

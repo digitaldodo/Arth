@@ -7,16 +7,22 @@
     "dev": "pnpm --parallel --filter @arth/frontend --filter @arth/backend dev",
     "dev:frontend": "pnpm --filter @arth/frontend dev",
     "dev:backend": "pnpm --filter @arth/backend dev",
-    "build": "pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build && pnpm --filter @arth/frontend build",
+    "dev:admin": "pnpm --filter @arth/admin dev",
+    "dev:all": "pnpm --parallel --filter @arth/frontend --filter @arth/backend --filter @arth/admin dev",
+    "build": "pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build && pnpm --filter @arth/frontend build && pnpm --filter @arth/admin build",
     "build:frontend": "pnpm --filter @arth/contracts build && pnpm --filter @arth/frontend build",
     "build:backend": "pnpm --filter @arth/contracts build && pnpm --filter @arth/backend build",
+    "build:admin": "pnpm --filter @arth/contracts build && pnpm --filter @arth/admin build",
     "build:contracts": "pnpm --filter @arth/contracts build",
     "lint": "pnpm --filter @arth/frontend lint",
+    "lint:admin": "pnpm --filter @arth/admin lint",
     "typecheck": "pnpm --recursive typecheck",
-    "test": "pnpm --filter @arth/backend test && pnpm --filter @arth/frontend test",
+    "test": "pnpm --filter @arth/backend test && pnpm --filter @arth/frontend test && pnpm --filter @arth/admin test",
     "test:frontend": "pnpm --filter @arth/frontend test",
     "test:backend": "pnpm --filter @arth/backend test",
+    "test:admin": "pnpm --filter @arth/admin test",
     "start:frontend": "pnpm --filter @arth/frontend start",
-    "start:backend": "pnpm --filter @arth/backend start"
+    "start:backend": "pnpm --filter @arth/backend start",
+    "start:admin": "pnpm --filter @arth/admin start"
   }
 }

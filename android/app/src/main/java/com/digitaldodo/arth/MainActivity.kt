@@ -13,8 +13,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
@@ -34,12 +35,15 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.digitaldodo.arth.core.designsystem.ArthTheme
+import com.digitaldodo.arth.core.designsystem.ThemeMode
+import com.digitaldodo.arth.core.designsystem.ThemePreferenceStore
 import com.digitaldodo.arth.core.network.EnvironmentValidator
 import com.digitaldodo.arth.core.network.AndroidReleaseUpdate
 import com.digitaldodo.arth.core.network.AndroidReleaseUpdateChecker
 import com.digitaldodo.arth.core.security.AppLockManager
 import com.digitaldodo.arth.core.security.BiometricAuthManager
 import com.digitaldodo.arth.core.security.SecureStorage
+import com.digitaldodo.arth.core.sms.SmsNotificationListenerService
 import com.digitaldodo.arth.feature.auth.AuthViewModel
 import com.digitaldodo.arth.feature.auth.LoginScreen
 import com.digitaldodo.arth.feature.balances.BalancesScreen
@@ -59,6 +63,7 @@ import com.digitaldodo.arth.feature.reports.ReportsScreen
 import com.digitaldodo.arth.feature.security.ArthLockScreen
 import com.digitaldodo.arth.feature.security.SecuritySettingsScreen
 import com.digitaldodo.arth.feature.settings.SettingsScreen
+import com.digitaldodo.arth.feature.sms.NotificationCaptureDisclosureDialog
 import com.digitaldodo.arth.feature.sms.SmsDisclosureDialog
 import com.digitaldodo.arth.feature.sms.SmsReviewScreen
 import com.digitaldodo.arth.feature.sms.SmsSettingsScreen
@@ -68,13 +73,17 @@ import com.digitaldodo.arth.feature.statement.StatementImportViewModel
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
-    object Dashboard : Screen("dashboard", "Dashboard", Icons.Outlined.Home, Icons.Filled.Home)
+    object Dashboard : Screen("dashboard", "Home", Icons.Outlined.Home, Icons.Filled.Home)
     object Ledger : Screen("ledger", "Ledger", Icons.AutoMirrored.Outlined.ReceiptLong, Icons.AutoMirrored.Filled.ReceiptLong)
     object Categories : Screen("categories", "Categories", Icons.Outlined.Category, Icons.Filled.Category)
-    object More : Screen("more", "More", Icons.Outlined.MoreHoriz, Icons.Filled.MoreHoriz)
+    object More : Screen("more", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
 class MainActivity : FragmentActivity() {
+    companion object {
+        const val EXTRA_OPEN_ROUTE = "open_route"
+    }
+
     private val authViewModel: AuthViewModel by viewModels()
     private val dashboardViewModel: DashboardViewModel by viewModels()
     private val ledgerViewModel: LedgerViewModel by viewModels()
@@ -86,14 +95,17 @@ class MainActivity : FragmentActivity() {
     private val statementImportViewModel: StatementImportViewModel by viewModels()
 
     private var biometricErrorMessage by mutableStateOf<String?>(null)
+    private var pendingRoute by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
+        ThemePreferenceStore.init(this)
         EnvironmentValidator.validate()
         handleAuthIntent(intent)
         handleSharedMessageIntent(intent)
+        handleRouteIntent(intent)
 
         val secureStorage = SecureStorage(this)
         if (secureStorage.isLoggedIn()) {
@@ -103,7 +115,13 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
-            ArthTheme {
+            val themeMode by ThemePreferenceStore.themeMode.collectAsState()
+            val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            ArthTheme(darkTheme = darkTheme) {
                 var availableUpdate by remember { mutableStateOf<AndroidReleaseUpdate?>(null) }
                 LaunchedEffect(Unit) {
                     availableUpdate = AndroidReleaseUpdateChecker.checkForUpdate()
@@ -131,7 +149,9 @@ class MainActivity : FragmentActivity() {
                         balancesViewModel = balancesViewModel,
                         smsViewModel = smsViewModel,
                         statementImportViewModel = statementImportViewModel,
-                        isLoggedInInitial = secureStorage.isLoggedIn()
+                        isLoggedInInitial = secureStorage.isLoggedIn(),
+                        pendingRoute = pendingRoute,
+                        onPendingRouteConsumed = { pendingRoute = null }
                     )
                 }
 
@@ -181,6 +201,13 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         handleAuthIntent(intent)
         handleSharedMessageIntent(intent)
+        handleRouteIntent(intent)
+    }
+
+    private fun handleRouteIntent(intent: Intent?) {
+        val target = intent?.getStringExtra(EXTRA_OPEN_ROUTE) ?: return
+        pendingRoute = target
+        intent.removeExtra(EXTRA_OPEN_ROUTE)
     }
 
     private fun handleSharedMessageIntent(intent: Intent?) {
@@ -272,7 +299,9 @@ fun ArthAppNavHost(
     balancesViewModel: BalancesViewModel,
     smsViewModel: SmsViewModel,
     statementImportViewModel: StatementImportViewModel,
-    isLoggedInInitial: Boolean
+    isLoggedInInitial: Boolean,
+    pendingRoute: String? = null,
+    onPendingRouteConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     var showQuickAddSheet by remember { mutableStateOf(false) }
@@ -313,6 +342,8 @@ fun ArthAppNavHost(
                 balancesViewModel = balancesViewModel,
                 smsViewModel = smsViewModel,
                 statementImportViewModel = statementImportViewModel,
+                pendingRoute = pendingRoute,
+                onPendingRouteConsumed = onPendingRouteConsumed,
                 onOpenQuickAdd = { showQuickAddSheet = true },
                 onSignOut = {
                     authViewModel.logout {
@@ -347,12 +378,23 @@ fun MainTabsScaffold(
     balancesViewModel: BalancesViewModel,
     smsViewModel: SmsViewModel,
     statementImportViewModel: StatementImportViewModel,
+    pendingRoute: String? = null,
+    onPendingRouteConsumed: () -> Unit = {},
     onOpenQuickAdd: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val tabNavController = rememberNavController()
     val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+
+    LaunchedEffect(pendingRoute) {
+        if (!pendingRoute.isNullOrBlank()) {
+            tabNavController.navigate(pendingRoute) {
+                launchSingleTop = true
+            }
+            onPendingRouteConsumed()
+        }
+    }
 
     val isSubScreen = currentRoute in listOf("balances", "people", "reports", "sms_review", "sms_settings", "security_settings", "statement_import")
     val isPersonDetail = currentRoute.startsWith("person_detail")
@@ -402,26 +444,49 @@ fun MainTabsScaffold(
         showFirstLaunchSmsOnboarding = false
     }
 
+    val notificationOnboardingLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        val granted = SmsNotificationListenerService.hasNotificationAccess(context)
+        smsViewModel.refreshNotificationAccessState()
+        if (granted) {
+            smsViewModel.setNotificationMonitoringEnabled(true)
+        }
+        smsPrefs.hasCompletedFirstLaunchOnboarding = true
+        showFirstLaunchSmsOnboarding = false
+    }
+
     if (showFirstLaunchSmsOnboarding) {
-        SmsDisclosureDialog(
-            onDismiss = {
-                smsPrefs.hasCompletedFirstLaunchOnboarding = true
-                showFirstLaunchSmsOnboarding = false
-            },
-            onAccept = {
-                if (BuildConfig.SMS_DETECTION_SUPPORTED) {
+        if (BuildConfig.SMS_DETECTION_SUPPORTED) {
+            SmsDisclosureDialog(
+                onDismiss = {
+                    smsPrefs.hasCompletedFirstLaunchOnboarding = true
+                    showFirstLaunchSmsOnboarding = false
+                },
+                onAccept = {
                     smsPermissionLauncher.launch(
                         arrayOf(
                             android.Manifest.permission.READ_SMS,
                             android.Manifest.permission.RECEIVE_SMS
                         )
                     )
-                } else {
+                }
+            )
+        } else {
+            NotificationCaptureDisclosureDialog(
+                onDismiss = {
                     smsPrefs.hasCompletedFirstLaunchOnboarding = true
                     showFirstLaunchSmsOnboarding = false
+                },
+                onContinueToSettings = {
+                    smsPrefs.hasCompletedFirstLaunchOnboarding = true
+                    showFirstLaunchSmsOnboarding = false
+                    notificationOnboardingLauncher.launch(
+                        Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    )
                 }
-            }
-        )
+            )
+        }
     }
 
     BackHandler(enabled = isDashboard) {
@@ -496,7 +561,7 @@ fun MainTabsScaffold(
                         }
                     )
 
-                    // 3. Central Floating Quick Add Action (+)
+                    // 3. Integrated Quick Add Action (+) aligned with Ledger Minimal
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -505,10 +570,10 @@ fun MainTabsScaffold(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
+                                .width(46.dp)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.primary)
-                                .border(BorderStroke(2.dp, MaterialTheme.colorScheme.surface), CircleShape)
                                 .clickable { onOpenQuickAdd() },
                             contentAlignment = Alignment.Center
                         ) {
@@ -516,7 +581,7 @@ fun MainTabsScaffold(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Add Transaction",
                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }

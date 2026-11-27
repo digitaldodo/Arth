@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import { useEffect, useCallback, useSyncExternalStore } from 'react';
 
 export interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -16,18 +16,85 @@ export interface PwaInstallState {
   isInstallable: boolean;
   isInstalled: boolean;
   isIos: boolean;
+  installOutcome: 'accepted' | 'dismissed' | null;
   installApp: () => Promise<boolean>;
 }
 
-function subscribeStandalone(callback: () => void): () => void {
+declare global {
+  interface Window {
+    __arthDeferredInstallPrompt?: BeforeInstallPromptEvent | null;
+    __arthPwaInstalled?: boolean;
+  }
+}
+
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
+let installedManually = false;
+let installOutcome: 'accepted' | 'dismissed' | null = null;
+let initialized = false;
+const listeners = new Set<() => void>();
+
+function notifyListeners() {
+  listeners.forEach((listener) => {
+    try {
+      listener();
+    } catch {
+      // Ignore subscriber errors
+    }
+  });
+}
+
+export function initPwaInstallCapture(): void {
+  if (typeof window === 'undefined' || initialized) return;
+  initialized = true;
+
+  if (window.__arthDeferredInstallPrompt) {
+    deferredPrompt = window.__arthDeferredInstallPrompt;
+  }
+  if (window.__arthPwaInstalled) {
+    installedManually = true;
+  }
+
+  const handleBeforeInstallPrompt = (e: Event) => {
+    e.preventDefault();
+    deferredPrompt = e as BeforeInstallPromptEvent;
+    window.__arthDeferredInstallPrompt = deferredPrompt;
+    notifyListeners();
+  };
+
+  const handleEarlyCaptured = () => {
+    if (window.__arthDeferredInstallPrompt) {
+      deferredPrompt = window.__arthDeferredInstallPrompt;
+      notifyListeners();
+    }
+  };
+
+  const handleAppInstalled = () => {
+    deferredPrompt = null;
+    window.__arthDeferredInstallPrompt = null;
+    window.__arthPwaInstalled = true;
+    installedManually = true;
+    installOutcome = 'accepted';
+    notifyListeners();
+  };
+
+  window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  window.addEventListener('arth:pwa-installable', handleEarlyCaptured);
+  window.addEventListener('appinstalled', handleAppInstalled);
+  window.addEventListener('arth:pwa-installed', handleAppInstalled);
+}
+
+function subscribeInstallStore(callback: () => void): () => void {
   if (typeof window === 'undefined') {
     return () => {};
   }
+  initPwaInstallCapture();
+  listeners.add(callback);
   const mediaQuery = window.matchMedia('(display-mode: standalone)');
   mediaQuery.addEventListener('change', callback);
   window.addEventListener('appinstalled', callback);
 
   return () => {
+    listeners.delete(callback);
     mediaQuery.removeEventListener('change', callback);
     window.removeEventListener('appinstalled', callback);
   };
@@ -54,9 +121,13 @@ function getIsIosServerSnapshot(): boolean {
   return false;
 }
 
+function getStoreVersion(): string {
+  return `${Boolean(deferredPrompt)}:${installedManually}:${installOutcome ?? 'none'}`;
+}
+
 export function usePwaInstall(): PwaInstallState {
   const isStandalone = useSyncExternalStore(
-    subscribeStandalone,
+    subscribeInstallStore,
     getStandaloneSnapshot,
     getStandaloneServerSnapshot
   );
@@ -67,57 +138,50 @@ export function usePwaInstall(): PwaInstallState {
     getIsIosServerSnapshot
   );
 
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installedManually, setInstalledManually] = useState<boolean>(false);
+  useSyncExternalStore(
+    subscribeInstallStore,
+    getStoreVersion,
+    () => 'false:false:none'
+  );
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-    };
-
-    const handleAppInstalled = () => {
-      setDeferredPrompt(null);
-      setInstalledManually(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
+    initPwaInstallCapture();
   }, []);
 
   const installApp = useCallback(async (): Promise<boolean> => {
-    if (!deferredPrompt) {
+    const promptEvent = deferredPrompt ?? (typeof window !== 'undefined' ? window.__arthDeferredInstallPrompt ?? null : null);
+    if (!promptEvent) {
       return false;
     }
 
     try {
-      await deferredPrompt.prompt();
-      const choiceResult = await deferredPrompt.userChoice;
+      await promptEvent.prompt();
+      const choiceResult = await promptEvent.userChoice;
+      deferredPrompt = null;
+      if (typeof window !== 'undefined') {
+        window.__arthDeferredInstallPrompt = null;
+      }
       if (choiceResult.outcome === 'accepted') {
-        setInstalledManually(true);
-        setDeferredPrompt(null);
+        installedManually = true;
+        installOutcome = 'accepted';
+        notifyListeners();
         return true;
       }
-      setDeferredPrompt(null);
+      installOutcome = 'dismissed';
+      notifyListeners();
       return false;
     } catch (err) {
       console.error('Error invoking PWA install prompt:', err);
       return false;
     }
-  }, [deferredPrompt]);
+  }, []);
 
   return {
     isStandalone,
     isInstallable: Boolean(deferredPrompt),
     isInstalled: isStandalone || installedManually,
     isIos,
+    installOutcome,
     installApp,
   };
 }

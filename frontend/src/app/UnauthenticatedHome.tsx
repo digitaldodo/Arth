@@ -1,15 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ArthLogo } from '@/components/brand/ArthLogo';
 import { getCachedPwaUser, clearCachedPwaUserContext, type CachedPwaUser } from '@/lib/offline-db';
-import { TransactionAppShell } from '@/features/transactions/TransactionAppShell';
 import { isAndroidPhone } from '@/lib/device';
+
+const TransactionAppShell = dynamic(
+  () => import('@/features/transactions/TransactionAppShell').then((m) => m.TransactionAppShell),
+  {
+    loading: () => (
+      <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <ArthLogo variant="full" className="h-7 w-auto mx-auto text-[var(--text-primary)] opacity-80" />
+          <p className="text-xs font-mono text-[var(--text-muted)]">Opening SpendSense…</p>
+        </div>
+      </div>
+    ),
+  }
+);
 
 export function UnauthenticatedHome() {
   const [cachedUser, setCachedUser] = useState<CachedPwaUser | null>(null);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  );
   const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
@@ -23,15 +39,15 @@ export function UnauthenticatedHome() {
     void (async () => {
       try {
         const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (!isOffline) {
+          // Online landing reached without active server session: clear stale context in background without blocking initial paint
+          void clearCachedPwaUserContext();
+          return;
+        }
         const user = await getCachedPwaUser();
         if (!cancelled && user) {
-          if (isOffline) {
-            // In offline PWA mode, hydrate local session so ledger operations remain accessible
-            setCachedUser(user);
-          } else {
-            // Online landing reached without active server session: clear stale context to prevent false session restoration
-            void clearCachedPwaUserContext();
-          }
+          // In offline PWA mode, hydrate local session so ledger operations remain accessible
+          setCachedUser(user);
         }
       } catch {
         // Continue to unauthenticated landing page

@@ -693,7 +693,7 @@ export function PeoplePage({ userId, onRefreshShell }: PeoplePageProps) {
                 <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                   Relationship Direction
                 </span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setNewPersonDirection('they_owe_me')}

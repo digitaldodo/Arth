@@ -24,43 +24,43 @@ export function SummaryCards({
   const isNetNegative = netCashFlowPaise < 0;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
       {/* 1. Income Card */}
-      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+      <div className="p-4 sm:p-5 lg:p-6 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] sm:text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Income
           </span>
           <Badge variant="income" size="xs">Money In</Badge>
         </div>
-        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-[var(--income-fg)] truncate tabular-nums">
+        <div className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight text-[var(--income-fg)] truncate tabular-nums">
           {incomePaise > 0 ? `+${formattedIncome}` : formattedIncome}
         </div>
-        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
+        <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
           Active income transactions in period
         </p>
       </div>
 
       {/* 2. Expenses Card */}
-      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+      <div className="p-4 sm:p-5 lg:p-6 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] sm:text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Total Expenses
           </span>
           <Badge variant="expense" size="xs">Money Out</Badge>
         </div>
-        <div className="text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight text-[var(--expense-fg)] truncate tabular-nums">
+        <div className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight text-[var(--expense-fg)] truncate tabular-nums">
           {expensesPaise > 0 ? `-${formattedExpenses}` : formattedExpenses}
         </div>
-        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
+        <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
           Active expense transactions in period
         </p>
       </div>
 
       {/* 3. Net Cash Flow Card */}
-      <div className="p-5 sm:p-6 lg:p-7 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+      <div className="p-4 sm:p-5 lg:p-6 bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl space-y-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] sm:text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)]">
             Net Cash Flow
           </span>
           <Badge variant={isNetPositive ? 'income' : isNetNegative ? 'expense' : 'neutral'} size="xs">
@@ -68,7 +68,7 @@ export function SummaryCards({
           </Badge>
         </div>
         <div
-          className={`text-2xl sm:text-3xl lg:text-4xl font-bold font-mono tracking-tight truncate tabular-nums ${
+          className={`text-xl sm:text-2xl lg:text-3xl font-bold font-mono tracking-tight truncate tabular-nums ${
             isNetPositive
               ? 'text-[var(--income-fg)]'
               : isNetNegative
@@ -78,7 +78,7 @@ export function SummaryCards({
         >
           {isNetPositive ? `+${formattedNetCashFlow}` : formattedNetCashFlow}
         </div>
-        <p className="text-xs sm:text-sm text-[var(--text-muted)]">
+        <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
           Income minus expenses in period
         </p>
       </div>

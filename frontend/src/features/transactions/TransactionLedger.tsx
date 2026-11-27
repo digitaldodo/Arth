@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/Badge';
 import {
   type TransactionDTO,
@@ -15,8 +16,11 @@ import { fetchCategories, fetchTransactions, restoreTransaction } from '@/lib/ap
 import { formatDateHuman, formatPaiseToINR } from '@/lib/format';
 import { sanitizeUserFacingError } from '@/lib/error-utils';
 import { computePresetDateRange } from './date-range-utils';
-import { ExportPdfDialog } from './ExportPdfDialog';
 import { type UserProfileSummary } from './ledger-pdf-exporter';
+
+const ExportPdfDialog = dynamic(
+  () => import('./ExportPdfDialog').then((module) => module.ExportPdfDialog)
+);
 import { extractCounterpartyAndPaymentMethod } from '@/features/categorization/upi-parser';
 import { DeleteTransactionModal } from './DeleteTransactionModal';
 import { QuickAddModal } from './QuickAddModal';
@@ -1187,13 +1191,13 @@ export function TransactionLedger({
             </div>
 
             {/* Action Buttons: Statement Import, PDF Export & Record Entry */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               {handleOpenImport && (
                 <button
                   type="button"
                   onClick={handleOpenImport}
                   title="Import transactions from bank statement (PDF, CSV, XLSX, XLS)"
-                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer flex-1 sm:flex-initial"
                 >
                   <span className="text-xs" aria-hidden="true">📥</span>
                   <span>Import Bank Statement</span>
@@ -1204,7 +1208,7 @@ export function TransactionLedger({
                 type="button"
                 onClick={() => setIsExportDialogOpen(true)}
                 title="Configure and download transaction statement PDF"
-                className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3.5 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-2 text-xs font-semibold border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-subtle)] rounded-lg transition-colors cursor-pointer flex-1 sm:flex-initial"
               >
                 <span className="text-xs" aria-hidden="true">📄</span>
                 <span>Download PDF</span>
@@ -1213,7 +1217,7 @@ export function TransactionLedger({
               <button
                 type="button"
                 onClick={onOpenQuickAdd}
-                className="inline-flex items-center justify-center gap-1 min-h-[38px] px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
+                className="inline-flex items-center justify-center gap-1 min-h-[38px] px-3.5 py-2 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-lg hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer w-full sm:w-auto"
               >
                 <span>+ Record Entry</span>
               </button>
@@ -1238,11 +1242,11 @@ export function TransactionLedger({
 
       {/* 4. Transaction Items / Table View */}
       {isInitialLoading && transactions.length === 0 ? (
-        <div className="space-y-2 py-2">
+        <div className="space-y-2 py-2" aria-busy="true">
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="h-14 bg-[var(--bg-surface-subtle)] animate-pulse rounded-xl border border-[var(--border-hairline)]"
+              className="h-14 bg-[var(--bg-surface-subtle)]/75 rounded-xl border border-[var(--border-hairline)]"
             />
           ))}
         </div>
@@ -1890,18 +1894,20 @@ export function TransactionLedger({
         errorMessage={deleteError}
       />
 
-      {/* Flexible Ledger PDF Export Dialog */}
-      <ExportPdfDialog
-        isOpen={isExportDialogOpen}
-        onClose={() => setIsExportDialogOpen(false)}
-        categories={categories}
-        initialType={selectedType}
-        initialCategoryId={selectedCategory}
-        initialNecessity={selectedNecessity}
-        userProfile={userProfile}
-        hasPassword={hasPassword}
-        onAccountPasswordVerified={onAccountPasswordVerified}
-      />
+      {/* Flexible Ledger PDF Export Dialog (loaded on demand) */}
+      {isExportDialogOpen && (
+        <ExportPdfDialog
+          isOpen={true}
+          onClose={() => setIsExportDialogOpen(false)}
+          categories={categories}
+          initialType={selectedType}
+          initialCategoryId={selectedCategory}
+          initialNecessity={selectedNecessity}
+          userProfile={userProfile}
+          hasPassword={hasPassword}
+          onAccountPasswordVerified={onAccountPasswordVerified}
+        />
+      )}
     </div>
   );
 }

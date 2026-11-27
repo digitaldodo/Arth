@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -134,16 +135,25 @@ fun StatementImportScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ArthTheme.colors.emerald.copy(alpha = 0.1f))
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(ArthTheme.colors.emeraldContainer)
+                        .border(1.dp, ArthTheme.colors.incomeBorder, RoundedCornerShape(6.dp))
                         .padding(12.dp)
                 ) {
                     Column {
-                        Text(
-                            text = "🔒 Local-Only Statement Intelligence",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = ArthTheme.colors.emerald
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = ArthTheme.colors.emerald,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Local-Only Statement Intelligence",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = ArthTheme.colors.emerald
+                            )
+                        }
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = "Statements are parsed and reconciled strictly on this device. File contents and passwords are never sent to external servers or logged.",

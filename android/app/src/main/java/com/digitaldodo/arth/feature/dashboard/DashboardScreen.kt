@@ -58,22 +58,11 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "Dashboard",
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = "Financial Overview",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ArthTheme.colors.textMuted
-                        )
-                    }
+                    SpendSenseBrandLockup(badge = "Ledger", markSize = 26.dp)
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         // Import Bank Statement button
                         IconButton(
@@ -84,7 +73,7 @@ fun DashboardScreen(
                                 imageVector = Icons.Default.FileOpen,
                                 contentDescription = "Import Bank Statement",
                                 tint = ArthTheme.colors.textSecondary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
@@ -95,7 +84,7 @@ fun DashboardScreen(
                         ) {
                             if (state.isRefreshing) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -104,11 +93,30 @@ fun DashboardScreen(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = "Refresh",
                                     tint = ArthTheme.colors.textSecondary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
+                    }
+                }
 
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Financial Overview",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = ArthTheme.colors.textSecondary
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         // Period Filter Selector
                         PeriodChip(
                             label = "Month",
@@ -127,6 +135,8 @@ fun DashboardScreen(
                         )
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = ArthTheme.colors.border, thickness = 1.dp)
             }
         }
     ) { padding ->
@@ -152,12 +162,12 @@ fun DashboardScreen(
                     )
                 }
             } else {
-                // Pending SMS suggestions banner
+                // Pending Captured Alerts Banner
                 if (state.pendingSmsCount > 0) {
                     item {
                         ArthCard(
                             backgroundColor = ArthTheme.colors.blueContainer,
-                            borderColor = ArthTheme.colors.blue.copy(alpha = 0.3f),
+                            borderColor = ArthTheme.colors.blueBorder,
                             onClick = onNavigateToSmsReview
                         ) {
                             Row(
@@ -165,17 +175,20 @@ fun DashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Mail,
                                         contentDescription = null,
                                         tint = ArthTheme.colors.blue,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(Modifier.width(10.dp))
                                     Text(
-                                        text = "${state.pendingSmsCount} new financial SMS detected",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        text = "${state.pendingSmsCount} captured transaction alert${if (state.pendingSmsCount == 1) "" else "s"} ready for review",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                                         color = ArthTheme.colors.blue
                                     )
                                 }
@@ -394,18 +407,15 @@ fun SummaryMetricsCards(state: DashboardUiState) {
                     color = ArthTheme.colors.textMuted
                 )
                 Text(
-                    text = "In",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    text = "↑ In",
+                    style = MaterialTheme.typography.labelSmall,
                     color = ArthTheme.colors.emerald
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "+${Money.formatPaise(state.periodIncomePaise)}",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                ),
+                style = ArthFigureSmallStyle,
                 color = ArthTheme.colors.emerald
             )
         }
@@ -423,18 +433,15 @@ fun SummaryMetricsCards(state: DashboardUiState) {
                     color = ArthTheme.colors.textMuted
                 )
                 Text(
-                    text = "Out",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    text = "↓ Out",
+                    style = MaterialTheme.typography.labelSmall,
                     color = ArthTheme.colors.crimson
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "−${Money.formatPaise(state.periodExpensePaise)}",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                ),
+                style = ArthFigureSmallStyle,
                 color = ArthTheme.colors.crimson
             )
         }
@@ -456,8 +463,8 @@ fun SummaryMetricsCards(state: DashboardUiState) {
                     color = ArthTheme.colors.textMuted
                 )
                 Text(
-                    text = if (isSurplus) "Surplus" else if (isDeficit) "Deficit" else "Zero",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    text = if (isSurplus) "Surplus" else if (isDeficit) "Deficit" else "Balanced",
+                    style = MaterialTheme.typography.labelSmall,
                     color = netColor
                 )
             }
@@ -465,10 +472,7 @@ fun SummaryMetricsCards(state: DashboardUiState) {
             val netSign = if (isSurplus) "+" else if (isDeficit) "−" else ""
             Text(
                 text = "$netSign${Money.formatPaise(Math.abs(state.netCashFlowPaise))}",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                ),
+                style = ArthFigureSmallStyle,
                 color = netColor
             )
         }
@@ -521,7 +525,7 @@ fun SpendingByNecessityCard(state: DashboardUiState) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(2.dp))
                     .background(ArthTheme.colors.border)
             ) {
                 if (essentialPct > 0) {
@@ -529,7 +533,7 @@ fun SpendingByNecessityCard(state: DashboardUiState) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .weight(essentialPct.toFloat().coerceAtLeast(1f))
-                            .background(Color(0xFF3B82F6))
+                            .background(ArthTheme.colors.blue)
                     )
                 }
                 if (optionalPct > 0) {
@@ -537,7 +541,7 @@ fun SpendingByNecessityCard(state: DashboardUiState) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .weight(optionalPct.toFloat().coerceAtLeast(1f))
-                            .background(Color(0xFFF59E0B))
+                            .background(ArthTheme.colors.amber)
                     )
                 }
                 if (luxuryPct > 0) {
@@ -545,7 +549,7 @@ fun SpendingByNecessityCard(state: DashboardUiState) {
                         modifier = Modifier
                             .fillMaxHeight()
                             .weight(luxuryPct.toFloat().coerceAtLeast(1f))
-                            .background(Color(0xFFA855F7))
+                            .background(ArthTheme.colors.purple)
                     )
                 }
             }
@@ -557,19 +561,19 @@ fun SpendingByNecessityCard(state: DashboardUiState) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 NecessityStat(
-                    title = "Essential ($essentialPct%)",
+                    title = "▲ Essential ($essentialPct%)",
                     amount = Money.formatPaise(state.essentialExpensePaise),
-                    color = Color(0xFF3B82F6)
+                    color = ArthTheme.colors.blue
                 )
                 NecessityStat(
-                    title = "Optional ($optionalPct%)",
+                    title = "● Optional ($optionalPct%)",
                     amount = Money.formatPaise(state.optionalExpensePaise),
-                    color = Color(0xFFF59E0B)
+                    color = ArthTheme.colors.amber
                 )
                 NecessityStat(
-                    title = "Luxury ($luxuryPct%)",
+                    title = "◆ Luxury ($luxuryPct%)",
                     amount = Money.formatPaise(state.luxuryExpensePaise),
-                    color = Color(0xFFA855F7)
+                    color = ArthTheme.colors.purple
                 )
             }
         }
@@ -732,12 +736,14 @@ fun PeriodChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else ArthTheme.colors.textSecondary
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary else ArthTheme.colors.border
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(4.dp))
             .background(bg)
             .clickable { onClick() }
             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -803,7 +809,7 @@ fun TransactionListItem(
                     }
                     Text(
                         text = dateStr,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = ArthTimestampStyle,
                         color = ArthTheme.colors.textMuted
                     )
                 }

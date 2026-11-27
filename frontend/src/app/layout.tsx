@@ -69,14 +69,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Establish dark theme and canvas background immediately before hydration to prevent white flash */}
+        {/* Establish dark theme and capture early PWA install prompt before hydration */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 try {
                   var saved = localStorage.getItem('theme');
-                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                   if (saved === 'light') {
                     document.documentElement.classList.remove('dark');
                     document.documentElement.classList.add('light');
@@ -87,6 +86,18 @@ export default function RootLayout({
                 } catch (e) {
                   document.documentElement.classList.add('dark');
                 }
+                try {
+                  window.addEventListener('beforeinstallprompt', function(e) {
+                    e.preventDefault();
+                    window.__arthDeferredInstallPrompt = e;
+                    window.dispatchEvent(new Event('arth:pwa-installable'));
+                  });
+                  window.addEventListener('appinstalled', function() {
+                    window.__arthDeferredInstallPrompt = null;
+                    window.__arthPwaInstalled = true;
+                    window.dispatchEvent(new Event('arth:pwa-installed'));
+                  });
+                } catch (e) {}
               })();
             `,
           }}

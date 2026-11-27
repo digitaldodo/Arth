@@ -58,6 +58,10 @@ android/.idea/
 
 # Scratch files
 scratch/
+backend/.local-admin-state.json
+backend/.local-admin-mailbox.json
+admin/AGENTS.md
+frontend/AGENTS.md
 
 # Generated export files
 *.pdf

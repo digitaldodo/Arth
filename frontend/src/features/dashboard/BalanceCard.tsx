@@ -68,11 +68,11 @@ export function BalanceCard({
 
   return (
     <>
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded-xl p-4 sm:p-6 space-y-4 sm:space-y-5">
         {/* Top Header: Total Available Balance & Action Buttons */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-[var(--text-secondary)]">
                 Total Available Balance
               </span>
@@ -97,9 +97,9 @@ export function BalanceCard({
                 </Badge>
               )}
             </div>
-            <div className="text-2xl sm:text-3xl lg:text-4xl font-mono font-bold tracking-tight text-[var(--text-primary)]">
+            <div className="text-2xl sm:text-3xl lg:text-4xl font-mono font-bold tracking-tight text-[var(--text-primary)] truncate tabular-nums">
               {loading && !balances ? (
-                <div className="h-9 w-44 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
+                <div className="h-8 w-40 bg-[var(--bg-surface-subtle)] rounded-md" />
               ) : balances && isConfigured ? (
                 balances.formatted_total_available
               ) : error ? (
@@ -127,7 +127,7 @@ export function BalanceCard({
                 }
               }}
               title={!balances ? 'Balances unavailable' : !isConfigured ? 'Configure starting balances first' : undefined}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⇄</span>
               <span>Transfer</span>
@@ -143,7 +143,7 @@ export function BalanceCard({
                 }
               }}
               title={!balances ? 'Balances unavailable' : !isConfigured ? 'Configure starting balances first' : undefined}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-1.5 text-xs font-semibold border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>⚙</span>
               <span>Adjust</span>
@@ -151,7 +151,7 @@ export function BalanceCard({
             <button
               type="button"
               onClick={() => setIsConfigureOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-1.5 text-xs font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer"
             >
               {isConfigured ? 'Starting Balances' : 'Set Up Balances'}
             </button>
@@ -217,8 +217,8 @@ export function BalanceCard({
         {/* Breakdown: Cash vs Online Balances */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--border-hairline)]">
           {/* Cash Balance */}
-          <div className="p-3.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="space-y-0.5">
+          <div className="p-3.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between gap-3 min-w-0">
+            <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-[var(--text-secondary)]">
                   Cash Balance
@@ -227,11 +227,11 @@ export function BalanceCard({
                   Cash
                 </Badge>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)]">Physical wallet &amp; cash on hand</p>
+              <p className="text-[11px] text-[var(--text-muted)] truncate">Physical wallet &amp; cash on hand</p>
             </div>
-            <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--text-primary)]">
+            <div className="text-base sm:text-xl font-mono font-semibold text-[var(--text-primary)] shrink-0 tabular-nums">
               {loading && !balances ? (
-                <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
+                <div className="h-6 w-20 bg-[var(--bg-surface-subtle)] rounded-md" />
               ) : isConfigured ? (
                 balances?.formatted_current_cash || '—'
               ) : (
@@ -241,8 +241,8 @@ export function BalanceCard({
           </div>
 
           {/* Online Balance */}
-          <div className="p-3.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="space-y-0.5">
+          <div className="p-3.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-subtle)] flex items-center justify-between gap-3 min-w-0">
+            <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-[var(--text-secondary)]">
                   Online Balance
@@ -251,11 +251,11 @@ export function BalanceCard({
                   Online
                 </Badge>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)]">Bank accounts, UPI &amp; digital funds</p>
+              <p className="text-[11px] text-[var(--text-muted)] truncate">Bank accounts, UPI &amp; digital funds</p>
             </div>
-            <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--text-primary)]">
+            <div className="text-base sm:text-xl font-mono font-semibold text-[var(--text-primary)] shrink-0 tabular-nums">
               {loading && !balances ? (
-                <div className="h-6 w-24 bg-[var(--bg-surface-subtle)] animate-pulse rounded-md" />
+                <div className="h-6 w-20 bg-[var(--bg-surface-subtle)] rounded-md" />
               ) : isConfigured ? (
                 balances?.formatted_current_online || '—'
               ) : (

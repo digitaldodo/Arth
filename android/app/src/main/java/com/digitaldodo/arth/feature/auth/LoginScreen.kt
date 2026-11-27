@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthOutlinedButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
+import com.digitaldodo.arth.core.designsystem.SpendSenseMark
 
 @Composable
 fun LoginScreen(
@@ -65,10 +66,13 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Brand Logo & Header
+            SpendSenseMark(size = 44.dp)
+            Spacer(Modifier.height(14.dp))
             Text(
                 text = "SpendSense",
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 24.sp,
                     letterSpacing = (-0.5).sp
                 ),
                 color = MaterialTheme.colorScheme.onBackground
@@ -76,7 +80,7 @@ fun LoginScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "Personal Financial Ledger",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.bodySmall,
                 color = ArthTheme.colors.textSecondary
             )
 

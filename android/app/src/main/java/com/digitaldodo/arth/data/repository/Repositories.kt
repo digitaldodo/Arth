@@ -518,9 +518,12 @@ class SmsSuggestionRepository(
         val finalMerchant = customMerchant ?: suggestion.merchant
         val finalMode = customPaymentMode ?: suggestion.paymentMode
 
-        val source = when (suggestion.sender) {
-            "User-shared message" -> "message_share"
-            "Notification" -> "notification"
+        val source = when {
+            suggestion.sender == "User-shared message" -> "message_share"
+            suggestion.sender.startsWith("App ·") ||
+                suggestion.sender.startsWith("SMS ·") ||
+                suggestion.sender == "SMS notification" ||
+                suggestion.sender == "Notification" -> "notification"
             else -> "sms"
         }
 

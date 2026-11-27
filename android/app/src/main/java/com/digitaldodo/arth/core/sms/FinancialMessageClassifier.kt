@@ -61,9 +61,21 @@ object FinancialMessageClassifier {
         RegexOption.IGNORE_CASE
     )
 
-    // Login / 2FA Discard
+    // Login / 2FA / Mandate Setup Discard
     private val loginAlertPattern = Regex(
         "\\b(logged in|login detected|netbanking login|password changed|profile updated|password reset)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    // Upcoming bill / EMI reminders / Mandate notifications without completed movement
+    private val reminderOrMandatePattern = Regex(
+        "\\b(reminder|payment due|bill due|emi due|due on|upcoming autopay|e-mandate|mandate registered|mandate created|auto-pay scheduled|request to pay|collect request|requested you to pay)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    // Redacted / hidden OS notification content
+    private val redactedPattern = Regex(
+        "\\b(hidden content|content hidden|sensitive notification(?: content)? hidden|contents hidden)\\b",
         RegexOption.IGNORE_CASE
     )
 
@@ -80,15 +92,17 @@ object FinancialMessageClassifier {
         RegexOption.IGNORE_CASE
     )
 
-    // Verbs indicating debit
+    // Verbs indicating debit (English + Hindi)
     private val debitKeywords = Regex(
-        "\\b(debited|spent|paid|sent|withdrawn|purchase at|purchase of|deducted|transferred to|payment of)\\b",
+        "\\b(debited|spent|paid|sent|withdrawn|purchase at|purchase of|deducted|transferred to|payment of|payment successful|paid to)\\b|" +
+        "(?:डेबिट|खर्च|भुगतान\\s*(?:सफल|किया)|काटे\\s*गए)",
         RegexOption.IGNORE_CASE
     )
 
-    // Verbs indicating credit
+    // Verbs indicating credit (English + Hindi)
     private val creditKeywords = Regex(
-        "\\b(credited|received|deposited|refunded|refund of|added to account|salary of|salary credited|interest credited)\\b",
+        "\\b(credited|received|deposited|refunded|refund of|added to account|salary of|salary credited|interest credited|received from)\\b|" +
+        "(?:क्रेडिट|जमा|प्राप्त\\s*हुए)",
         RegexOption.IGNORE_CASE
     )
 
@@ -98,11 +112,12 @@ object FinancialMessageClassifier {
         RegexOption.IGNORE_CASE
     )
 
-    // Transaction amount regex: captures verb + amount or currency + amount
+    // Transaction amount regex: captures verb + amount or currency + amount (English + Hindi currency markers)
     private val transactionAmountRegex = Regex(
-        "(?:(?:debited\\s+(?:by|with)|credited\\s+(?:by|with)|spent|paid|withdrawn|transferred|salary of|refund of|payment of)\\s*(?:INR|Rs\\.?|₹)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?))|" +
-        "(?:(?:INR|Rs\\.?|₹)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:debited|spent|paid|withdrawn|credited|received|deposited|transferred|refunded))|" +
-        "(?:\\b(?:INR|Rs\\.?|₹)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\b)",
+        "(?:(?:debited\\s+(?:by|with)|credited\\s+(?:by|with)|spent|paid|sent|received|withdrawn|transferred|salary of|refund of|payment of)\\s*(?:INR|Rs\\.?|₹|रु\\.?|रुपये)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?))|" +
+        "(?:(?:INR|Rs\\.?|₹|रु\\.?|रुपये)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:debited|spent|paid|sent|withdrawn|credited|received|deposited|transferred|refunded))|" +
+        "(?:\\b(?:INR|Rs\\.?|₹)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\b)|" +
+        "(?:(?:रु\\.?|रुपये)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?))",
         RegexOption.IGNORE_CASE
     )
 
@@ -169,8 +184,8 @@ object FinancialMessageClassifier {
         val cleanBody = body.trim()
         if (cleanBody.isBlank()) return null
 
-        // 1. Immediately discard OTPs
-        if (otpPattern.containsMatchIn(cleanBody)) {
+        // 1. Immediately discard OTPs & redacted notifications
+        if (otpPattern.containsMatchIn(cleanBody) || redactedPattern.containsMatchIn(cleanBody)) {
             return null
         }
 
@@ -178,6 +193,12 @@ object FinancialMessageClassifier {
         if (loginAlertPattern.containsMatchIn(cleanBody) &&
             !debitKeywords.containsMatchIn(cleanBody) &&
             !creditKeywords.containsMatchIn(cleanBody)) {
+            return null
+        }
+
+        // 2b. Discard payment reminders / upcoming mandates / collect requests without settled debit/credit
+        if (reminderOrMandatePattern.containsMatchIn(cleanBody) &&
+            !Regex("\\b(debited|credited|payment successful)\\b", RegexOption.IGNORE_CASE).containsMatchIn(cleanBody)) {
             return null
         }
 
@@ -382,7 +403,7 @@ object FinancialMessageClassifier {
 
         return if (direction == TransactionType.EXPENSE) {
             val destinationRegex = Regex(
-                "\\b(?:to|at|towards|vpa)\\s+([A-Za-z][A-Za-z0-9 .&'_-]{1,40}?)(?=\\s+(?:on|using|via|ref|utr|upi|avl|bal|a/c|card|debited|credited)|[.,;]|$)",
+                "\\b(?:to|at|towards|vpa)\\s+([A-Za-z][A-Za-z0-9 .&'_-]{1,40}?)(?=\\s+(?:on|using|via|ref|utr|upi|avl|bal|a/c|card|debited|credited|paid|sent|received)|[.,;]|$)",
                 RegexOption.IGNORE_CASE
             )
             val destMatches = cleanCandidates(destinationRegex)

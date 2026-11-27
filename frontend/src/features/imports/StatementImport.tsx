@@ -2476,7 +2476,7 @@ export function StatementImport({ userId, onImported }: Props) {
 
               return (
                 <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 border-t border-[var(--border-hairline)] pt-3 text-xs">
-                  <div className="min-w-[240px] flex-1">
+                  <div className="min-w-0 sm:min-w-[240px] flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <strong className="text-sm font-medium text-[var(--text-primary)]">{item.source}</strong>
                       {isUndone ? (

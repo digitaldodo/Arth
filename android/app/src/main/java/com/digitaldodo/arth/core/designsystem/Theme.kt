@@ -11,78 +11,140 @@ import androidx.compose.ui.graphics.Color
 
 data class ArthExtendedColors(
     val border: Color,
+    val borderSubtle: Color,
     val borderStrong: Color,
+    val surfaceSubtle: Color,
+    val surfaceElevated: Color,
     val textPrimary: Color,
     val textSecondary: Color,
     val textMuted: Color,
     val emerald: Color,
     val emeraldContainer: Color,
+    val incomeBorder: Color,
     val crimson: Color,
     val crimsonContainer: Color,
+    val expenseBorder: Color,
     val amber: Color,
     val amberContainer: Color,
+    val amberBorder: Color,
     val blue: Color,
     val blueContainer: Color,
+    val blueBorder: Color,
     val purple: Color,
-    val purpleContainer: Color
+    val purpleContainer: Color,
+    val purpleBorder: Color,
+    val tagCashFg: Color,
+    val tagCashBg: Color,
+    val tagCashBorder: Color,
+    val tagOnlineFg: Color,
+    val tagOnlineBg: Color,
+    val tagOnlineBorder: Color,
+    val brandEvergreen: Color = BrandEvergreen,
+    val brandCopper: Color = BrandCopper
 )
 
-val LocalArthColors = staticCompositionLocalOf {
-    ArthExtendedColors(
-        border = LightBorder,
-        borderStrong = LightBorderStrong,
-        textPrimary = LightTextPrimary,
-        textSecondary = LightTextSecondary,
-        textMuted = LightTextMuted,
-        emerald = EmeraldPrimary,
-        emeraldContainer = EmeraldContainerLight,
-        crimson = CrimsonPrimary,
-        crimsonContainer = CrimsonContainerLight,
-        amber = AmberPrimary,
-        amberContainer = AmberContainerLight,
-        blue = BluePrimary,
-        blueContainer = BlueContainerLight,
-        purple = PurplePrimary,
-        purpleContainer = PurpleContainerLight
-    )
-}
+private val LightExtendedColors = ArthExtendedColors(
+    border = LightBorderHairline,
+    borderSubtle = LightBorderSubtle,
+    borderStrong = LightBorderStrong,
+    surfaceSubtle = LightSurfaceSubtle,
+    surfaceElevated = LightSurfaceElevated,
+    textPrimary = LightTextPrimary,
+    textSecondary = LightTextSecondary,
+    textMuted = LightTextMuted,
+    emerald = LightIncomeFg,
+    emeraldContainer = LightIncomeBg,
+    incomeBorder = LightIncomeBorder,
+    crimson = LightExpenseFg,
+    crimsonContainer = LightExpenseBg,
+    expenseBorder = LightExpenseBorder,
+    amber = LightTagOptionalFg,
+    amberContainer = LightTagOptionalBg,
+    amberBorder = LightTagOptionalBorder,
+    blue = LightTagEssentialFg,
+    blueContainer = LightTagEssentialBg,
+    blueBorder = LightTagEssentialBorder,
+    purple = LightTagLuxuryFg,
+    purpleContainer = LightTagLuxuryBg,
+    purpleBorder = LightTagLuxuryBorder,
+    tagCashFg = LightTagCashFg,
+    tagCashBg = LightTagCashBg,
+    tagCashBorder = LightTagCashBorder,
+    tagOnlineFg = LightTagOnlineFg,
+    tagOnlineBg = LightTagOnlineBg,
+    tagOnlineBorder = LightTagOnlineBorder
+)
+
+private val DarkExtendedColors = ArthExtendedColors(
+    border = DarkBorderHairline,
+    borderSubtle = DarkBorderSubtle,
+    borderStrong = DarkBorderStrong,
+    surfaceSubtle = DarkSurfaceSubtle,
+    surfaceElevated = DarkSurfaceElevated,
+    textPrimary = DarkTextPrimary,
+    textSecondary = DarkTextSecondary,
+    textMuted = DarkTextMuted,
+    emerald = DarkIncomeFg,
+    emeraldContainer = DarkIncomeBg,
+    incomeBorder = DarkIncomeBorder,
+    crimson = DarkExpenseFg,
+    crimsonContainer = DarkExpenseBg,
+    expenseBorder = DarkExpenseBorder,
+    amber = DarkTagOptionalFg,
+    amberContainer = DarkTagOptionalBg,
+    amberBorder = DarkTagOptionalBorder,
+    blue = DarkTagEssentialFg,
+    blueContainer = DarkTagEssentialBg,
+    blueBorder = DarkTagEssentialBorder,
+    purple = DarkTagLuxuryFg,
+    purpleContainer = DarkTagLuxuryBg,
+    purpleBorder = DarkTagLuxuryBorder,
+    tagCashFg = DarkTagCashFg,
+    tagCashBg = DarkTagCashBg,
+    tagCashBorder = DarkTagCashBorder,
+    tagOnlineFg = DarkTagOnlineFg,
+    tagOnlineBg = DarkTagOnlineBg,
+    tagOnlineBorder = DarkTagOnlineBorder
+)
+
+val LocalArthColors = staticCompositionLocalOf { LightExtendedColors }
 
 private val LightColorScheme = lightColorScheme(
     primary = LightTextPrimary,
-    onPrimary = LightSurface,
-    primaryContainer = LightSurfaceVariant,
+    onPrimary = LightTextInverse,
+    primaryContainer = LightSurfaceSubtle,
     onPrimaryContainer = LightTextPrimary,
     secondary = LightTextSecondary,
-    onSecondary = LightSurface,
-    background = LightBackground,
+    onSecondary = LightTextInverse,
+    background = LightCanvas,
     onBackground = LightTextPrimary,
     surface = LightSurface,
     onSurface = LightTextPrimary,
-    surfaceVariant = LightSurfaceVariant,
+    surfaceVariant = LightSurfaceSubtle,
     onSurfaceVariant = LightTextSecondary,
-    outline = LightBorder,
+    outline = LightBorderHairline,
     outlineVariant = LightBorderStrong,
-    error = CrimsonPrimary,
+    error = LightExpenseFg,
     onError = Color.White
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = DarkTextPrimary,
-    onPrimary = DarkBackground,
-    primaryContainer = DarkSurfaceVariant,
+    onPrimary = DarkTextInverse,
+    primaryContainer = DarkSurfaceSubtle,
     onPrimaryContainer = DarkTextPrimary,
     secondary = DarkTextSecondary,
-    onSecondary = DarkBackground,
-    background = DarkBackground,
+    onSecondary = DarkTextInverse,
+    background = DarkCanvas,
     onBackground = DarkTextPrimary,
     surface = DarkSurface,
     onSurface = DarkTextPrimary,
-    surfaceVariant = DarkSurfaceVariant,
+    surfaceVariant = DarkSurfaceSubtle,
     onSurfaceVariant = DarkTextSecondary,
-    outline = DarkBorder,
+    outline = DarkBorderHairline,
     outlineVariant = DarkBorderStrong,
-    error = CrimsonLight,
-    onError = Color.Black
+    error = DarkExpenseFg,
+    onError = DarkCanvas
 )
 
 @Composable
@@ -91,48 +153,13 @@ fun ArthTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val extendedColors = if (darkTheme) {
-        ArthExtendedColors(
-            border = DarkBorder,
-            borderStrong = DarkBorderStrong,
-            textPrimary = DarkTextPrimary,
-            textSecondary = DarkTextSecondary,
-            textMuted = DarkTextMuted,
-            emerald = EmeraldLight,
-            emeraldContainer = EmeraldContainerDark,
-            crimson = CrimsonLight,
-            crimsonContainer = CrimsonContainerDark,
-            amber = AmberLight,
-            amberContainer = AmberContainerDark,
-            blue = BlueLight,
-            blueContainer = BlueContainerDark,
-            purple = PurpleLight,
-            purpleContainer = PurpleContainerDark
-        )
-    } else {
-        ArthExtendedColors(
-            border = LightBorder,
-            borderStrong = LightBorderStrong,
-            textPrimary = LightTextPrimary,
-            textSecondary = LightTextSecondary,
-            textMuted = LightTextMuted,
-            emerald = EmeraldPrimary,
-            emeraldContainer = EmeraldContainerLight,
-            crimson = CrimsonPrimary,
-            crimsonContainer = CrimsonContainerLight,
-            amber = AmberPrimary,
-            amberContainer = AmberContainerLight,
-            blue = BluePrimary,
-            blueContainer = BlueContainerLight,
-            purple = PurplePrimary,
-            purpleContainer = PurpleContainerLight
-        )
-    }
+    val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
 
     CompositionLocalProvider(LocalArthColors provides extendedColors) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = ArthTypography,
+            shapes = ArthShapes,
             content = content
         )
     }

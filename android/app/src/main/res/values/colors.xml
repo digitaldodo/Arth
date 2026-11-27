@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#1C1917</color>
+    <color name="colorPrimary">#181615</color>
     <color name="colorPrimaryDark">#0C0A09</color>
-    <color name="colorAccent">#57534E</color>
-    <color name="backgroundColor">#FBFBF9</color>
+    <color name="colorAccent">#494541</color>
+    <color name="backgroundColor">#F8F8F6</color>
     <color name="spendsense_brand_green">#193F37</color>
+    <color name="spendsense_brand_paper">#F6F4ED</color>
+    <color name="spendsense_brand_copper">#B67645</color>
 </resources>

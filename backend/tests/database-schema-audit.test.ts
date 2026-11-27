@@ -51,7 +51,8 @@ describe('Database Schema & Migration Integrity Audit', () => {
       '0036_expand_ingestion_sources.sql',
       '0037_optional_category_and_necessity.sql',
       '0038_payment_method_upi.sql',
-      '0039_consolidated_ledger_balances.sql'
+      '0039_consolidated_ledger_balances.sql',
+      '0040_admin_portal.sql'
     ];
 
     assert.deepEqual(files, expectedFiles, 'Migrations must strictly follow documented numbered sequence');

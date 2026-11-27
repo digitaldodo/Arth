@@ -4,23 +4,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ArthLogo } from '@/components/brand/ArthLogo';
-import { QuickAddModal } from './QuickAddModal';
-import { StatementImportModal } from '@/features/imports/StatementImportModal';
-import { SettingsView } from '@/features/settings/SettingsView';
-import { InstallPromptCard } from '@/features/pwa/InstallPromptCard';
-import { DataExportCard } from '@/features/export/DataExportCard';
-import { UsernameClaimForm } from '@/features/profile/UsernameClaimForm';
-import { DeleteAccountModal } from '@/features/profile/DeleteAccountModal';
-import { ChangePasswordModal } from '@/features/profile/ChangePasswordModal';
-import { AppLockSettings } from '@/features/app-lock/AppLockSettings';
-import { AppLockScreen } from '@/features/app-lock/AppLockScreen';
-import { LanguagePreference } from '@/features/settings/LanguagePreference';
-import { useAppLock } from '@/features/app-lock/useAppLock';
+import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { syncEngine } from '@/features/sync/sync-engine';
 import { unlockAfterVerification } from '@/features/app-lock/verification';
-import { ConfigureStartingBalancesModal } from '@/features/dashboard/ConfigureStartingBalancesModal';
+import { useAppLock } from '@/features/app-lock/useAppLock';
 import {
   type CreateTransactionResponse,
   type AccountBalancesDTO,
@@ -34,7 +22,6 @@ import type { PasswordStatus } from '@/lib/auth/password-status';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 import { FeatureComingSoon } from '@/features/scaffold/FeatureComingSoon';
 import { HeaderSyncIndicator } from '@/features/sync/HeaderSyncIndicator';
-import { DataSyncSettings } from '@/features/settings/DataSyncSettings';
 
 interface TransactionAppShellProps {
   user: {
@@ -61,13 +48,27 @@ export type AppView =
   | 'data-sync'
   | 'more';
 
+const PLANNING_VIEWS: Array<{ id: AppView; label: string; shortDesc: string }> = [
+  { id: 'safe-to-spend', label: 'Safe to Spend', shortDesc: 'Daily headroom & obligations' },
+  { id: 'emi-planner', label: 'EMI Stress Test', shortDesc: 'Rate sensitivity & prepayment' },
+  { id: 'goal-planner', label: 'Goal Planner', shortDesc: 'Milestone targets & savings' },
+  { id: 'fire-planning', label: 'FIRE Planning', shortDesc: 'Withdrawal & corpus horizon' },
+  { id: 'insights', label: 'Financial Insights', shortDesc: 'Allocation & anomaly checks' },
+];
+
 function ViewLoading({ label }: { label: string }) {
-  return <div role="status" aria-live="polite" className="min-h-40 animate-pulse rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 text-sm text-[var(--text-muted)]">Opening {label}…</div>;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="min-h-36 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 text-sm text-[var(--text-muted)] flex items-center gap-2.5"
+    >
+      <span className="w-2 h-2 rounded-full bg-[var(--border-strong)] shrink-0" aria-hidden="true" />
+      <span>Opening {label}…</span>
+    </div>
+  );
 }
 
-const DashboardPage = dynamic(() => import('@/features/dashboard/DashboardPage').then((module) => module.DashboardPage), {
-  loading: () => <ViewLoading label="your dashboard" />,
-});
 const TransactionLedger = dynamic(() => import('./TransactionLedger').then((module) => module.TransactionLedger), {
   loading: () => <ViewLoading label="your ledger" />,
 });
@@ -83,6 +84,22 @@ const DocumentsTaxCentre = dynamic(() => import('@/features/tax/DocumentsTaxCent
 const StatementImport = dynamic(() => import('@/features/imports/StatementImport').then((module) => module.StatementImport), {
   loading: () => <ViewLoading label="statement tools" />,
 });
+const SettingsView = dynamic(() => import('@/features/settings/SettingsView').then((module) => module.SettingsView), {
+  loading: () => <ViewLoading label="settings" />,
+});
+const DataSyncSettings = dynamic(() => import('@/features/settings/DataSyncSettings').then((module) => module.DataSyncSettings), {
+  loading: () => <ViewLoading label="data and sync" />,
+});
+const QuickAddModal = dynamic(() => import('./QuickAddModal').then((module) => module.QuickAddModal));
+const StatementImportModal = dynamic(() => import('@/features/imports/StatementImportModal').then((module) => module.StatementImportModal));
+const InstallPromptCard = dynamic(() => import('@/features/pwa/InstallPromptCard').then((module) => module.InstallPromptCard));
+const DataExportCard = dynamic(() => import('@/features/export/DataExportCard').then((module) => module.DataExportCard));
+const ThemeToggle = dynamic(() => import('@/components/ui/ThemeToggle').then((module) => module.ThemeToggle));
+const AppLockSettings = dynamic(() => import('@/features/app-lock/AppLockSettings').then((module) => module.AppLockSettings));
+const AppLockScreen = dynamic(() => import('@/features/app-lock/AppLockScreen').then((module) => module.AppLockScreen));
+const ChangePasswordModal = dynamic(() => import('@/features/profile/ChangePasswordModal').then((module) => module.ChangePasswordModal));
+const DeleteAccountModal = dynamic(() => import('@/features/profile/DeleteAccountModal').then((module) => module.DeleteAccountModal));
+const ConfigureStartingBalancesModal = dynamic(() => import('@/features/dashboard/ConfigureStartingBalancesModal').then((module) => module.ConfigureStartingBalancesModal));
 
 export function TransactionAppShell({ user }: TransactionAppShellProps) {
   return (
@@ -106,6 +123,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const navigateToView = (view: AppView) => {
     setVisitedViews((visited) => visited.has(view) ? visited : new Set(visited).add(view));
     setActiveView(view);
+    setIsPlanningMenuOpen(false);
   };
   const [ledgerInitialFilter, setLedgerInitialFilter] = useState<{
     categoryId?: string;
@@ -129,6 +147,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const [isPlanningMenuOpen, setIsPlanningMenuOpen] = useState<boolean>(false);
   const planningMenuRef = useRef<HTMLDivElement | null>(null);
 
+  const isPlanningViewActive = ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView);
+  const activePlanningLabel = PLANNING_VIEWS.find((v) => v.id === activeView)?.label;
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (planningMenuRef.current && !planningMenuRef.current.contains(event.target as Node)) {
@@ -141,6 +162,17 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     }
   }, [isPlanningMenuOpen]);
 
+  // Dismiss Planning popover on Android hardware/gesture back
+  useBackHandler({
+    id: 'popover-planning-menu',
+    priority: 'modal',
+    enabled: isPlanningMenuOpen,
+    onBack: () => {
+      setIsPlanningMenuOpen(false);
+      return true;
+    },
+  });
+
   // Priority 3: Main navigation tab back handler returns to Dashboard
   useBackHandler({
     id: 'tab-main',
@@ -149,7 +181,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       activeView !== 'home' &&
       (!openedCategoriesFromMore || activeView !== 'categories') &&
       activeView !== 'data-sync' &&
-      !['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView),
+      !isPlanningViewActive,
     onBack: () => {
       navigateToView('home');
       return true;
@@ -172,7 +204,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   useBackHandler({
     id: 'subscreen-planning',
     priority: 'subscreen',
-    enabled: ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView),
+    enabled: isPlanningViewActive,
     onBack: () => {
       navigateToView('home');
       return true;
@@ -233,7 +265,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   // Offline mutation queue sync state
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const lastSyncedAtRef = useRef<number | null>(null);
+  const lastSyncedAtRef = useRef<number | null>(syncEngine.getState().lastSyncedAt);
+  const lastSyncedCountRef = useRef<number>(syncEngine.getState().syncedCount);
+  const initialMountSyncHandledRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!user) return;
@@ -248,7 +282,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
         }
       }
     }).catch(() => {});
-  }, [user, pendingSyncCount, isSyncing]);
+  }, [user]);
 
   const handleSignOut = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -260,7 +294,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     isQuickAddOpen || isStatementImportOpen || isDeleteModalOpen || isPasswordModalOpen || isStartingBalancesModalOpen || isSyncing
   );
 
-  // The sync engine is the only queue runner; keep shell status scoped to this account.
   // Load initial cached balances for Settings card and Dashboard instant render
   useEffect(() => {
     if (!user) return;
@@ -276,13 +309,32 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
     const unsubscribe = syncEngine.subscribe((state) => {
       setPendingSyncCount(state.pendingCount);
       setIsSyncing(state.isSyncing);
+      const syncedChanged = state.syncedCount > lastSyncedCountRef.current;
       if (state.lastSyncedAt && state.lastSyncedAt !== lastSyncedAtRef.current) {
         lastSyncedAtRef.current = state.lastSyncedAt;
-        setRefreshTrigger((value) => value + 1);
+        // Avoid triggering a redundant Dashboard refetch on the very first background reconciliation
+        // unless offline mutations were actually uploaded to the server.
+        if (initialMountSyncHandledRef.current || syncedChanged) {
+          setRefreshTrigger((value) => value + 1);
+        }
+        initialMountSyncHandledRef.current = true;
       }
+      lastSyncedCountRef.current = state.syncedCount;
     });
-    if (userId) void syncEngine.processQueue(userId);
-    return unsubscribe;
+
+    if (!userId) {
+      return unsubscribe;
+    }
+
+    // Yield briefly so the primary Dashboard fetch starts before background snapshot sync
+    const syncTimer = window.setTimeout(() => {
+      void syncEngine.processQueue(userId);
+    }, 150);
+
+    return () => {
+      window.clearTimeout(syncTimer);
+      unsubscribe();
+    };
   }, [userId]);
 
   const handleTransactionCreated = (res: CreateTransactionResponse) => {
@@ -324,62 +376,37 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   return (
     <>
     <div hidden={isAppLocked} aria-hidden={isAppLocked} inert={isAppLocked} className="min-h-screen">
-    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5rem+env(safe-area-inset-bottom)))] lg:pb-12">
-      {/* Top Application Header */}
-      <header className="sticky top-0 z-30 bg-[var(--bg-canvas)]/90 backdrop-blur-xs border-b border-[var(--border-hairline)] px-4 sm:px-6 lg:px-8 xl:px-12 py-3 sm:py-3.5">
-        <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors pb-[max(6rem,calc(5.25rem+env(safe-area-inset-bottom)))] lg:pb-12">
+      {/* Top Application Header — Single row on Desktop (lg+), Clean Two-Row Sticky Header on Mobile/Tablet */}
+      <header className="sticky top-0 z-30 glass-nav border-b border-[var(--border-hairline)]">
+        {/* Row 1: Brand Identity + Desktop Navigation + Synchronization Status */}
+        <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-2.5 sm:py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <Link href="/" onClick={() => navigateToView('home')} aria-label="Go to dashboard" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
+            <Link
+              href="/"
+              onClick={() => navigateToView('home')}
+              aria-label="Go to dashboard"
+              className="flex items-center gap-2 sm:gap-2.5 group shrink-0 rounded-sm"
+            >
               <ArthLogo
                 variant="full"
-                className="h-6 sm:h-7 w-auto max-w-[110px] sm:max-w-[130px] text-[var(--text-primary)] group-hover:opacity-90 transition-opacity shrink-0"
+                className="h-6 sm:h-7 w-auto max-w-[120px] sm:max-w-[130px] text-[var(--text-primary)] group-hover:opacity-90 transition-opacity shrink-0"
               />
-              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold px-1.5 sm:px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shrink-0 select-none">
+              <span className="hidden min-[350px]:inline-flex text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold px-1.5 sm:px-2 py-0.5 rounded-xs bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shrink-0 select-none">
                 Ledger
               </span>
             </Link>
 
-            {/* Mobile Navigation Shortcuts for Docs & Tax and Planning */}
-            {user && (
-              <div className="flex lg:hidden items-center gap-1 bg-[var(--bg-surface-subtle)] p-0.5 rounded-md border border-[var(--border-hairline)] ml-1">
-                <button
-                  type="button"
-                  onClick={() => navigateToView('documents')}
-                  className={`px-2 py-1 text-[11px] font-semibold rounded-xs transition-colors cursor-pointer ${
-                    activeView === 'documents'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  Docs
-                </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsPlanningMenuOpen((prev) => !prev)}
-                    className={`px-2 py-1 text-[11px] font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-0.5 ${
-                      ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
-                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <span>Plan</span>
-                    <span className="text-[9px] opacity-60">▾</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Desktop Navigation Switcher */}
+            {/* Desktop Navigation Switcher (lg+) */}
             {user && (
               <div className="hidden lg:flex items-center gap-1.5 bg-[var(--bg-surface-subtle)] p-1 rounded-lg border border-[var(--border-hairline)] ml-2 lg:ml-4">
                 <button
                   type="button"
                   onClick={() => navigateToView('home')}
-                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer ${
                     activeView === 'home'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                   }`}
                 >
                   Dashboard
@@ -387,10 +414,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('ledger')}
-                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer ${
                     activeView === 'ledger'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                   }`}
                 >
                   Ledger
@@ -398,99 +425,54 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
-                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer ${
                     activeView === 'documents'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                   }`}
                 >
                   Documents &amp; Tax
                 </button>
 
-                {/* Planning & Intelligence Tools Dropdown */}
+                {/* Desktop Planning Dropdown */}
                 <div className="relative" ref={planningMenuRef}>
                   <button
                     type="button"
+                    aria-expanded={isPlanningMenuOpen}
+                    aria-haspopup="menu"
                     onClick={() => setIsPlanningMenuOpen((prev) => !prev)}
-                    className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer flex items-center gap-1 ${
-                      ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView)
-                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                      isPlanningViewActive
+                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                     }`}
                   >
                     <span>Planning</span>
-                    <span className="text-[10px] opacity-60">▾</span>
+                    <span className={`text-[10px] opacity-70 transition-transform ${isPlanningMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true">▾</span>
                   </button>
 
                   {isPlanningMenuOpen && (
-                    <div className="absolute top-full left-0 mt-1.5 w-52 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-lg z-50 divide-y divide-[var(--border-hairline)]">
-                      <div className="py-1">
+                    <div
+                      role="menu"
+                      aria-label="Planning tools"
+                      className="hidden lg:block absolute top-full left-0 mt-1.5 w-60 py-1.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-xl shadow-lg z-50"
+                    >
+                      {PLANNING_VIEWS.map((item) => (
                         <button
+                          key={item.id}
+                          role="menuitem"
                           type="button"
-                          onClick={() => {
-                            navigateToView('safe-to-spend');
-                            setIsPlanningMenuOpen(false);
-                          }}
-                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
-                            activeView === 'safe-to-spend' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          onClick={() => navigateToView(item.id)}
+                          className={`w-full px-3.5 py-2 text-left text-xs flex flex-col gap-0.5 hover:bg-[var(--bg-surface-subtle)] cursor-pointer transition-colors ${
+                            activeView === item.id ? 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
                           }`}
                         >
-                          <span>🛡️</span>
-                          <span>Safe to Spend</span>
+                          <span className={activeView === item.id ? 'font-semibold text-[var(--text-primary)]' : 'font-medium text-[var(--text-primary)]'}>
+                            {item.label}
+                          </span>
+                          <span className="text-[10px] text-[var(--text-muted)]">{item.shortDesc}</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigateToView('emi-planner');
-                            setIsPlanningMenuOpen(false);
-                          }}
-                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
-                            activeView === 'emi-planner' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <span>📊</span>
-                          <span>EMI Stress Test</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigateToView('goal-planner');
-                            setIsPlanningMenuOpen(false);
-                          }}
-                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
-                            activeView === 'goal-planner' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <span>🎯</span>
-                          <span>Goal Planner</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigateToView('fire-planning');
-                            setIsPlanningMenuOpen(false);
-                          }}
-                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
-                            activeView === 'fire-planning' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <span>🔥</span>
-                          <span>FIRE Planning</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigateToView('insights');
-                            setIsPlanningMenuOpen(false);
-                          }}
-                          className={`w-full px-3.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-surface-subtle)] cursor-pointer ${
-                            activeView === 'insights' ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          <span>📈</span>
-                          <span>Financial Insights</span>
-                        </button>
-                      </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -498,10 +480,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('people')}
-                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer ${
                     activeView === 'people'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                   }`}
                 >
                   People
@@ -509,10 +491,10 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                 <button
                   type="button"
                   onClick={() => navigateToView('more')}
-                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xs transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-md transition-colors cursor-pointer ${
                     activeView === 'more' || activeView === 'data-sync' || activeView === 'categories'
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs border border-[var(--border-hairline)]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-transparent'
                   }`}
                 >
                   Settings
@@ -521,13 +503,13 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {user && (
               <HeaderSyncIndicator onOpenSyncSettings={() => navigateToView('data-sync')} />
             )}
             {user ? (
-              <div className="hidden sm:flex items-center gap-3">
-                <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[160px] lg:max-w-[220px]">
+              <div className="hidden sm:flex items-center gap-2.5 lg:gap-3">
+                <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[140px] lg:max-w-[200px]">
                   {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
                 </span>
                 <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
@@ -549,23 +531,141 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
             )}
           </div>
         </div>
+
+        {/* Row 2 (Mobile & Tablet < lg): Dedicated Scrollable Secondary Navigation Rail */}
+        {user && (
+          <div className="lg:hidden border-t border-[var(--border-hairline)]/80 relative">
+            <div
+              role="navigation"
+              aria-label="Primary sections"
+              className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 overflow-x-auto scrollbar-none py-1.5"
+            >
+              <button
+                type="button"
+                onClick={() => navigateToView('ledger')}
+                className={`relative shrink-0 whitespace-nowrap min-h-[38px] px-3 py-1.5 text-xs sm:text-[13px] font-semibold rounded-md border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeView === 'ledger'
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-subtle)] shadow-2xs'
+                    : 'bg-transparent text-[var(--text-secondary)] border-transparent active:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <span>Ledger</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateToView('documents')}
+                className={`relative shrink-0 whitespace-nowrap min-h-[38px] px-3 py-1.5 text-xs sm:text-[13px] font-semibold rounded-md border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeView === 'documents'
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-subtle)] shadow-2xs'
+                    : 'bg-transparent text-[var(--text-secondary)] border-transparent active:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <span className="sm:hidden">Documents</span>
+                <span className="hidden sm:inline">Documents &amp; Tax</span>
+              </button>
+
+              <button
+                type="button"
+                aria-expanded={isPlanningMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setIsPlanningMenuOpen((prev) => !prev)}
+                className={`relative shrink-0 whitespace-nowrap min-h-[38px] px-3 py-1.5 text-xs sm:text-[13px] font-semibold rounded-md border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  isPlanningViewActive || isPlanningMenuOpen
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-subtle)] shadow-2xs'
+                    : 'bg-transparent text-[var(--text-secondary)] border-transparent active:bg-[var(--bg-surface-subtle)]'
+                }`}
+              >
+                <span>{activePlanningLabel ? `Planning · ${activePlanningLabel}` : 'Planning'}</span>
+                <span
+                  className={`text-[10px] opacity-70 transition-transform ${isPlanningMenuOpen ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                >
+                  ▾
+                </span>
+              </button>
+            </div>
+
+            {/* Mobile & Tablet Planning Menu Popover (outside overflow-x-auto so never clipped) */}
+            {isPlanningMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/25"
+                  onClick={() => setIsPlanningMenuOpen(false)}
+                  aria-hidden="true"
+                />
+                <div
+                  role="menu"
+                  aria-label="Planning tools"
+                  className="absolute left-4 right-4 sm:left-6 sm:right-auto sm:w-72 top-full mt-1.5 z-50 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-xl shadow-xl py-1.5 divide-y divide-[var(--border-hairline)]"
+                >
+                  <div className="px-3.5 py-2 flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] font-semibold">
+                      Planning &amp; Intelligence
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsPlanningMenuOpen(false)}
+                      aria-label="Close planning menu"
+                      className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-1.5 py-0.5 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="py-1">
+                    {PLANNING_VIEWS.map((item) => {
+                      const isCurrent = activeView === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          role="menuitem"
+                          type="button"
+                          onClick={() => navigateToView(item.id)}
+                          className={`w-full min-h-[44px] px-3.5 py-2 text-left flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                            isCurrent
+                              ? 'bg-[var(--bg-surface-subtle)] text-[var(--text-primary)]'
+                              : 'text-[var(--text-secondary)] active:bg-[var(--bg-surface-subtle)]'
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className={`block text-xs ${isCurrent ? 'font-bold text-[var(--text-primary)]' : 'font-semibold text-[var(--text-primary)]'}`}>
+                              {item.label}
+                            </span>
+                            <span className="block text-[11px] text-[var(--text-muted)]">
+                              {item.shortDesc}
+                            </span>
+                          </span>
+                          {isCurrent && (
+                            <span className="text-[10px] font-mono uppercase text-[var(--text-primary)] shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
+      <main className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-5 sm:py-7 lg:py-8">
         {/* Success / Save Confirmation Toast */}
         {saveSuccessBanner && (
           <div
             role="status"
             aria-live="polite"
-            className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-xl text-xs font-medium flex items-center gap-2 transition-all"
+            className="fixed bottom-20 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] px-4 py-2.5 rounded-lg bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-xl text-xs font-medium flex items-center gap-2 transition-all"
           >
-            <span className="text-emerald-500 font-bold">✓</span>
-            <span>{saveSuccessBanner}</span>
+            <span className="text-emerald-500 font-bold shrink-0">✓</span>
+            <span className="truncate">{saveSuccessBanner}</span>
             <button
               type="button"
               onClick={() => setSaveSuccessBanner(null)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] font-bold ml-2 cursor-pointer"
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] font-bold ml-2 cursor-pointer shrink-0"
               aria-label="Dismiss notification"
             >
               ✕
@@ -575,17 +675,14 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
 
         {/* Subtle prompt for accounts without a username */}
         {user && !currentUsername && (
-          <div className="mb-4 p-3 text-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-secondary)] rounded-md flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span>💡</span>
-              <span>
-                You haven&apos;t set a username yet. Choose one to enable sign-in with your username.
-              </span>
-            </div>
+          <div className="mb-4 p-3 text-xs bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[var(--text-secondary)] rounded-lg flex flex-wrap items-center justify-between gap-2.5">
+            <span className="min-w-0 leading-relaxed">
+              You haven&apos;t set a username yet. Choose one to enable sign-in with your username.
+            </span>
             <button
               type="button"
               onClick={() => navigateToView('more')}
-              className="text-xs font-medium text-[var(--text-primary)] underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
+              className="text-xs font-semibold text-[var(--text-primary)] underline underline-offset-2 hover:opacity-80 transition-opacity cursor-pointer shrink-0"
             >
               Choose username &rarr;
             </button>
@@ -782,26 +879,23 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                           Switch between Archival Light and Obsidian Dark themes.
                         </p>
                       </div>
-                      <ThemeToggle className="sm:w-64" />
+                      <ThemeToggle className="w-full sm:w-64" />
                     </div>
                   }
                   androidDownloadSlot={
                     <Link
                       href="/download"
-                      className="flex items-center justify-between p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] hover:border-[var(--border-strong)] rounded-xl transition-all group"
+                      className="flex items-center justify-between gap-3 p-4 bg-[var(--bg-surface)] border border-[var(--border-hairline)] hover:border-[var(--border-strong)] rounded-xl transition-all group"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl" aria-hidden="true">&#128241;</span>
-                        <div>
-                          <p className="text-sm font-medium text-[var(--text-primary)]">
-                            Native Android Application
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)]">
-                            Get the official offline-first native app with fingerprint unlock
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          Native Android Application
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                          Get the official offline-first native app with fingerprint unlock
+                        </p>
                       </div>
-                      <span className="text-xs text-[var(--text-muted)] group-hover:text-[var(--text-primary)] font-bold transition-colors">
+                      <span className="text-xs text-[var(--text-muted)] group-hover:text-[var(--text-primary)] font-bold transition-colors shrink-0">
                         &rarr;
                       </span>
                     </Link>
@@ -830,24 +924,27 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
         )}
       </main>
 
-      {/* Mobile Fixed Bottom Navigation with Central Quick Add (+) */}
+      {/* Mobile & Tablet Fixed Bottom Navigation with Central Quick Add (+) */}
       {/* 5 destinations: Home | Ledger | Add (+) | People | More */}
       {user && (
         <nav
           aria-label="Mobile Navigation"
-          className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-[var(--bg-surface)]/95 backdrop-blur-md border-t border-[var(--border-hairline)] px-2 pt-1 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around"
+          className="lg:hidden fixed inset-x-0 bottom-0 z-40 glass-bottom-nav border-t border-[var(--border-hairline)] px-2 pt-1.5 pb-[max(0.55rem,env(safe-area-inset-bottom))] flex items-center justify-around"
         >
           {/* 1. Home */}
           <button
             type="button"
             onClick={() => navigateToView('home')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[10px] transition-colors flex-1 max-w-[72px] cursor-pointer rounded-md ${
               activeView === 'home'
-                ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-muted)] font-medium hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none" aria-hidden="true">🏠</span>
+            <svg className="w-[19px] h-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeView === 'home' ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 10.5 12 3l9 7.5" />
+              <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
+            </svg>
             <span className="truncate">Home</span>
           </button>
 
@@ -855,25 +952,32 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           <button
             type="button"
             onClick={() => navigateToView('ledger')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[10px] transition-colors flex-1 max-w-[72px] cursor-pointer rounded-md ${
               activeView === 'ledger'
-                ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-muted)] font-medium hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none" aria-hidden="true">📊</span>
+            <svg className="w-[19px] h-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeView === 'ledger' ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h10" />
+            </svg>
             <span className="truncate">Ledger</span>
           </button>
 
-          {/* 3. Central Floating Quick Add Action (+) */}
-          <div className="flex items-center justify-center flex-1 max-w-[56px] -mt-5">
+          {/* 3. Integrated Center Quick Add Action (+) */}
+          <div className="flex items-center justify-center flex-1 max-w-[64px]">
             <button
               type="button"
               onClick={() => setIsQuickAddOpen(true)}
               aria-label="Add transaction"
-              className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] shadow-md hover:scale-105 active:scale-95 transition-transform cursor-pointer border-2 border-[var(--bg-surface)]"
+              className="flex items-center justify-center w-12 h-10 rounded-md bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-95 transition-transform cursor-pointer border border-[var(--border-strong)]/20"
             >
-              <span className="text-2xl font-light leading-none mb-0.5" aria-hidden="true">+</span>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
             </button>
           </div>
 
@@ -881,27 +985,35 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           <button
             type="button"
             onClick={() => navigateToView('people')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[10px] transition-colors flex-1 max-w-[72px] cursor-pointer rounded-md ${
               activeView === 'people'
-                ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-muted)] font-medium hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none" aria-hidden="true">👥</span>
+            <svg className="w-[19px] h-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeView === 'people' ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="9" cy="7" r="3.5" />
+              <path d="M3 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" />
+              <path d="M16.5 4.5a3 3 0 0 1 0 5.5" />
+              <path d="M18 15c2.2.6 3.5 2.4 3.5 5" />
+            </svg>
             <span className="truncate">People</span>
           </button>
 
-          {/* 5. More */}
+          {/* 5. More / Settings */}
           <button
             type="button"
             onClick={() => navigateToView('more')}
-            className={`flex flex-col items-center justify-center min-h-[44px] gap-0.5 text-[10px] font-medium transition-colors flex-1 max-w-[64px] cursor-pointer ${
+            className={`flex flex-col items-center justify-center min-h-[44px] gap-1 text-[10px] transition-colors flex-1 max-w-[72px] cursor-pointer rounded-md ${
               activeView === 'more' || activeView === 'data-sync' || activeView === 'categories'
-                ? 'text-[var(--text-primary)] font-bold'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)] font-semibold'
+                : 'text-[var(--text-muted)] font-medium hover:text-[var(--text-primary)]'
             }`}
           >
-            <span className="text-base leading-none" aria-hidden="true">⚙️</span>
+            <svg className="w-[19px] h-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={activeView === 'more' || activeView === 'data-sync' || activeView === 'categories' ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.86 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
             <span className="truncate">More</span>
           </button>
         </nav>
@@ -924,6 +1036,7 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
           isOpen={true}
           onClose={() => setIsStatementImportOpen(false)}
           userId={user.id}
+          StatementImportComponent={StatementImport}
           onImported={(count) => {
             setRefreshTrigger((prev) => prev + 1);
             setSaveSuccessBanner(`Imported ${count} statement transaction(s) into your ledger.`);
@@ -937,9 +1050,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       )}
 
       {/* Change / Set Password Modal */}
-      {user && (
+      {user && isPasswordModalOpen && (
         <ChangePasswordModal
-          isOpen={isPasswordModalOpen}
+          isOpen={true}
           onClose={() => setIsPasswordModalOpen(false)}
           userEmail={user.email}
           hasPassword={hasPassword}

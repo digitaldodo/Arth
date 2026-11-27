@@ -29,7 +29,7 @@ function getServiceWorkerServerSnapshot(): boolean {
 }
 
 export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) => {
-  const { isStandalone, isInstallable, isInstalled, isIos, installApp } = usePwaInstall();
+  const { isStandalone, isInstallable, isInstalled, isIos, installOutcome, installApp } = usePwaInstall();
   const [isInstalling, setIsInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<'accepted' | 'dismissed' | null>(null);
   const [syncState, setSyncState] = useState<SyncState>(() => syncEngine.getState());
@@ -316,23 +316,23 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
 
         {/* Row 2: Full-width concise description */}
         <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-          Use SpendSense offline and sync your changes when you&apos;re back online. Install on your device for standalone access.
+          Use SpendSense offline and sync your changes when you&apos;re back online. Install SpendSense on this device for standalone app access.
         </p>
 
         {/* Action Button */}
-        <div className="flex items-center gap-2 pt-0.5">
+        <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
           <button
             type="button"
             data-testid="pwa-install-button"
             onClick={handleInstallClick}
             disabled={isInstalling}
-            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+            className="min-h-10 px-4 py-2 text-xs font-semibold rounded-md bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] hover:bg-[var(--action-primary-hover)] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer shadow-xs"
           >
-            {isInstalling ? 'Installing…' : 'Install on this Device'}
+            {isInstalling ? 'Installing…' : 'Install SpendSense'}
           </button>
-          {installResult === 'dismissed' && (
+          {(installResult === 'dismissed' || installOutcome === 'dismissed') && (
             <span className="text-[11px] text-[var(--text-muted)]">
-              Prompt dismissed. You can install anytime.
+              Prompt dismissed. You can install anytime from your browser menu.
             </span>
           )}
         </div>
@@ -417,6 +417,16 @@ export const InstallPromptCard: React.FC<InstallPromptCardProps> = ({ userId }) 
       <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
         Use SpendSense offline and sync your changes when you&apos;re back online.
       </p>
+
+      {/* Browser Install Guidance when programmatic prompt is not exposed */}
+      <div className="p-2.5 bg-[var(--bg-surface-subtle)] rounded-lg border border-[var(--border-hairline)] text-[11px] text-[var(--text-secondary)] space-y-1">
+        <p className="font-semibold text-[var(--text-primary)]">
+          {installOutcome === 'dismissed' ? 'Install SpendSense anytime' : 'Install SpendSense Web App'}
+        </p>
+        <p className="leading-relaxed text-[var(--text-muted)]">
+          To install on this device, tap the <strong>Install</strong> icon in your browser&apos;s address bar or open the browser menu and select <strong>Install app</strong> / <strong>Add to Home screen</strong>.
+        </p>
+      </div>
 
       {/* Sync Status details */}
       {syncStatusSection}

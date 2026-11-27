@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -25,12 +26,12 @@ fun SmsDisclosureDialog(
                 Icons.Default.Security,
                 contentDescription = null,
                 tint = ArthTheme.colors.blue,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(30.dp)
             )
         },
         title = {
             Text(
-                text = "Automatically detect your bank transactions",
+                text = "Automatically capture your bank SMS?",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
         },
@@ -42,44 +43,19 @@ fun SmsDisclosureDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "SpendSense can identify eligible financial transaction messages from your banks and payment providers and prepare them for your personal ledger.",
+                    text = "SpendSense can identify eligible financial transaction SMS alerts from your banks and payment providers and queue them for your review.",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Text(
-                    text = "• Messages processed: Only eligible transaction alerts from supported Indian banks, credit cards, and UPI providers. Personal conversations, OTPs, 2FA security codes, and promotional messages are discarded immediately in memory.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• Why permissions are needed: Android requires SMS permissions (READ_SMS and RECEIVE_SMS) to inspect incoming bank alerts and provide on-demand historical scans.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• How transactions are categorized: Transactions are automatically matched to categories (e.g. Groceries, Utilities, Dining) using on-device pattern recognition.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• How duplicate detection works: UTR references, masked account identifiers, timestamps, and exact paise amounts prevent duplicate entries in your ledger.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• Complete user control: You can pause, disable, or re-enable detection at any time in Settings → Automatic Transaction Detection without affecting your saved ledger.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
-                Text(
-                    text = "• Financial protection & privacy: 100% on-device processing. Raw SMS text never leaves your device and is never uploaded to any server. Every candidate requires your confirmation.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArthTheme.colors.textSecondary
-                )
+                DisclosureBullet("Messages accessed: Only financial transaction alerts. Personal chats, OTPs, 2FA security codes, login alerts, and promotions are discarded immediately in memory.")
+                DisclosureBullet("Why permission is required: Android requires READ_SMS and RECEIVE_SMS to inspect incoming alerts and scan recent history when permitted.")
+                DisclosureBullet("Local storage & sync: Raw SMS text is never saved or sent to servers. Only extracted amount, merchant, direction, and reference enter your local review queue.")
+                DisclosureBullet("Duplicate prevention: UTR references, timestamps, and amount matching reconcile SMS and notification captures cleanly.")
+                DisclosureBullet("Always your choice: Nothing is confirmed silently without review unless you explicitly opt in, and you can revoke access anytime in Settings.")
             }
         },
         confirmButton = {
             ArthButton(
-                text = "Enable Automatic Detection",
+                text = "Continue to SMS Permission",
                 onClick = onAccept
             )
         },
@@ -88,5 +64,67 @@ fun SmsDisclosureDialog(
                 Text("Not Now")
             }
         }
+    )
+}
+
+@Composable
+fun NotificationCaptureDisclosureDialog(
+    onDismiss: () -> Unit,
+    onContinueToSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.NotificationsActive,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(30.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Allow Notification Access for Capture?",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "SpendSense can read eligible payment and bank notifications on this device to help keep your ledger up to date without requesting SMS inbox permissions.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                DisclosureBullet("OS-level access scope: Android grants Notification Access system-wide rather than per app. SpendSense immediately ignores and drops notifications from all apps outside your chosen financial & Messages allowlist before parsing.")
+                DisclosureBullet("Local-only processing: Parsing runs strictly on this device in memory. Raw notification text is discarded immediately, OTPs and redacted alerts are rejected, and nothing is uploaded without your review.")
+                DisclosureBullet("Stored locally: Only normalized candidate fields (amount, direction, merchant, masked ref/account) enter your local review queue. Confirmed items sync to your account.")
+                DisclosureBullet("Android 13+ note: If Android marks Notification Access as restricted for browser-installed apps, open App Info → ⋮ → Allow restricted settings, then enable SpendSense.")
+                DisclosureBullet("Full control: You can toggle individual payment apps, pause capture, or revoke Notification Access anytime in Android Settings.")
+            }
+        },
+        confirmButton = {
+            ArthButton(
+                text = "Open Notification Access",
+                onClick = onContinueToSettings
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DisclosureBullet(text: String) {
+    Text(
+        text = "• $text",
+        style = MaterialTheme.typography.bodySmall,
+        color = ArthTheme.colors.textSecondary
     )
 }

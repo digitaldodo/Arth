@@ -6,25 +6,26 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import com.digitaldodo.arth.core.database.ArthDatabase
-import com.digitaldodo.arth.core.model.DuplicateStatus
-import com.digitaldodo.arth.MainActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.digitaldodo.arth.MainActivity
+import com.digitaldodo.arth.R
+import com.digitaldodo.arth.core.database.ArthDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import android.content.pm.PackageManager
 
 /**
- * Imports visible transaction alerts from the user's default SMS app without inbox permissions.
- * Notification access is separately granted by the user in Android Settings. Raw notification
- * text is parsed in memory and is never written to the database or sent to the backend.
+ * Captures eligible transaction notifications from the user's allowlisted financial apps
+ * (UPI/banking apps and optionally the default Messages app) without SMS inbox permissions.
+ * Notification access is explicitly granted by the user in Android Settings.
+ * Raw notification text is parsed locally in memory and is never stored or uploaded.
  */
 class SmsNotificationListenerService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -48,12 +49,17 @@ class SmsNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         smsPreferences.isNotificationListenerConnected = true
+        smsPreferences.lastCaptureError = null
     }
 
     override fun onListenerDisconnected() {
         smsPreferences.isNotificationListenerConnected = false
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            requestRebind(ComponentName(this, SmsNotificationListenerService::class.java))
+            runCatching {
+                requestRebind(ComponentName(this, SmsNotificationListenerService::class.java))
+            }.onFailure {
+                smsPreferences.lastCaptureError = "Notification listener disconnected; reopen Android Settings if alerts pause."
+            }
         }
         super.onListenerDisconnected()
     }
@@ -67,58 +73,88 @@ class SmsNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (!::smsPreferences.isInitialized || !smsPreferences.isNotificationMonitoringEnabled) return
         if (sbn.isOngoing || sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        if (sbn.packageName == packageName) return
 
-        val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(this) ?: return
-        if (sbn.packageName != defaultSmsPackage || sbn.packageName == packageName) return
+        val allowedPackages = smsPreferences.allowedNotificationPackages
+        val allowDefaultSms = smsPreferences.isNotificationDefaultSmsEnabled
+        val defaultSmsPackage = runCatching { Telephony.Sms.getDefaultSmsPackage(this) }.getOrNull()
 
-        val content = extractVisibleText(sbn.notification) ?: return
-        if (content.isBlank()) return
+        val isDefaultSms = allowDefaultSms && !defaultSmsPackage.isNullOrBlank() && sbn.packageName == defaultSmsPackage
+        val isAllowlisted = sbn.packageName in allowedPackages
+        if (!isDefaultSms && !isAllowlisted) return
 
-        // Classify on the callback and pass only extracted fields to background storage work.
         val title = sbn.notification.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val parsed = SmsNotificationParser.parse(
-            notificationPackage = sbn.packageName,
+        val content = extractVisibleText(sbn.notification) ?: return
+        val pkgName = sbn.packageName
+        val postedAt = sbn.postTime
+        val monitoringEnabled = smsPreferences.isNotificationMonitoringEnabled
+        val sourceLabel = SupportedNotificationSources.resolveSourceLabel(
+            packageName = pkgName,
             defaultSmsPackage = defaultSmsPackage,
-            title = title,
-            visibleText = content,
-            postedAt = sbn.postTime,
-            monitoringEnabled = smsPreferences.isNotificationMonitoringEnabled
-        ) ?: return
+            defaultSmsLabel = defaultSmsAppLabel(this)
+        )
 
         serviceScope.launch {
-            val database = ArthDatabase.getInstance(applicationContext)
-            val suggestions = database.smsSuggestionDao()
-            val transactions = database.transactionDao()
+            runCatching {
+                val parsed = SmsNotificationParser.parseAllowlisted(
+                    notificationPackage = pkgName,
+                    defaultSmsPackage = defaultSmsPackage,
+                    allowedPackages = allowedPackages,
+                    allowDefaultSmsApp = allowDefaultSms,
+                    title = title,
+                    visibleText = content,
+                    postedAt = postedAt,
+                    monitoringEnabled = monitoringEnabled
+                ) ?: return@launch
 
-            if (!parsed.refNumber.isNullOrBlank() && suggestions.findByRefNumber(parsed.refNumber) != null) return@launch
-            if (parsed.refNumber.isNullOrBlank()) {
-                val nearMatch = suggestions.findNearMatch(parsed.amountPaise, parsed.timestamp, DUPLICATE_WINDOW_MILLIS)
-                if (nearMatch != null && (parsed.merchant.isNullOrBlank() || nearMatch.merchant.equals(parsed.merchant, true))) return@launch
-            }
+                val database = ArthDatabase.getInstance(applicationContext)
+                val suggestions = database.smsSuggestionDao()
+                val transactions = database.transactionDao()
 
-            var duplicateStatus = DuplicateStatus.UNIQUE.name
-            var matchedTransactionId: String? = null
-            if (!parsed.refNumber.isNullOrBlank()) {
-                transactions.findByReference(parsed.refNumber)?.let { matched ->
-                    duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                    matchedTransactionId = matched.id
-                }
-            }
-            if (matchedTransactionId == null) {
-                transactions.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp).firstOrNull()?.let { matched ->
-                    duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                    matchedTransactionId = matched.id
-                }
-            }
+                val refMatchedTx = parsed.refNumber?.let { transactions.findByReference(it) }
+                val amountMatchedTxs = transactions.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp)
+                val (duplicateStatus, matchedTransactionId) = TransactionDeduplicator.evaluateLedgerDuplicate(
+                    amountPaise = parsed.amountPaise,
+                    type = parsed.type,
+                    merchant = parsed.merchant,
+                    refNumber = parsed.refNumber,
+                    timestamp = parsed.timestamp,
+                    refMatchedTx = refMatchedTx,
+                    amountMatchedTxs = amountMatchedTxs
+                )
 
-            suggestions.insert(
-                SmsNotificationParser.toSuggestion(parsed).copy(
+                val candidate = SmsNotificationParser.toSuggestion(parsed, sourceLabel = sourceLabel).copy(
                     duplicateStatus = duplicateStatus,
                     matchedTransactionId = matchedTransactionId
                 )
-            )
-            smsPreferences.incrementProcessedCount()
-            postReviewPrompt(parsed.id.hashCode())
+
+                val exactRefMatch = parsed.refNumber?.takeIf { it.isNotBlank() }?.let { suggestions.findByRefNumber(it) }
+                val nearbyMatches = suggestions.findNearMatches(
+                    parsed.amountPaise,
+                    parsed.timestamp,
+                    TransactionDeduplicator.CROSS_SOURCE_WINDOW_MILLIS
+                )
+
+                when (val decision = TransactionDeduplicator.evaluatePendingSuggestion(candidate, exactRefMatch, nearbyMatches)) {
+                    is TransactionDeduplicator.CandidateDecision.SkipDuplicate -> return@launch
+                    is TransactionDeduplicator.CandidateDecision.MergeIntoExisting -> {
+                        suggestions.update(
+                            decision.mergedEntity.copy(
+                                duplicateStatus = duplicateStatus,
+                                matchedTransactionId = matchedTransactionId ?: decision.mergedEntity.matchedTransactionId
+                            )
+                        )
+                        smsPreferences.recordSuccessfulCapture(sourceLabel, postedAt)
+                    }
+                    is TransactionDeduplicator.CandidateDecision.InsertNew -> {
+                        suggestions.insert(candidate)
+                        smsPreferences.recordSuccessfulCapture(sourceLabel, postedAt)
+                        postReviewPrompt(parsed.id.hashCode())
+                    }
+                }
+            }.onFailure { err ->
+                smsPreferences.lastCaptureError = err.message ?: "Capture processing interrupted"
+            }
         }
     }
 
@@ -126,17 +162,21 @@ class SmsNotificationListenerService : NotificationListenerService() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
 
+        val reviewIntent = Intent(this, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_OPEN_ROUTE, "sms_review")
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val openApp = PendingIntent.getActivity(
             this,
             notificationId,
-            Intent(this, MainActivity::class.java),
+            reviewIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         runCatching {
             NotificationCompat.Builder(this, REVIEW_CHANNEL)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_stat_spendsense)
                 .setContentTitle("Transaction alert ready for review")
-                .setContentText("Open SpendSense to review the details")
+                .setContentText("Tap to review and confirm in SpendSense")
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setCategory(NotificationCompat.CATEGORY_EVENT)
                 .setAutoCancel(true)
@@ -158,7 +198,6 @@ class SmsNotificationListenerService : NotificationListenerService() {
 
     companion object {
         private const val MAX_NOTIFICATION_LENGTH = 10_000
-        private const val DUPLICATE_WINDOW_MILLIS = 120_000L
         private const val REVIEW_CHANNEL = "sms_transaction_review"
 
         fun hasNotificationAccess(context: android.content.Context): Boolean {

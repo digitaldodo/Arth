@@ -1,8 +1,25 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { StatementImport } from './StatementImport';
+import dynamic from 'next/dynamic';
 import { useBackHandler } from '@/features/navigation';
+
+const LazyStatementImport = dynamic(
+  () => import('./StatementImport').then((module) => module.StatementImport),
+  {
+    loading: () => (
+      <div role="status" className="min-h-40 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-5 text-xs text-[var(--text-muted)]">
+        Loading bank statement parser…
+      </div>
+    ),
+  }
+);
+
+export interface StatementImportWidgetProps {
+  userId: string;
+  onImported: (count: number) => void;
+  onManualEntry?: () => void;
+}
 
 interface StatementImportModalProps {
   isOpen: boolean;
@@ -10,6 +27,7 @@ interface StatementImportModalProps {
   userId: string;
   onImported: (count: number) => void;
   onManualEntry: () => void;
+  StatementImportComponent?: React.ComponentType<StatementImportWidgetProps>;
 }
 
 export function StatementImportModal({
@@ -18,6 +36,7 @@ export function StatementImportModal({
   userId,
   onImported,
   onManualEntry,
+  StatementImportComponent = LazyStatementImport,
 }: StatementImportModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -67,8 +86,8 @@ export function StatementImportModal({
         style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         {/* Header with Title and Close Button */}
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-hairline)]">
-          <div>
+        <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-[var(--border-hairline)]">
+          <div className="min-w-0">
             <h2 id="statement-import-modal-title" className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
               Import Bank Statement
             </h2>
@@ -79,7 +98,7 @@ export function StatementImportModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer"
+            className="min-h-10 min-w-10 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] transition-colors cursor-pointer shrink-0"
             aria-label="Close statement import"
           >
             <span className="text-lg leading-none" aria-hidden="true">✕</span>
@@ -87,7 +106,7 @@ export function StatementImportModal({
         </div>
 
         {/* Embedded Shared Statement Import Engine */}
-        <StatementImport
+        <StatementImportComponent
           userId={userId}
           onImported={(count) => {
             onImported(count);

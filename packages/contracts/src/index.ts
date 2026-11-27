@@ -6,3 +6,4 @@ export * from './transactions.js';
 export * from './people.js';
 export * from './dashboard.js';
 export * from './balances.js';
+export * from './admin.js';

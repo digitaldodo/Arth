@@ -66,18 +66,21 @@ android {
             versionNameSuffix ""
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
             buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "false"
+            buildConfigField "boolean", "NOTIFICATION_CAPTURE_SUPPORTED", "true"
             resValue "string", "appName", "SpendSense"
         }
         play {
             dimension "distribution"
-            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
+            buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "false"
             buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "false"
+            buildConfigField "boolean", "NOTIFICATION_CAPTURE_SUPPORTED", "true"
             resValue "string", "appName", "SpendSense"
         }
         directSms {
             dimension "distribution"
             buildConfigField "boolean", "SMS_DETECTION_SUPPORTED", "true"
             buildConfigField "boolean", "SMS_INSTALLER_UPDATE_SUPPORTED", "true"
+            buildConfigField "boolean", "NOTIFICATION_CAPTURE_SUPPORTED", "true"
             resValue "string", "appName", "SpendSense"
         }
     }

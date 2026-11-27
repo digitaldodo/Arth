@@ -16,6 +16,7 @@ import { balanceRoutes } from './modules/balances/balance.routes.js';
 import type { IBalanceService } from './modules/balances/balance.service.js';
 import { documentsRoutes } from './modules/documents/documents.routes.js';
 import type { IDocumentsService } from './modules/documents/documents.service.js';
+import { adminRoutes, type AdminRoutesOptions } from './modules/admin/admin.routes.js';
 
 /**
  * Fastify application factory function.
@@ -29,7 +30,8 @@ export async function buildApp(
   customPeopleService?: IPeopleService,
   customDashboardService?: IDashboardService,
   customBalanceService?: IBalanceService,
-  customDocumentsService?: IDocumentsService
+  customDocumentsService?: IDocumentsService,
+  customAdminOptions?: Partial<AdminRoutesOptions>
 ): Promise<FastifyInstance> {
   const config: AppConfig = {
     ...loadConfig(),
@@ -70,6 +72,10 @@ export async function buildApp(
   await app.register(documentsRoutes, {
     config,
     service: customDocumentsService,
+  });
+  await app.register(adminRoutes, {
+    config,
+    ...customAdminOptions,
   });
   return app;
 }

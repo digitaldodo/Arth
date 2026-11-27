@@ -8,7 +8,16 @@ import {
   type AccountBalancesDTO,
   resolveDateRangePreset,
 } from '@arth/contracts';
-import { getCachedBalances, getCachedTransactions, getCachedCategories, getSyncMeta, setCachedBalances, clearCachedPwaUserContext } from '@/lib/offline-db';
+import {
+  getCachedBalances,
+  getCachedTransactions,
+  getCachedCategories,
+  getCachedDashboardSummary,
+  setCachedDashboardSummary,
+  getSyncMeta,
+  setCachedBalances,
+  clearCachedPwaUserContext,
+} from '@/lib/offline-db';
 import { DateRangeSelector } from './DateRangeSelector';
 import { BalanceCard } from './BalanceCard';
 import { SummaryCards } from './SummaryCards';
@@ -78,10 +87,40 @@ export function DashboardPage({
   const [expandedList, setExpandedList] = useState<'categories' | 'transactions' | null>(null);
   const [offlineCopyUnavailable, setOfflineCopyUnavailable] = useState(false);
 
-  // Use the same user-scoped local records as the ledger. The sync engine refreshes in the background.
+  // Use user-scoped stale-while-revalidate caching so returning users see financial data immediately.
   useEffect(() => {
     let isMounted = true;
+    const summaryCacheKey = `${dateRange.start_date ?? 'all'}:${dateRange.end_date ?? 'all'}`;
+
     if (!isPwa) {
+      let hasCachedSummary = false;
+      let hasCachedBal = Boolean(initialBalances);
+
+      // Hydrate cached user-scoped dashboard summary & balances immediately while fetching fresh data
+      if (userId) {
+        void Promise.all([
+          getCachedDashboardSummary(userId, summaryCacheKey),
+          initialBalances ? Promise.resolve(initialBalances) : getCachedBalances(userId),
+          getSyncMeta(userId),
+        ])
+          .then(([cachedSummary, cachedBal, meta]) => {
+            if (!isMounted) return;
+            if (cachedSummary) {
+              hasCachedSummary = true;
+              setSummary((prev) => prev ?? cachedSummary);
+              setLoading(false);
+              setIsRefreshing(true);
+            }
+            if (cachedBal && !hasCachedBal) {
+              hasCachedBal = true;
+              setBalances(cachedBal);
+              setBalancesCachedAt(meta.balancesCachedAt);
+              setBalancesLoading(false);
+            }
+          })
+          .catch(() => {});
+      }
+
       const summaryPromise = fetchDashboardSummary(dateRange);
       const balancesPromise = fetchBalances();
 
@@ -95,13 +134,16 @@ export function DashboardPage({
           setSummary(summaryResult.value);
           setError(null);
           hasAnySuccess = true;
+          if (userId) void setCachedDashboardSummary(userId, summaryCacheKey, summaryResult.value);
         } else {
           const message =
             summaryResult.reason instanceof Error
               ? summaryResult.reason.message
               : 'Could not load dashboard summary. Check your connection.';
           const statusCode = (summaryResult.reason as { statusCode?: number })?.statusCode;
-          setError({ message, statusCode });
+          if (!hasCachedSummary) {
+            setError({ message, statusCode });
+          }
           firstErrorMessage = message;
         }
 
@@ -310,22 +352,22 @@ export function DashboardPage({
   return (
     <div className="space-y-6">
       {/* Header Bar */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[var(--text-primary)]">
             Dashboard
           </h1>
-          <p className="text-sm sm:text-base text-[var(--text-secondary)] mt-1">
+          <p className="text-xs sm:text-sm lg:text-base text-[var(--text-secondary)] mt-0.5 sm:mt-1">
             Consolidated personal finance and cash flow overview
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
           {onOpenStatementImport && (
             <button
               type="button"
               onClick={onOpenStatementImport}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer shadow-2xs shrink-0"
+              className="inline-flex items-center justify-center gap-1.5 min-h-[38px] px-3 py-2 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-subtle)] rounded-md transition-colors cursor-pointer shrink-0 w-full sm:w-auto"
               title="Import PDF, CSV, or spreadsheet statement"
             >
               <span className="text-xs" aria-hidden="true">📄</span>
@@ -335,7 +377,7 @@ export function DashboardPage({
           <button
             type="button"
             onClick={onOpenQuickAdd}
-            className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors shadow-xs cursor-pointer shrink-0"
+            className="hidden sm:inline-flex items-center gap-2 min-h-[38px] px-4 py-2 text-sm font-semibold bg-[var(--action-primary-bg)] text-[var(--action-primary-fg)] rounded-md hover:bg-[var(--action-primary-hover)] transition-colors cursor-pointer shrink-0"
           >
             <span>+</span>
             <span>Quick Add</span>

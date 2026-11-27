@@ -45,48 +45,50 @@ class InstallerActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(28), dp(24), dp(24))
-            setBackgroundColor(0xFFF7F6F2.toInt())
+            setBackgroundColor(0xFFF8F8F6.toInt())
         }
         val title = TextView(this).apply {
             text = "SpendSense"
-            textSize = 25f
-            setTextColor(0xFF202624.toInt())
+            textSize = 24f
+            setTextColor(0xFF181615.toInt())
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         val eyebrow = TextView(this).apply {
-            text = "OFFICIAL INSTALLER"
+            text = "OFFICIAL SMS HELPER"
             textSize = 11f
-            letterSpacing = 0.13f
-            setTextColor(0xFF66716B.toInt())
+            letterSpacing = 0.12f
+            setTextColor(0xFF736E66.toInt())
             setPadding(0, dp(6), 0, dp(22))
         }
         val explanation = TextView(this).apply {
             text = "This signed helper downloads the current SMS-enabled SpendSense app from the official HTTPS release service, verifies its checksum and signing certificate, then opens Android's installation confirmation."
             textSize = 15f
-            setTextColor(0xFF343D39.toInt())
+            setTextColor(0xFF494541.toInt())
             setLineSpacing(dp(4).toFloat(), 1f)
         }
         val permissions = TextView(this).apply {
             text = "Android requires a separate permission review after installation. SMS inbox access stays off until you enable it in SpendSense. You can use the standard notification-only APK instead if you do not want inbox access."
             textSize = 13f
-            setTextColor(0xFF66716B.toInt())
+            setTextColor(0xFF736E66.toInt())
             setLineSpacing(dp(3).toFloat(), 1f)
             setPadding(0, dp(18), 0, dp(28))
         }
         status = TextView(this).apply {
             text = "No app has been installed or updated yet."
             textSize = 13f
-            setTextColor(0xFF66716B.toInt())
+            setTextColor(0xFF494541.toInt())
             setPadding(0, dp(4), 0, dp(18))
         }
         action = Button(this).apply {
             text = "Install SMS-enabled SpendSense"
+            setBackgroundColor(0xFF181615.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
             setOnClickListener { beginInstall() }
         }
         val footer = TextView(this).apply {
             text = "App package: com.digitaldodo.arth\nThe Android system will ask you to confirm installation. Updates use the existing app ID and signing key to preserve local data."
             textSize = 11f
-            setTextColor(0xFF79827D.toInt())
+            setTextColor(0xFF736E66.toInt())
             setPadding(0, dp(22), 0, 0)
             setLineSpacing(dp(3).toFloat(), 1f)
         }

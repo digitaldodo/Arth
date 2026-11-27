@@ -101,37 +101,18 @@ object SmsInboxScanner {
 
                 financialDiscovered++
 
-                // Check duplicate in suggestions
-                val alreadyExists = if (!parsed.refNumber.isNullOrBlank()) {
-                    suggestionDao.findByRefNumber(parsed.refNumber) != null
-                } else {
-                    suggestionDao.findNearMatch(parsed.amountPaise, parsed.timestamp, 120000L) != null
-                }
-
-                if (alreadyExists) {
-                    duplicatesSkipped++
-                    continue
-                }
-
-                // Check duplicate in transactions
-                var duplicateStatus = DuplicateStatus.UNIQUE.name
-                var matchedTxId: String? = null
-
-                if (!parsed.refNumber.isNullOrBlank()) {
-                    val txMatch = transactionDao.findByReference(parsed.refNumber)
-                    if (txMatch != null) {
-                        duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                        matchedTxId = txMatch.id
-                    }
-                }
-
-                if (matchedTxId == null) {
-                    val potentialDups = transactionDao.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp)
-                    if (potentialDups.isNotEmpty()) {
-                        duplicateStatus = DuplicateStatus.POTENTIAL_DUPLICATE.name
-                        matchedTxId = potentialDups.first().id
-                    }
-                }
+                // Cross-source duplicate check in existing ledger transactions
+                val refMatchedTx = parsed.refNumber?.let { transactionDao.findByReference(it) }
+                val amountMatchedTxs = transactionDao.findPotentialDuplicates(parsed.amountPaise, parsed.timestamp)
+                val (duplicateStatus, matchedTxId) = TransactionDeduplicator.evaluateLedgerDuplicate(
+                    amountPaise = parsed.amountPaise,
+                    type = parsed.type,
+                    merchant = parsed.merchant,
+                    refNumber = parsed.refNumber,
+                    timestamp = parsed.timestamp,
+                    refMatchedTx = refMatchedTx,
+                    amountMatchedTxs = amountMatchedTxs
+                )
 
                 val entity = SmsSuggestionEntity(
                     id = parsed.id,
@@ -153,13 +134,38 @@ object SmsInboxScanner {
                     rawSnippet = null
                 )
 
-                suggestionDao.insert(entity)
-                newCandidatesAdded++
+                val exactRefMatch = parsed.refNumber?.takeIf { it.isNotBlank() }?.let { suggestionDao.findByRefNumber(it) }
+                val nearbyMatches = suggestionDao.findNearMatches(
+                    parsed.amountPaise,
+                    parsed.timestamp,
+                    TransactionDeduplicator.CROSS_SOURCE_WINDOW_MILLIS
+                )
+
+                when (val decision = TransactionDeduplicator.evaluatePendingSuggestion(entity, exactRefMatch, nearbyMatches)) {
+                    is TransactionDeduplicator.CandidateDecision.SkipDuplicate -> {
+                        duplicatesSkipped++
+                    }
+                    is TransactionDeduplicator.CandidateDecision.MergeIntoExisting -> {
+                        suggestionDao.update(
+                            decision.mergedEntity.copy(
+                                duplicateStatus = duplicateStatus,
+                                matchedTransactionId = matchedTxId ?: decision.mergedEntity.matchedTransactionId
+                            )
+                        )
+                        duplicatesSkipped++
+                    }
+                    is TransactionDeduplicator.CandidateDecision.InsertNew -> {
+                        suggestionDao.insert(entity)
+                        newCandidatesAdded++
+                    }
+                }
             }
         }
 
         prefs.lastScanTimestamp = maxTimestampFound
-        prefs.incrementProcessedCount(newCandidatesAdded)
+        if (newCandidatesAdded > 0) {
+            prefs.recordSuccessfulCapture("SMS inbox scan", System.currentTimeMillis())
+        }
 
         ScanResult(
             totalScanned = totalScanned,

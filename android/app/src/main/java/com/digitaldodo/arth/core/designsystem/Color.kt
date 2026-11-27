@@ -3,8 +3,14 @@ package com.digitaldodo.arth.core.designsystem
 import androidx.compose.ui.graphics.Color
 
 // =============================================================================
-// SpendSense — Ledger Minimal Design Tokens
+// SpendSense — Ledger Minimal Design Tokens (Aligned with globals.css)
 // =============================================================================
+
+// Shared Brand Identity Palette
+val BrandEvergreen = Color(0xFF193F37)
+val BrandPagePaper = Color(0xFFF6F4ED)
+val BrandPageFold = Color(0xFFD9E2D9)
+val BrandCopper = Color(0xFFB67645)
 
 // Light Mode (Warm Archival Paper baseline)
 val LightCanvas = Color(0xFFF8F8F6)

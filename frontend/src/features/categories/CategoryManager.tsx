@@ -354,7 +354,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
         </div>
 
         {/* Tab Switcher: Expense vs Income */}
-        <div className="flex items-center p-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-md self-start sm:self-auto">
+        <div className="grid grid-cols-2 sm:flex items-center p-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] rounded-md w-full sm:w-auto">
           <button
             type="button"
             onClick={() => {
@@ -362,7 +362,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
               setIsAddingNew(false);
               cancelEditing();
             }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer ${
+            className={`px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer text-center ${
               activeTab === 'expense'
                 ? 'bg-[var(--bg-surface)] text-[var(--expense-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -377,7 +377,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
               setIsAddingNew(false);
               cancelEditing();
             }}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer ${
+            className={`px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-xs transition-colors cursor-pointer text-center ${
               activeTab === 'income'
                 ? 'bg-[var(--bg-surface)] text-[var(--income-fg)] shadow-2xs'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -526,14 +526,14 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
               </div>
 
               {/* Custom Emoji / Text Input */}
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex flex-wrap items-center gap-2 mt-2">
                 <input
                   type="text"
                   value={newIcon}
                   onChange={(e) => setNewIcon(e.target.value)}
                   placeholder="Or enter custom emoji (e.g. 🍔, ☕)"
                   maxLength={10}
-                  className="px-2.5 py-1.5 text-xs bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] w-48 focus:outline-hidden focus:border-[var(--border-strong)]"
+                  className="px-2.5 py-1.5 text-xs bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-md text-[var(--text-primary)] w-full sm:w-48 focus:outline-hidden focus:border-[var(--border-strong)]"
                 />
                 {newIcon && (
                   <button
@@ -552,7 +552,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
               <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                 Badge Color
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {PRESET_COLORS.map((c) => (
                   <button
                     key={c}
@@ -667,7 +667,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
                   {/* Edit Form vs Static Display */}
                   {isEditing ? (
                     <div className="flex flex-col gap-2 flex-1 max-w-md">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
                           autoFocus
@@ -699,7 +699,7 @@ export function CategoryManager({ userId, onCategoryChange }: CategoryManagerPro
                       </div>
 
                       {/* Icon & Color controls while editing */}
-                      <div className="flex items-center gap-3 pt-1">
+                      <div className="flex flex-wrap items-center gap-3 pt-1">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] text-[var(--text-muted)]">Icon:</span>
                           <input

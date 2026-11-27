@@ -46,7 +46,8 @@ export function HeaderSyncIndicator({
       type="button"
       onClick={onOpenSyncSettings}
       title={`Data & Sync: ${label}. Click to open sync details.`}
-      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)] transition-colors cursor-pointer select-none ${className}`}
+      aria-label={`Synchronization status: ${label}. Open Data and Sync settings.`}
+      className={`inline-flex items-center gap-1.5 min-h-[34px] px-2.5 py-1 rounded-full text-[11px] font-medium border border-[var(--border-hairline)] bg-[var(--bg-surface-subtle)]/90 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)] transition-colors cursor-pointer select-none shrink-0 whitespace-nowrap ${className}`}
     >
       <span
         className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor} ${
@@ -54,7 +55,7 @@ export function HeaderSyncIndicator({
         }`}
         aria-hidden="true"
       />
-      <span className="font-mono text-[10px] sm:text-[11px] tracking-tight">{label}</span>
+      <span className="font-mono text-[11px] tracking-tight">{label}</span>
     </button>
   );
 }

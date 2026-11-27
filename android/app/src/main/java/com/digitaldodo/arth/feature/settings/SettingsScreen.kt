@@ -19,6 +19,10 @@ import com.digitaldodo.arth.core.designsystem.ArthButton
 import com.digitaldodo.arth.core.designsystem.ArthCard
 import com.digitaldodo.arth.core.designsystem.ArthOutlinedButton
 import com.digitaldodo.arth.core.designsystem.ArthTheme
+import com.digitaldodo.arth.core.designsystem.SelectablePill
+import com.digitaldodo.arth.core.designsystem.SpendSenseMark
+import com.digitaldodo.arth.core.designsystem.ThemeMode
+import com.digitaldodo.arth.core.designsystem.ThemePreferenceStore
 import com.digitaldodo.arth.core.security.SecureStorage
 import com.digitaldodo.arth.core.sync.AccountSyncService
 import com.digitaldodo.arth.core.sync.SyncState
@@ -79,12 +83,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        SpendSenseMark(size = 38.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -163,22 +162,58 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Mail, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Automatic Transaction Detection",
+                                    text = "Automatic Transaction Capture",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                                 )
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "Configure on-device bank and UPI SMS detection",
+                                    text = "Capture eligible bank and payment notifications to help keep your ledger up to date",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ArthTheme.colors.textSecondary
                                 )
                             }
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ArthTheme.colors.textMuted)
+                    }
+                }
+            }
+
+            // Appearance Theme Selector (Ledger Minimal Warm Paper / Obsidian Dark)
+            item {
+                val activeTheme by ThemePreferenceStore.themeMode.collectAsState()
+                ArthCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Appearance & Theme",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Choose Archival Warm Paper, Obsidian Dark, or follow your Android system setting.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ArthTheme.colors.textSecondary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ThemeMode.entries.forEach { mode ->
+                                val shortLabel = when (mode) {
+                                    ThemeMode.SYSTEM -> "Auto"
+                                    ThemeMode.LIGHT -> "Warm Paper"
+                                    ThemeMode.DARK -> "Obsidian"
+                                }
+                                SelectablePill(
+                                    text = shortLabel,
+                                    selected = activeTheme == mode,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { ThemePreferenceStore.setThemeMode(context, mode) }
+                                )
+                            }
+                        }
                     }
                 }
             }

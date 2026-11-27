@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,7 +65,7 @@ fun QuickAddSheet(
                 height = 4.dp
             )
         },
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.85f)
@@ -87,14 +89,14 @@ fun QuickAddSheet(
                 Text(
                     text = if (state.type == TransactionType.EXPENSE) "Add Expense" else "Add Income",
                     style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = (-0.3).sp
                     ),
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 IconButton(
                     onClick = { attemptClose() },
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -108,9 +110,10 @@ fun QuickAddSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, ArthTheme.colors.border, RoundedCornerShape(4.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -119,7 +122,7 @@ fun QuickAddSheet(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(3.dp))
                         .background(if (isExpense) MaterialTheme.colorScheme.surface else Color.Transparent)
                         .clickable { viewModel.setType(TransactionType.EXPENSE) },
                     contentAlignment = Alignment.Center
@@ -135,7 +138,7 @@ fun QuickAddSheet(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(3.dp))
                         .background(if (!isExpense) MaterialTheme.colorScheme.surface else Color.Transparent)
                         .clickable { viewModel.setType(TransactionType.INCOME) },
                     contentAlignment = Alignment.Center
@@ -148,15 +151,15 @@ fun QuickAddSheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
 
             // 2. Large Amount Input Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, ArthTheme.colors.border, RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .clip(RoundedCornerShape(6.dp))
+                    .border(1.dp, ArthTheme.colors.border, RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     .padding(16.dp)
             ) {
                 Column {
@@ -395,27 +398,38 @@ fun QuickAddSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) ArthTheme.colors.emerald.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (isSelected) ArthTheme.colors.emeraldContainer else MaterialTheme.colorScheme.surfaceVariant)
+                        .border(
+                            1.dp,
+                            if (isSelected) ArthTheme.colors.incomeBorder else ArthTheme.colors.border,
+                            RoundedCornerShape(4.dp)
+                        )
                         .clickable { viewModel.applySuggestedCategory() }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(
+                            imageVector = if (isSelected) Icons.Default.Check else Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = if (isSelected) ArthTheme.colors.emerald else ArthTheme.colors.textSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Text(
-                            text = if (isSelected) "✓ Suggested: " else "💡 Suggestion: ",
+                            text = if (isSelected) "Suggested:" else "Suggestion:",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = if (isSelected) ArthTheme.colors.emerald else ArthTheme.colors.textSecondary
                         )
                         Text(
-                            text = "${suggested.icon} ${suggested.name}",
+                            text = suggested.name,
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = " (${(state.suggestionConfidence?.times(100))?.toInt() ?: 50}%)",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "${(state.suggestionConfidence?.times(100))?.toInt() ?: 50}%",
+                            style = ArthTimestampStyle,
                             color = ArthTheme.colors.textMuted
                         )
                     }
