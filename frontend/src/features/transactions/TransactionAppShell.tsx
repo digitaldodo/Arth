@@ -148,6 +148,9 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
   const [openedCategoriesFromMore, setOpenedCategoriesFromMore] = useState<boolean>(false);
   const [isPlanningMenuOpen, setIsPlanningMenuOpen] = useState<boolean>(false);
   const planningMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
   const isPlanningViewActive = ['safe-to-spend', 'emi-planner', 'goal-planner', 'fire-planning', 'insights'].includes(activeView);
   const activePlanningLabel = PLANNING_VIEWS.find((v) => v.id === activeView)?.label;
@@ -163,6 +166,27 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [isPlanningMenuOpen]);
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setIsAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsAccountMenuOpen(false);
+        accountTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAccountMenuOpen]);
 
   // Dismiss Planning popover on Android hardware/gesture back
   useBackHandler({
@@ -526,18 +550,40 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
               <HeaderSyncIndicator onOpenSyncSettings={() => navigateToView('data-sync')} />
             )}
             {user ? (
-              <div className="hidden sm:flex items-center gap-2.5 lg:gap-3">
-                <span className="text-xs sm:text-sm font-mono text-[var(--text-secondary)] truncate max-w-[140px] lg:max-w-[200px]">
-                  {currentUsername ? `@${currentUsername}` : user.displayName || user.email}
-                </span>
-                <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 text-xs sm:text-sm font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface)] rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-                  >
-                    Sign Out
-                  </button>
-                </form>
+              <div className="relative" ref={accountMenuRef}>
+                <button
+                  ref={accountTriggerRef}
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={isAccountMenuOpen}
+                  aria-controls="account-menu"
+                  onClick={() => setIsAccountMenuOpen((open) => !open)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full px-1.5 sm:px-2 text-[var(--text-primary)] hover:bg-[var(--state-hover-overlay)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer"
+                >
+                  <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[10px] font-semibold uppercase text-[var(--text-secondary)]">
+                    {(user.displayName || currentUsername || user.email || 'S').trim().split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+                  </span>
+                  <span className="hidden min-[380px]:inline max-w-[96px] truncate text-xs font-medium sm:max-w-[132px]">
+                    {user.displayName?.trim().split(/\s+/)[0] || (currentUsername ? `@${currentUsername}` : 'Account')}
+                  </span>
+                  <span aria-hidden="true" className={`text-[10px] text-[var(--text-muted)] transition-transform ${isAccountMenuOpen ? 'rotate-180' : ''}`}>▾</span>
+                </button>
+                {isAccountMenuOpen && (
+                  <div id="account-menu" role="dialog" aria-label="Account" className="absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2 shadow-lg">
+                    <div className="border-b border-[var(--border-hairline)] px-3 py-2">
+                      <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{user.displayName || (currentUsername ? `@${currentUsername}` : 'SpendSense Account')}</p>
+                      {user.email && <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{user.email}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setIsAccountMenuOpen(false); navigateToView('more'); }}
+                      className="mt-1 flex min-h-10 w-full items-center rounded-md px-3 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer"
+                    >Account settings</button>
+                    <form action="/auth/logout" method="POST" onSubmit={handleSignOut}>
+                      <button type="submit" className="flex min-h-10 w-full items-center rounded-md px-3 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface-subtle)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] cursor-pointer">Sign Out</button>
+                    </form>
+                  </div>
+                )}
               </div>
             ) : (
               <Link
@@ -884,7 +930,6 @@ function TransactionAppShellContent({ user }: TransactionAppShellProps) {
                   isMobilePwa={isMobilePwa}
                   appLock={appLock}
                   appLockSlot={isMobilePwa && <AppLockSettings appLock={appLock} />}
-                  onSignOut={handleSignOut}
                   installPrompt={<InstallPromptCard userId={user?.id} />}
                   dataExport={<DataExportCard user={user} />}
                   themeToggleSlot={

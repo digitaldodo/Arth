@@ -128,13 +128,15 @@ describe('SpendSense Website Navigation & Android Download Experience Test Suite
   });
 
   describe('3. Header Redesign, Mobile Layout & Invariants', () => {
-    test('UnauthenticatedHome implements two-row header with Android-only row and desktop clean header', () => {
+    test('UnauthenticatedHome keeps auth actions in the header and puts verified install options in the hero', () => {
       const homePath = path.join(projectRoot, 'src', 'app', 'UnauthenticatedHome.tsx');
       const content = fs.readFileSync(homePath, 'utf8');
+      const installPath = path.join(projectRoot, 'src', 'features', 'install', 'GetSpendSenseSection.tsx');
+      const installContent = fs.readFileSync(installPath, 'utf8');
 
-      // Reliable device detection
-      assert.ok(content.includes('isAndroidPhone()'), 'Must use isAndroidPhone device detection');
-      assert.ok(content.includes('isAndroid'), 'Must track isAndroid state');
+      assert.ok(content.includes('getDeviceInstallContext()'), 'Must detect device platform after hydration');
+      assert.ok(content.includes('<GetSpendSenseSection compact />'), 'Install controls must render in the hero');
+      assert.ok(!content.includes('headerApkDownload'), 'APK download must not bypass release verification');
 
       // Desktop / Non-Android row has Sign Up and Log In
       assert.ok(
@@ -150,23 +152,9 @@ describe('SpendSense Website Navigation & Android Download Experience Test Suite
         'Must offer separate Log In action'
       );
 
-      // Android second row
-      assert.ok(
-        content.includes('isAndroid &&'),
-        'Second row must be conditionally rendered only when isAndroid is true'
-      );
-      assert.ok(
-        content.includes('grid grid-cols-3') || content.includes('flex'),
-        'Second row must layout three buttons responsively'
-      );
-      assert.ok(
-        content.includes('href="/api/android/download"'),
-        'Download App button must link directly to /api/android/download'
-      );
-      assert.ok(
-        content.includes('whitespace-nowrap'),
-        'All three mobile button labels must enforce whitespace-nowrap to avoid text wrapping'
-      );
+      assert.ok(installContent.includes("isHydrated && isAndroid"), 'APK card must be device-gated after hydration');
+      assert.ok(installContent.includes("method: 'HEAD'"), 'APK action must verify a binary endpoint');
+      assert.ok(installContent.includes('Download Android App'), 'Android APK action must have a clear label');
 
       // Hero section: Removed duplicate Sign In, changed to "Get Started →"
       assert.ok(

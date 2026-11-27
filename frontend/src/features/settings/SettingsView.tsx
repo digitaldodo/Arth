@@ -38,7 +38,6 @@ interface SettingsViewProps {
   appLockSlot?: React.ReactNode;
   themeToggleSlot?: React.ReactNode;
   androidDownloadSlot?: React.ReactNode;
-  onSignOut: (e: React.FormEvent<HTMLFormElement>) => void;
   installPrompt?: React.ReactNode;
   dataExport?: React.ReactNode;
 }
@@ -75,7 +74,6 @@ export function SettingsView({
   appLockSlot,
   themeToggleSlot,
   androidDownloadSlot,
-  onSignOut,
   installPrompt,
   dataExport,
 }: SettingsViewProps) {
@@ -100,7 +98,7 @@ export function SettingsView({
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Settings Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-[var(--border-hairline)]">
+      <div className="pb-3 border-b border-[var(--border-hairline)]">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)]">
             Settings &amp; Preferences
@@ -110,25 +108,6 @@ export function SettingsView({
           </p>
         </div>
 
-        {/* Compact User Identity & Sign Out */}
-        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 bg-[var(--bg-surface)] border border-[var(--border-hairline)] px-3 py-2 rounded-lg shrink-0">
-          <div className="min-w-0 text-left sm:text-right">
-            <span className="text-xs font-semibold text-[var(--text-primary)] block truncate">
-              {currentUsername ? `@${currentUsername}` : user.displayName || 'SpendSense Account'}
-            </span>
-            <span className="text-[11px] text-[var(--text-muted)] font-mono truncate max-w-[180px] sm:max-w-[160px] block">
-              {user.email}
-            </span>
-          </div>
-          <form action="/auth/logout" method="POST" onSubmit={onSignOut} className="shrink-0">
-            <button
-              type="submit"
-              className="min-h-[36px] px-3 py-1.5 text-xs font-medium border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md transition-colors cursor-pointer"
-            >
-              Sign Out
-            </button>
-          </form>
-        </div>
       </div>
 
       {/* Quick PWA Install Banner when browser supports programmatic install */}

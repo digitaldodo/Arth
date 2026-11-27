@@ -215,12 +215,12 @@ describe('Universal PWA Landing Page, Device Detection & Desktop Windows Runtime
     }
   });
 
-  test('UnauthenticatedHome SSR hides Android APK by default before client hydration while exposing Get SpendSense PWA', () => {
+  test('UnauthenticatedHome SSR places PWA guidance in the hero and hides Android APK until hydration', () => {
     const homeMarkup = renderToStaticMarkup(React.createElement(UnauthenticatedHome));
     assert.ok(homeMarkup.includes('Get SpendSense'));
-    assert.ok(homeMarkup.includes('Use SpendSense wherever you manage your money.'));
+    assert.ok(homeMarkup.includes('Install for this device'));
     assert.ok(homeMarkup.includes('Install SpendSense'));
-    assert.ok(homeMarkup.includes('href="#get-spendsense"'));
+    assert.ok(homeMarkup.indexOf('Get Started') < homeMarkup.indexOf('get-spendsense-heading'));
     // Unknown / pre-hydration SSR state must NEVER expose Android APK options
     assert.ok(!homeMarkup.includes('landing-android-card'));
     assert.ok(!homeMarkup.includes('Download for Android'));

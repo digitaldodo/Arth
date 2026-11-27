@@ -372,9 +372,25 @@ body {
 }
 
 .glass-nav {
-  background-color: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  /* Opaque-enough theme fallback for browsers without backdrop-filter. */
+  background-color: rgba(248, 248, 246, 0.94);
+  border-color: color-mix(in srgb, var(--border-hairline) 78%, transparent);
+  box-shadow: 0 1px 8px rgba(20, 18, 16, 0.035);
+  isolation: isolate;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dark .glass-nav, [data-theme="dark"] .glass-nav {
+  background-color: rgba(12, 10, 9, 0.94);
+  box-shadow: 0 1px 10px rgba(0, 0, 0, 0.16);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-nav {
+    background-color: color-mix(in srgb, var(--bg-canvas) 74%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    backdrop-filter: blur(16px) saturate(130%);
+  }
 }
 .glass-bottom-nav {
   background-color: color-mix(in srgb, var(--bg-surface) 92%, transparent);

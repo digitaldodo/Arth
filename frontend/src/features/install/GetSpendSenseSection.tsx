@@ -9,6 +9,7 @@ import type { AndroidReleaseInfo } from '@/lib/android-release-asset';
 
 interface GetSpendSenseSectionProps {
   initialRelease?: AndroidReleaseInfo;
+  compact?: boolean;
 }
 
 function formatBytesShort(bytes: number): string {
@@ -17,7 +18,7 @@ function formatBytesShort(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionProps) {
+export function GetSpendSenseSection({ initialRelease, compact = false }: GetSpendSenseSectionProps) {
   const {
     isHydrated,
     isStandalone,
@@ -104,8 +105,8 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
 
   const pwaPrimaryLabel = isWindows
     ? isInstalling
-      ? 'Installing SpendSense on Windows…'
-      : 'Install SpendSense on Windows'
+      ? 'Installing on Windows…'
+      : 'Install on Windows'
     : isInstalling
       ? 'Installing SpendSense…'
       : 'Install SpendSense';
@@ -131,11 +132,11 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
                   : 'Web App · PWA';
 
   const pwaDescription = isAndroid
-    ? 'Install the lightweight web application from the browser. Instant launch, standalone display, and offline ledger access.'
+    ? 'Install SpendSense directly from your browser for quick access to your financial ledger.'
     : isIos
       ? `Add SpendSense directly to your ${isIpad ? 'iPad' : 'iPhone'} Home Screen for full-screen standalone access.`
       : isWindows
-        ? 'Install SpendSense as a standalone Windows desktop application through supported browsers such as Microsoft Edge and Google Chrome.'
+        ? 'Use SpendSense in its own desktop application window.'
         : 'Install SpendSense as an app on your device. Access it from your home screen, dock, or application launcher.';
 
   const renderBrowserInstructions = () => {
@@ -227,9 +228,9 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
     <section
       id="get-spendsense"
       aria-labelledby="get-spendsense-heading"
-      className="mt-12 sm:mt-14 pt-10 border-t border-[var(--border-hairline)] space-y-6"
+      className={compact ? 'mt-3 space-y-3' : 'mt-12 sm:mt-14 pt-10 border-t border-[var(--border-hairline)] space-y-6'}
     >
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      {!compact && <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-[2px] bg-[var(--bg-surface-subtle)] border border-[var(--border-hairline)] text-[10px] font-mono uppercase tracking-wider text-[var(--text-secondary)]">
             <span>Apps &amp; Installation</span>
@@ -254,14 +255,15 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
             <span>Synced Ledger &middot; Offline Capable</span>
           </div>
         </div>
-      </div>
+      </div>}
+      {compact && <div className="flex items-center justify-between gap-2"><h2 id="get-spendsense-heading" className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">Get SpendSense</h2><span className="text-[10px] text-[var(--text-muted)]">Install for this device</span></div>}
 
       {/* Adaptive Grid: Two cards on Android (PWA + Verified Native APK); Single prominent PWA card on Desktop, iOS & Unknown */}
-      <div className={`grid gap-4 ${showAndroidCard ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-2xl'}`}>
+      <div className={`grid gap-3 ${showAndroidCard ? (compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2') : 'grid-cols-1 max-w-2xl'}`}>
         {/* OPTION 1 — INSTALL SPENDSENSE PWA */}
         <article
           data-testid="landing-pwa-card"
-          className="rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 sm:p-6 flex flex-col justify-between gap-5 shadow-2xs min-h-[220px]"
+          className={`rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] ${compact ? 'p-3.5' : 'p-5 sm:p-6'} flex flex-col justify-between gap-4 shadow-2xs ${compact ? '' : 'min-h-[220px]'}`}
         >
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -371,7 +373,7 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
                     <path d="m9 11 3 3 3-3" />
                     <path d="M8 21h8" />
                   </svg>
-                  <span>{pwaPrimaryLabel}</span>
+                  <span>{isAndroid ? 'Install PWA' : pwaPrimaryLabel}</span>
                 </button>
                 {installOutcome === 'dismissed' && (
                   <p className="text-[11px] text-[var(--text-muted)]">
@@ -403,7 +405,7 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
         {showAndroidCard && (
           <article
             data-testid="landing-android-card"
-            className="rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] p-5 sm:p-6 flex flex-col justify-between gap-5 shadow-2xs min-h-[220px]"
+            className={`rounded-[6px] bg-[var(--bg-surface)] border border-[var(--border-hairline)] ${compact ? 'p-3.5' : 'p-5 sm:p-6'} flex flex-col justify-between gap-4 shadow-2xs ${compact ? '' : 'min-h-[220px]'}`}
           >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -427,7 +429,7 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base font-semibold text-[var(--text-primary)] leading-tight">
-                      Download SpendSense Android
+                      Download Native Android App
                     </h3>
                     <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
                       Native APK &middot; Android 8.0+
@@ -462,8 +464,7 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
               </div>
 
               <p className="text-xs sm:text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                Download the actual signed <code className="font-mono">.apk</code> file for native Android features,
-                biometric app lock, and supported transaction capture.
+                Get the native Android application for supported device features and transaction capture.
               </p>
 
               {apkAvailable && release && (
@@ -511,7 +512,7 @@ export function GetSpendSenseSection({ initialRelease }: GetSpendSenseSectionPro
                         ? apkDownload.progressPercent !== null
                           ? `Downloading ${apkDownload.progressPercent}%…`
                           : `Downloading ${formatBytesShort(apkDownload.bytesReceived) || 'APK'}…`
-                        : 'Download for Android'}
+                        : 'Download Android App'}
                     </span>
                   </a>
                 ) : (

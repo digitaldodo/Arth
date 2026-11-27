@@ -42,12 +42,16 @@ describe('Native Android Download Experience & Distribution Infrastructure', () 
     }
   });
 
-  test('UnauthenticatedHome exposes /download in header and footer', () => {
+  test('UnauthenticatedHome places verified install choices in the hero and links to /download', () => {
     const homePath = path.join(process.cwd(), 'src', 'app', 'UnauthenticatedHome.tsx');
     const content = fs.readFileSync(homePath, 'utf-8');
+    const installPath = path.join(process.cwd(), 'src', 'features', 'install', 'GetSpendSenseSection.tsx');
+    const installContent = fs.readFileSync(installPath, 'utf-8');
 
     assert.ok(content.includes('href="/download"'), 'UnauthenticatedHome must link to /download');
-    assert.ok(content.includes('Download App'), 'Header must contain Download App text');
+    assert.ok(content.includes('<GetSpendSenseSection compact />'), 'Install controls must be rendered in the hero');
+    assert.ok(installContent.includes('Download Android App'), 'Hero install card must expose the native Android action');
+    assert.ok(!content.includes('headerApkDownload'), 'APK download must not bypass release verification in the header');
     assert.ok(content.includes('Android App'), 'Footer must contain Android App link');
   });
 
